@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.Color
 import android.graphics.Typeface
 import android.view.View
+import android.view.ViewGroup
 import android.widget.ScrollView
 import android.widget.TextView
 import io.flutter.plugin.common.BinaryMessenger
@@ -47,9 +48,9 @@ class OpenClawNativeTerminalView(
         scrollView.isFillViewport = true
         scrollView.addView(
             textView,
-            ScrollView.LayoutParams(
-                ScrollView.LayoutParams.MATCH_PARENT,
-                ScrollView.LayoutParams.WRAP_CONTENT,
+            ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
             ),
         )
         channel.setMethodCallHandler(this)
