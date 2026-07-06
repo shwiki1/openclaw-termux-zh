@@ -170,7 +170,7 @@ class FloatingFileManagerService : Service() {
         val scroll = ScrollView(this).apply {
             addView(list)
         }
-        panel.addView(scroll, LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
+        panel.addView(scroll, LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f)
         replaceView(panel, dp(330), dp(480))
     }
 
@@ -276,7 +276,7 @@ class FloatingFileManagerService : Service() {
             ext in videoExtensions || ext in audioExtensions -> mediaPreview(file)
             else -> emptyRow("Preview not supported. Tap share to open with another app.")
         }
-        panel.addView(content, LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
+        panel.addView(content, LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f)
         replaceView(panel, dp(340), dp(500))
     }
 
