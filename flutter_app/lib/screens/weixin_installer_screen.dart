@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -34,6 +35,7 @@ class _WeixinInstallerScreenState extends State<WeixinInstallerScreen> {
   String? _error;
   final _ctrlNotifier = ValueNotifier<bool>(false);
   final _altNotifier = ValueNotifier<bool>(false);
+  final _nativeTerminalKey = GlobalKey<NativeTerminalViewState>();
   final _screenshotKey = GlobalKey();
 
   static final _anyUrlRegex = RegExp(r'https?://[^\s<>\[\]"' "'" r'\)]+');
@@ -178,8 +180,14 @@ class _WeixinInstallerScreenState extends State<WeixinInstallerScreen> {
     return best;
   }
 
-  void _copySelection() {
-    final text = _getSelectedText();
+  Future<String?> _getPreferredSelectedText() async {
+    return await _nativeTerminalKey.currentState?.getSelectedText() ??
+        _getSelectedText();
+  }
+
+  Future<void> _copySelection() async {
+    final text = await _getPreferredSelectedText();
+    if (!mounted) return;
     if (text == null) return;
 
     Clipboard.setData(ClipboardData(text: text));
@@ -210,8 +218,9 @@ class _WeixinInstallerScreenState extends State<WeixinInstallerScreen> {
     }
   }
 
-  void _openSelection() {
-    final text = _getSelectedText();
+  Future<void> _openSelection() async {
+    final text = await _getPreferredSelectedText();
+    if (!mounted) return;
     if (text == null) return;
 
     final url = _extractUrl(text);
@@ -270,12 +279,12 @@ class _WeixinInstallerScreenState extends State<WeixinInstallerScreen> {
           IconButton(
             icon: const Icon(Icons.copy),
             tooltip: l10n.t('commonCopy'),
-            onPressed: _copySelection,
+            onPressed: () => unawaited(_copySelection()),
           ),
           IconButton(
             icon: const Icon(Icons.open_in_browser),
             tooltip: l10n.t('commonOpen'),
-            onPressed: _openSelection,
+            onPressed: () => unawaited(_openSelection()),
           ),
           IconButton(
             icon: const Icon(Icons.paste),
@@ -342,7 +351,10 @@ class _WeixinInstallerScreenState extends State<WeixinInstallerScreen> {
             Expanded(
               child: RepaintBoundary(
                 key: _screenshotKey,
-                child: NativeTerminalView(terminal: _terminal),
+                child: NativeTerminalView(
+                  key: _nativeTerminalKey,
+                  terminal: _terminal,
+                ),
               ),
             ),
             TerminalToolbar(

@@ -14,10 +14,10 @@ class NativeTerminalView extends StatefulWidget {
   });
 
   @override
-  State<NativeTerminalView> createState() => _NativeTerminalViewState();
+  State<NativeTerminalView> createState() => NativeTerminalViewState();
 }
 
-class _NativeTerminalViewState extends State<NativeTerminalView> {
+class NativeTerminalViewState extends State<NativeTerminalView> {
   late final String _viewId;
   MethodChannel? _channel;
   Timer? _timer;
@@ -70,11 +70,30 @@ class _NativeTerminalViewState extends State<NativeTerminalView> {
     if (channel == null) return;
     final text = _snapshotText();
     if (!force && text == _lastText) return;
+    final previous = _lastText;
     _lastText = text;
     try {
-      await channel.invokeMethod('setText', {'text': text});
+      if (!force && previous.isNotEmpty && text.startsWith(previous)) {
+        await channel.invokeMethod('appendText', {
+          'text': text.substring(previous.length),
+        });
+      } else {
+        await channel.invokeMethod('setText', {'text': text});
+      }
     } catch (_) {
       // The Android view can be disposed while an async sync is in flight.
+    }
+  }
+
+  Future<String?> getSelectedText() async {
+    final channel = _channel;
+    if (channel == null) return null;
+    try {
+      final value = await channel.invokeMethod<String>('getSelectedText');
+      final text = value?.trim();
+      return text == null || text.isEmpty ? null : text;
+    } catch (_) {
+      return null;
     }
   }
 

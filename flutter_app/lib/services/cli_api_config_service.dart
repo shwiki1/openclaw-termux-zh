@@ -150,9 +150,9 @@ class CliApiConfigService {
   }) async {
     final allConfigs = configs ?? await _loadAll();
     final tools = _asMap(allConfigs['tools']);
-    final codex = CliApiConfig.fromJson('codex', _asMapOrNull(tools['codex']));
+    final codex = _activeConfigFromJson('codex', _asMapOrNull(tools['codex']));
     final claude =
-        CliApiConfig.fromJson('claude', _asMapOrNull(tools['claude']));
+        _activeConfigFromJson('claude', _asMapOrNull(tools['claude']));
 
     await _writePrefsConfig(allConfigs);
     await NativeBridge.writeRootfsFile(
@@ -401,6 +401,13 @@ class CliApiConfigService {
     if (model.isNotEmpty) {
       lines.add('model = ${_tomlString(model)}');
     }
+    lines
+      ..add('disable_response_storage = true')
+      ..add('preferred_auth_method = "apikey"')
+      ..add('sandbox_mode = "danger-full-access"')
+      ..add('approval_policy = "never"')
+      ..add('tui.notifications = false')
+      ..add('tui.terminal_title = []');
     if (effort.isNotEmpty) {
       lines.add('model_reasoning_effort = ${_tomlString(effort)}');
     }

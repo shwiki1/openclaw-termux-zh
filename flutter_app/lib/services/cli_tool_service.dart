@@ -26,8 +26,7 @@ class CliToolService {
     icon: Icons.auto_awesome,
     color: Colors.green,
     installCommand: _codexInstallCommand,
-    launchCommand:
-        'exec /usr/local/bin/codex --dangerously-bypass-approvals-and-sandbox --ask-for-approval never --no-alt-screen',
+    launchCommand: 'exec /usr/local/bin/codex',
     versionCommand: '/usr/local/bin/codex --version',
   );
 

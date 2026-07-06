@@ -72,8 +72,21 @@ class OpenClawNativeTerminalView(
             }
             "appendText" -> {
                 textView.append(call.argument<String>("text").orEmpty())
-                scrollToBottom()
+                if (!hasSelection()) {
+                    scrollToBottom()
+                }
                 result.success(true)
+            }
+            "getSelectedText" -> {
+                val start = textView.selectionStart
+                val end = textView.selectionEnd
+                if (start >= 0 && end >= 0 && start != end) {
+                    val from = minOf(start, end)
+                    val to = maxOf(start, end)
+                    result.success(textView.text.subSequence(from, to).toString())
+                } else {
+                    result.success(null)
+                }
             }
             "clear" -> {
                 textView.text = ""
@@ -87,5 +100,11 @@ class OpenClawNativeTerminalView(
         scrollView.post {
             scrollView.fullScroll(View.FOCUS_DOWN)
         }
+    }
+
+    private fun hasSelection(): Boolean {
+        val start = textView.selectionStart
+        val end = textView.selectionEnd
+        return start >= 0 && end >= 0 && start != end
     }
 }

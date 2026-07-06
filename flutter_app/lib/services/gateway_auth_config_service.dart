@@ -42,8 +42,26 @@ class GatewayAuthConfigService {
     String? configContent, {
     String? envContent,
   }) {
+    String? envFallbackToken() {
+      const names = [
+        'OPENCLAW_GATEWAY_TOKEN',
+        'GATEWAY_TOKEN',
+        'CONTROL_UI_TOKEN',
+        'OPENCLAW_TOKEN',
+      ];
+      for (final name in names) {
+        final token = DashboardUrlResolver.sanitizeTokenValue(
+          _readEnvValue(envContent, name),
+        );
+        if (token != null) {
+          return token;
+        }
+      }
+      return DashboardUrlResolver.extractToken(envContent ?? '');
+    }
+
     if (configContent == null || configContent.trim().isEmpty) {
-      return null;
+      return envFallbackToken();
     }
 
     try {
@@ -60,7 +78,8 @@ class GatewayAuthConfigService {
       // Fall back to text-based extraction below.
     }
 
-    return DashboardUrlResolver.extractToken(configContent);
+    return DashboardUrlResolver.extractToken(configContent) ??
+        envFallbackToken();
   }
 
   static Future<String?> _readFirstExistingFile(List<String> paths) async {

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:xterm/xterm.dart';
@@ -29,6 +31,7 @@ class TerminalScreen extends StatefulWidget {
 class _TerminalScreenState extends State<TerminalScreen> {
   late final PersistentTerminalSession _session;
   late final TerminalController _controller;
+  final _nativeTerminalKey = GlobalKey<NativeTerminalViewState>();
   final _inputController = TextEditingController();
   final _inputFocusNode = FocusNode();
   final _ctrlNotifier = ValueNotifier<bool>(false);
@@ -154,8 +157,14 @@ class _TerminalScreenState extends State<TerminalScreen> {
     return best;
   }
 
-  void _copySelection() {
-    final text = _getSelectedText();
+  Future<String?> _getPreferredSelectedText() async {
+    return await _nativeTerminalKey.currentState?.getSelectedText() ??
+        _getSelectedText();
+  }
+
+  Future<void> _copySelection() async {
+    final text = await _getPreferredSelectedText();
+    if (!mounted) return;
     if (text == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -208,8 +217,9 @@ class _TerminalScreenState extends State<TerminalScreen> {
     );
   }
 
-  void _openSelection() {
-    final text = _getSelectedText();
+  Future<void> _openSelection() async {
+    final text = await _getPreferredSelectedText();
+    if (!mounted) return;
     if (text == null) return;
 
     final url = _extractUrl(text);
@@ -281,7 +291,7 @@ class _TerminalScreenState extends State<TerminalScreen> {
       IconButton(
         icon: const Icon(Icons.copy),
         tooltip: 'Copy selection',
-        onPressed: _copySelection,
+        onPressed: () => unawaited(_copySelection()),
       ),
       IconButton(
         icon: const Icon(Icons.select_all),
@@ -291,7 +301,7 @@ class _TerminalScreenState extends State<TerminalScreen> {
       IconButton(
         icon: const Icon(Icons.open_in_browser),
         tooltip: 'Open URL',
-        onPressed: _openSelection,
+        onPressed: () => unawaited(_openSelection()),
       ),
       IconButton(
         icon: const Icon(Icons.paste),
@@ -321,13 +331,13 @@ class _TerminalScreenState extends State<TerminalScreen> {
             _takeScreenshot();
             break;
           case 'copy':
-            _copySelection();
+            unawaited(_copySelection());
             break;
           case 'copyAll':
             _copyAll();
             break;
           case 'open':
-            _openSelection();
+            unawaited(_openSelection());
             break;
           case 'paste':
             _paste();
@@ -407,7 +417,10 @@ class _TerminalScreenState extends State<TerminalScreen> {
         Expanded(
           child: RepaintBoundary(
             key: _screenshotKey,
-            child: NativeTerminalView(terminal: _session.terminal),
+            child: NativeTerminalView(
+              key: _nativeTerminalKey,
+              terminal: _session.terminal,
+            ),
           ),
         ),
         TerminalToolbar(

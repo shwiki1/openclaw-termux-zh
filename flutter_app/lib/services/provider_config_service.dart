@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math';
 
 import '../models/ai_provider.dart';
 import '../models/custom_provider_preset.dart';
@@ -293,6 +294,25 @@ class ProviderConfigService {
     if (mode is! String || mode.trim().isEmpty) {
       gateway['mode'] = _localGatewayMode;
     }
+  }
+
+  static void _ensureGatewayAuth(Map<String, dynamic> config) {
+    final gateway = _ensureGatewaySection(config);
+    final auth = _asStringKeyedMap(gateway['auth']);
+    gateway['auth'] = auth;
+
+    final token = auth['token'];
+    if (token is! String || token.trim().isEmpty) {
+      auth['token'] = _randomHexToken();
+    }
+
+    auth['mode'] = 'token';
+  }
+
+  static String _randomHexToken([int byteCount = 24]) {
+    final random = Random.secure();
+    final bytes = List<int>.generate(byteCount, (_) => random.nextInt(256));
+    return bytes.map((byte) => byte.toRadixString(16).padLeft(2, '0')).join();
   }
 
   static void _setBonjourMode(
@@ -728,6 +748,7 @@ class ProviderConfigService {
     final prefs = PreferencesService();
     await prefs.init();
     _setBonjourMode(config, enabled: prefs.bonjourEnabled);
+    _ensureGatewayAuth(config);
 
     if (_hasSavedModelOrProviderConfig(config)) {
       _ensureLocalGatewayMode(config);

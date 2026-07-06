@@ -147,6 +147,12 @@ class PersistentTerminalSessions {
     required String title,
     String? initialCommand,
   }) {
+    final existing = _sessions[id];
+    if (existing != null &&
+        !existing.isRunning &&
+        existing.initialCommand != initialCommand) {
+      _sessions.remove(id);
+    }
     return _sessions.putIfAbsent(
       id,
       () => PersistentTerminalSession(
