@@ -41,6 +41,21 @@ class CliToolService {
     color: Colors.deepOrange,
     installCommand: _claudeInstallCommand,
     launchCommand: r'''
+if [ ! -x /root/.openclaw/claude-launcher.sh ]; then
+  echo "Claude 运行时配置缺失，请先回到 CLI Tools 页面点击刷新，或在 Claude 配置页保存一次。" >&2
+  exit 2
+fi
+if ! grep -q "OPENCLAW_CLAUDE_WRAPPER" /usr/local/bin/claude 2>/dev/null; then
+  cat > /usr/local/bin/claude <<'OPENCLAW_CLAUDE_WRAPPER'
+#!/bin/sh
+# OPENCLAW_CLAUDE_WRAPPER
+export NODE_OPTIONS="${NODE_OPTIONS:---require /root/.openclaw/bionic-bypass.js}"
+export NODE_EXTRA_CA_CERTS="${NODE_EXTRA_CA_CERTS:-/etc/ssl/certs/ca-certificates.crt}"
+exec /root/.openclaw/claude-launcher.sh "$@"
+OPENCLAW_CLAUDE_WRAPPER
+  chmod 0755 /usr/local/bin/claude
+  hash -r 2>/dev/null || true
+fi
 ver="$(/usr/local/bin/claude --version 2>/dev/null | head -n 1 || true)"
 case "$ver" in
   2.1.148*) exec /root/.openclaw/claude-launcher.sh ;;
@@ -255,6 +270,7 @@ echo ">>> Installing Claude Code from npm..."
 install_claude_package
 cat > /usr/local/bin/claude <<'OPENCLAW_CLAUDE_WRAPPER'
 #!/bin/sh
+# OPENCLAW_CLAUDE_WRAPPER
 export NODE_OPTIONS="${NODE_OPTIONS:---require /root/.openclaw/bionic-bypass.js}"
 export NODE_EXTRA_CA_CERTS="${NODE_EXTRA_CA_CERTS:-/etc/ssl/certs/ca-certificates.crt}"
 if [ -x /root/.openclaw/claude-launcher.sh ]; then

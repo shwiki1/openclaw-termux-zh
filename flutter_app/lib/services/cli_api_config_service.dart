@@ -360,10 +360,12 @@ class CliApiConfigService {
       lines.add('unset ANTHROPIC_AUTH_TOKEN');
     } else if (claude.apiKey.trim().isNotEmpty) {
       lines.add('export ANTHROPIC_API_KEY=${_shQuote(claude.apiKey.trim())}');
+      lines.add(
+        'export ANTHROPIC_AUTH_TOKEN=${_shQuote(claude.apiKey.trim())}',
+      );
       lines.add('export CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1');
       lines.add('export CLAUDE_CODE_DISABLE_AUTO_UPDATE=1');
       lines.add('export API_TIMEOUT_MS=3000000');
-      lines.add('unset ANTHROPIC_AUTH_TOKEN');
     }
     if (claude.model.trim().isNotEmpty) {
       lines.add('export ANTHROPIC_MODEL=${_shQuote(claude.model.trim())}');
@@ -502,6 +504,7 @@ class CliApiConfigService {
       env['ANTHROPIC_BASE_URL'] = _claudeProxyBaseUrl;
     } else if (claude.apiKey.trim().isNotEmpty) {
       env['ANTHROPIC_API_KEY'] = claude.apiKey.trim();
+      env['ANTHROPIC_AUTH_TOKEN'] = claude.apiKey.trim();
     }
     if (claude.model.trim().isNotEmpty) {
       final model = claude.model.trim();
@@ -1160,7 +1163,10 @@ function proxyAnthropic(req, res, body, cfg) {
   delete headers["accept-encoding"];
   delete headers.authorization;
   delete headers["x-api-key"];
-  if (cfg.token) headers["x-api-key"] = cfg.token;
+  if (cfg.token) {
+    headers["x-api-key"] = cfg.token;
+    headers.authorization = `Bearer ${cfg.token}`;
+  }
   headers["anthropic-version"] = headers["anthropic-version"] || "2023-06-01";
   if (body.length) headers["content-length"] = body.length;
 

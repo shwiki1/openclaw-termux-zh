@@ -195,6 +195,42 @@ class BootstrapService {
     );
   }
 
+  Future<void> _downloadNodeArchive({
+    required String arch,
+    required String version,
+    required String destinationPath,
+    required void Function(SetupState) onProgress,
+    required double startProgress,
+    required double endProgress,
+    required String idleMessage,
+  }) async {
+    Object? lastError;
+    final urls = AppConstants.getNodeTarballUrlsForVersion(arch, version);
+    for (final url in urls) {
+      try {
+        _deleteArchiveIfExists(destinationPath);
+        final host = Uri.tryParse(url)?.host;
+        final sourceLabel =
+            host == null || host.isEmpty ? '' : ' | source: $host';
+        await _downloadStepArchive(
+          url: url,
+          destinationPath: destinationPath,
+          onProgress: onProgress,
+          step: SetupStep.installingNode,
+          startProgress: startProgress,
+          endProgress: endProgress,
+          idleMessage: idleMessage,
+          detailBuilder: (currentMb, totalMb, details) =>
+              '$currentMb MB / $totalMb MB$sourceLabel | $details',
+        );
+        return;
+      } catch (error) {
+        lastError = error;
+      }
+    }
+    throw StateError('Failed to download Node.js $version: $lastError');
+  }
+
   Future<String> _selectUbuntuMirror(String arch) async {
     final candidates = AppConstants.ubuntuMirrorCandidates(arch);
     const releasePath = '/dists/${AppConstants.ubuntuCodename}/Release';
@@ -821,7 +857,7 @@ class BootstrapService {
         // which fail inside proot). Includes node + npm + corepack.
         final nodeVersion = AppConstants.getNodeVersionForArch(arch);
         final nodeTarUrl = AppConstants.getNodeTarballUrl(arch);
-        final nodeTarPath = '$filesDir/tmp/nodejs.tar.xz';
+        final nodeTarPath = '$filesDir/tmp/nodejs-$nodeVersion.tar.xz';
         final nodeAssetPath =
             AppConstants.bundledBootstrapAssetPathForUrl(nodeTarUrl);
 
@@ -893,16 +929,14 @@ class BootstrapService {
             notificationText: 'Using downloaded Node.js package... 73.0%',
           );
         } else {
-          await _downloadStepArchive(
-            url: nodeTarUrl,
+          await _downloadNodeArchive(
+            arch: arch,
+            version: nodeVersion,
             destinationPath: nodeTarPath,
             onProgress: onProgress,
-            step: SetupStep.installingNode,
             startProgress: 0.45,
             endProgress: 0.80,
             idleMessage: 'Downloading Node.js $nodeVersion...',
-            detailBuilder: (currentMb, totalMb, details) =>
-                '$currentMb MB / $totalMb MB | $details',
           );
         }
 
@@ -924,16 +958,14 @@ class BootstrapService {
           try {
             File(nodeTarPath).deleteSync();
           } catch (_) {}
-          await _downloadStepArchive(
-            url: nodeTarUrl,
+          await _downloadNodeArchive(
+            arch: arch,
+            version: nodeVersion,
             destinationPath: nodeTarPath,
             onProgress: onProgress,
-            step: SetupStep.installingNode,
             startProgress: 0.45,
             endProgress: 0.80,
             idleMessage: 'Local Node.js cache failed, downloading online...',
-            detailBuilder: (currentMb, totalMb, details) =>
-                '$currentMb MB / $totalMb MB | $details',
           );
           await _runEstimatedProgress(
             onProgress: onProgress,

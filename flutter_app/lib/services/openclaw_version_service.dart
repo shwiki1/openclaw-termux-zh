@@ -214,6 +214,46 @@ class OpenClawVersionService {
     );
   }
 
+  Future<void> _downloadNodeArchiveWithMirrors({
+    required String arch,
+    required String version,
+    required String destinationPath,
+    required OpenClawInstallProgressCallback? onProgress,
+    required double startProgress,
+    required double endProgress,
+    required String idleMessage,
+  }) async {
+    Object? lastError;
+    final urls = AppConstants.getNodeTarballUrlsForVersion(arch, version);
+    for (final url in urls) {
+      try {
+        final file = File(destinationPath);
+        if (file.existsSync()) {
+          try {
+            file.deleteSync();
+          } catch (_) {}
+        }
+        final host = Uri.tryParse(url)?.host;
+        final sourceLabel =
+            host == null || host.isEmpty ? '' : ' | source: $host';
+        await _downloadWithProgress(
+          url: url,
+          destinationPath: destinationPath,
+          onProgress: onProgress,
+          startProgress: startProgress,
+          endProgress: endProgress,
+          idleMessage: idleMessage,
+          detailBuilder: (currentMb, totalMb, details) =>
+              '$currentMb MB / $totalMb MB$sourceLabel | $details',
+        );
+        return;
+      } catch (error) {
+        lastError = error;
+      }
+    }
+    throw StateError('Failed to download Node.js $version: $lastError');
+  }
+
   Future<StreamSubscription<String>?> _startLiveDetailStream(
     OpenClawInstallProgressCallback? onProgress, {
     bool enabled = true,
@@ -703,15 +743,14 @@ class OpenClawVersionService {
     }
 
     if (!usedLocalArchive) {
-      await _downloadWithProgress(
-        url: tarUrl,
+      await _downloadNodeArchiveWithMirrors(
+        arch: arch,
+        version: version,
         destinationPath: tarPath,
         onProgress: onProgress,
         startProgress: progressStart,
         endProgress: progressStart + ((progressEnd - progressStart) * 0.65),
         idleMessage: 'Downloading Node.js $version...',
-        detailBuilder: (currentMb, totalMb, details) =>
-            '$currentMb MB / $totalMb MB | $details',
       );
     }
 
@@ -732,15 +771,14 @@ class OpenClawVersionService {
       try {
         tarFile.deleteSync();
       } catch (_) {}
-      await _downloadWithProgress(
-        url: tarUrl,
+      await _downloadNodeArchiveWithMirrors(
+        arch: arch,
+        version: version,
         destinationPath: tarPath,
         onProgress: onProgress,
         startProgress: progressStart,
         endProgress: progressStart + ((progressEnd - progressStart) * 0.65),
         idleMessage: 'Bundled Node.js $version failed, downloading online...',
-        detailBuilder: (currentMb, totalMb, details) =>
-            '$currentMb MB / $totalMb MB | $details',
       );
       await _runEstimatedProgress(
         onProgress: onProgress,

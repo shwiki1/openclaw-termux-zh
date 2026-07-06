@@ -1,6 +1,6 @@
 class AppConstants {
   static const String appName = '次元虾';
-  static const String version = '2.0.15';
+  static const String version = '2.0.16';
   static const String packageName = 'com.openclaw.cyx';
 
   /// Matches ANSI escape sequences (e.g. color codes in terminal output).
@@ -40,11 +40,19 @@ class AppConstants {
 
   // Node.js binary tarball is downloaded by Flutter and extracted by Java.
   // Bypasses curl/gpg/NodeSource which fail inside proot.
-  static const String nodeVersion = '24.14.1';
+  static const String nodeVersion = '24.15.0';
   static const String nodeArmv7Version = '22.22.2';
   static const String openClawEstimatedSize = '~95 MB';
+  static const String nodePrimaryMirrorBaseUrl =
+      'https://npmmirror.com/mirrors/node';
+  static const List<String> nodeMirrorBaseUrls = <String>[
+    nodePrimaryMirrorBaseUrl,
+    'https://mirrors.ustc.edu.cn/node',
+    'https://mirrors.aliyun.com/nodejs-release',
+    'https://nodejs.org/dist',
+  ];
   static const String nodeBaseUrl =
-      'https://nodejs.org/dist/v$nodeVersion/node-v$nodeVersion-linux-';
+      '$nodePrimaryMirrorBaseUrl/v$nodeVersion/node-v$nodeVersion-linux-';
   static const String basicResourceReleaseBaseUrl =
       'https://github.com/JunWan666/openclaw-termux-zh/releases/download/basic-resource';
   static const String basicResourcePrebuiltRootfsArm64 =
@@ -52,7 +60,7 @@ class AppConstants {
   static const String basicResourceUbuntuRootfsArm64 =
       '$basicResourceReleaseBaseUrl/ubuntu-base-24.04.3-base-arm64.tar.gz';
   static const String basicResourceNodeArm64 =
-      '$basicResourceReleaseBaseUrl/node-v$nodeVersion-linux-arm64.tar.xz';
+      '${nodeBaseUrl}arm64.tar.xz';
 
   static bool isArmv7Arch(String arch) {
     final normalized = arch.trim().toLowerCase();
@@ -74,19 +82,23 @@ class AppConstants {
   }
 
   static String getNodeTarballUrlForVersion(String arch, String version) {
-    final nodeBaseUrl =
-        'https://nodejs.org/dist/v$version/node-v$version-linux-';
+    return getNodeTarballUrlsForVersion(arch, version).first;
+  }
 
-    switch (arch) {
-      case 'aarch64':
-        return '${nodeBaseUrl}arm64.tar.xz';
-      case 'arm':
-        return '${nodeBaseUrl}armv7l.tar.xz';
-      case 'x86_64':
-        return '${nodeBaseUrl}x64.tar.xz';
-      default:
-        return '${nodeBaseUrl}arm64.tar.xz';
-    }
+  static List<String> getNodeTarballUrlsForVersion(
+    String arch,
+    String version,
+  ) {
+    final nodeArch = switch (arch) {
+      'aarch64' => 'arm64',
+      'arm' => 'armv7l',
+      'x86_64' => 'x64',
+      _ => 'arm64',
+    };
+
+    return nodeMirrorBaseUrls.map((baseUrl) {
+      return '$baseUrl/v$version/node-v$version-linux-$nodeArch.tar.xz';
+    }).toList();
   }
 
   static String bundledBootstrapAssetPathForUrl(String url) {

@@ -43,6 +43,13 @@ class _CliToolsScreenState extends State<CliToolsScreen> {
 
   Future<void> _openTool(CliToolDefinition tool) async {
     final isShell = tool.id == CliToolService.shellTool.id;
+    if (!isShell) {
+      try {
+        await CliApiConfigService.regenerateRuntimeFiles();
+      } catch (_) {
+        // The terminal launch script will surface missing runtime files.
+      }
+    }
     await Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => TerminalScreen(
