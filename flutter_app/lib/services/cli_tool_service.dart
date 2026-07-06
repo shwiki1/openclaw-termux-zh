@@ -39,7 +39,14 @@ class CliToolService {
     icon: Icons.assistant,
     color: Colors.lightBlue,
     installCommand: _codeBuddyInstallCommand,
-    launchCommand: 'exec /usr/local/bin/codebuddy',
+    launchCommand: r'''
+[ -r /root/.openclaw/cli-env.sh ] && . /root/.openclaw/cli-env.sh
+[ -r /root/.openclaw/cli-env-codebuddy.sh ] && . /root/.openclaw/cli-env-codebuddy.sh
+if [ -n "${OPENCLAW_MODEL:-}" ]; then
+  exec /usr/local/bin/codebuddy --model "$OPENCLAW_MODEL"
+fi
+exec /usr/local/bin/codebuddy
+''',
     versionCommand: '/usr/local/bin/codebuddy --version',
   );
 
@@ -52,7 +59,14 @@ class CliToolService {
     icon: Icons.hub,
     color: Colors.orange,
     installCommand: _qwenInstallCommand,
-    launchCommand: 'exec /usr/local/bin/qwen',
+    launchCommand: r'''
+[ -r /root/.openclaw/cli-env.sh ] && . /root/.openclaw/cli-env.sh
+[ -r /root/.openclaw/cli-env-qwen-code.sh ] && . /root/.openclaw/cli-env-qwen-code.sh
+if [ -n "${OPENCLAW_MODEL:-}" ]; then
+  exec /usr/local/bin/qwen --model "$OPENCLAW_MODEL"
+fi
+exec /usr/local/bin/qwen
+''',
     versionCommand: '/usr/local/bin/qwen --version',
   );
 
@@ -65,7 +79,11 @@ class CliToolService {
     icon: Icons.bolt,
     color: Colors.amber,
     installCommand: _hermesInstallCommand,
-    launchCommand: 'exec /usr/local/bin/hermes',
+    launchCommand: r'''
+[ -r /root/.openclaw/cli-env.sh ] && . /root/.openclaw/cli-env.sh
+[ -r /root/.openclaw/cli-env-hermes-agent.sh ] && . /root/.openclaw/cli-env-hermes-agent.sh
+exec /usr/local/bin/hermes
+''',
     versionCommand: '/usr/local/bin/hermes --version',
   );
 
@@ -78,7 +96,11 @@ class CliToolService {
     icon: Icons.smart_toy,
     color: Colors.teal,
     installCommand: _genericInstallCommand,
-    launchCommand: 'exec /usr/local/bin/generic-agent',
+    launchCommand: r'''
+[ -r /root/.openclaw/cli-env.sh ] && . /root/.openclaw/cli-env.sh
+[ -r /root/.openclaw/cli-env-generic-agent.sh ] && . /root/.openclaw/cli-env-generic-agent.sh
+exec /usr/local/bin/generic-agent
+''',
     versionCommand: '/usr/local/bin/generic-agent --version',
   );
 
@@ -91,7 +113,21 @@ class CliToolService {
     icon: Icons.diamond,
     color: Colors.indigo,
     installCommand: _geminiInstallCommand,
-    launchCommand: 'exec /usr/local/bin/gemini',
+    launchCommand: r'''
+[ -r /root/.openclaw/cli-env.sh ] && . /root/.openclaw/cli-env.sh
+[ -r /root/.openclaw/cli-env-gemini.sh ] && . /root/.openclaw/cli-env-gemini.sh
+if [ "${OPENCLAW_API_PROTOCOL:-gemini}" != "gemini" ]; then
+  if [ -x /usr/local/bin/gemini-openai-agent ]; then
+    exec /usr/local/bin/gemini-openai-agent
+  fi
+  echo "Gemini CLI 的官方运行时只支持 Gemini 协议。OpenAI 兼容协议需要回到 CLI Tools 页面更新 Gemini CLI 以安装兜底 Agent。" >&2
+  exit 2
+fi
+if [ -n "${OPENCLAW_MODEL:-}" ]; then
+  exec /usr/local/bin/gemini --model "$OPENCLAW_MODEL"
+fi
+exec /usr/local/bin/gemini
+''',
     versionCommand: '/usr/local/bin/gemini --version',
   );
 
@@ -222,9 +258,11 @@ OPENCLAW_NODE_WRAPPER
 
 write_generic_agent() {
   bin_name="$1"
-  tool_id="$2"
-  display_name="$3"
-  cat > "/usr/local/bin/$bin_name" <<'OPENCLAW_GENERIC_AGENT'
+  env_tool_id="$2"
+  tool_id="$3"
+  display_name="$4"
+  script_path="/usr/local/lib/openclaw-cli-$bin_name.js"
+  cat > "$script_path" <<'OPENCLAW_GENERIC_AGENT'
 #!/usr/bin/env node
 const readline = require("readline");
 
@@ -324,7 +362,18 @@ rl.on("line", async (line) => {
   rl.prompt();
 });
 OPENCLAW_GENERIC_AGENT
-  sed -i "s/Generic Agent/$display_name/g; s/generic-agent/$tool_id/g" "/usr/local/bin/$bin_name"
+  sed -i "s/Generic Agent/$display_name/g; s/generic-agent/$tool_id/g" "$script_path"
+  chmod 0755 "$script_path"
+  cat > "/usr/local/bin/$bin_name" <<OPENCLAW_GENERIC_AGENT_WRAPPER
+#!/bin/sh
+export NODE_OPTIONS="\${NODE_OPTIONS:---require /root/.openclaw/bionic-bypass.js}"
+export NODE_EXTRA_CA_CERTS="\${NODE_EXTRA_CA_CERTS:-/etc/ssl/certs/ca-certificates.crt}"
+export TMPDIR="\${TMPDIR:-/tmp}"
+[ -r /root/.openclaw/terminal-theme.sh ] && . /root/.openclaw/terminal-theme.sh
+[ -r /root/.openclaw/cli-env.sh ] && . /root/.openclaw/cli-env.sh
+[ -r /root/.openclaw/cli-env-$env_tool_id.sh ] && . /root/.openclaw/cli-env-$env_tool_id.sh
+exec node "$script_path" "\$@"
+OPENCLAW_GENERIC_AGENT_WRAPPER
   chmod 0755 "/usr/local/bin/$bin_name"
 }
 
@@ -432,7 +481,7 @@ echo ">>> QWEN_CODE_CLI_INSTALL_COMPLETE"
 echo ">>> Installing Gemini CLI from npm..."
 install_cli_package gemini @google/gemini-cli gemini
 write_node_wrapper gemini gemini /opt/openclaw-cli/gemini/node_modules/@google/gemini-cli/bundle/gemini.js
-write_generic_agent gemini-openai-agent generic-agent "Gemini OpenAI Agent"
+write_generic_agent gemini-openai-agent gemini generic-agent "Gemini OpenAI Agent"
 hash -r
 /usr/local/bin/gemini --version || true
 echo ">>> GEMINI_CLI_INSTALL_COMPLETE"
@@ -441,7 +490,7 @@ echo ">>> GEMINI_CLI_INSTALL_COMPLETE"
   static const _hermesInstallCommand = _commonInstallPrefix +
       r'''
 echo ">>> Installing OpenClaw Hermes Agent..."
-write_generic_agent hermes hermes-agent "Hermes Agent"
+write_generic_agent hermes hermes-agent hermes-agent "Hermes Agent"
 hash -r
 /usr/local/bin/hermes --version
 echo ">>> HERMES_AGENT_INSTALL_COMPLETE"
@@ -450,7 +499,7 @@ echo ">>> HERMES_AGENT_INSTALL_COMPLETE"
   static const _genericInstallCommand = _commonInstallPrefix +
       r'''
 echo ">>> Installing OpenClaw Generic Agent..."
-write_generic_agent generic-agent generic-agent "Generic Agent"
+write_generic_agent generic-agent generic-agent generic-agent "Generic Agent"
 hash -r
 /usr/local/bin/generic-agent --version
 echo ">>> GENERIC_AGENT_INSTALL_COMPLETE"

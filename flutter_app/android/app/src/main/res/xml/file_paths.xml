@@ -9,4 +9,7 @@
     <external-files-path
         name="external_files"
         path="." />
+    <external-path
+        name="shared_storage"
+        path="." />
 </paths>

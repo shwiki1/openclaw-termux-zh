@@ -331,6 +331,7 @@ class _TerminalScreenState extends State<TerminalScreen> {
     final compactActions = MediaQuery.sizeOf(context).width < 380;
     return Scaffold(
       backgroundColor: Colors.black,
+      resizeToAvoidBottomInset: false,
       appBar: AppBar(
         title: Text(widget.title),
         actions: compactActions ? [_buildOverflowMenu()] : _buildToolbarActions(),

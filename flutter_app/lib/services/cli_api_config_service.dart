@@ -422,6 +422,10 @@ export PS1='\[\e[1;32m\]\u@\h\[\e[0m\]:\[\e[1;34m\]\w\[\e[0m\]\$ '
         ..add('export ANTHROPIC_MODEL=${_shQuote(toolModel)}')
         ..add('export GEMINI_MODEL=${_shQuote(toolModel)}')
         ..add('export QWEN_MODEL=${_shQuote(toolModel)}')
+        ..add('export CODEBUDDY_MODEL=${_shQuote(toolModel)}')
+        ..add('export CODEBUDDY_BIG_SLOW_MODEL=${_shQuote(toolModel)}')
+        ..add('export CODEBUDDY_SMALL_FAST_MODEL=${_shQuote(toolModel)}')
+        ..add('export CODEBUDDY_CODE_SUBAGENT_MODEL=${_shQuote(toolModel)}')
         ..add('export CHINESE_LLM_MODEL=${_shQuote(toolModel)}')
         ..add('export OPENCLAW_MODEL=${_shQuote(toolModel)}');
     }
@@ -479,8 +483,13 @@ export PS1='\[\e[1;32m\]\u@\h\[\e[0m\]:\[\e[1;34m\]\w\[\e[0m\]\$ '
           'CODEBUDDY_API_KEY': config.apiKey.trim(),
         if (config.baseUrl.trim().isNotEmpty)
           'CODEBUDDY_BASE_URL': _trimTrailingSlash(config.baseUrl),
-        if (config.effectiveToolModel.isNotEmpty)
+        if (config.effectiveToolModel.isNotEmpty) ...{
           'OPENCLAW_MODEL': config.effectiveToolModel,
+          'CODEBUDDY_MODEL': config.effectiveToolModel,
+          'CODEBUDDY_BIG_SLOW_MODEL': config.effectiveToolModel,
+          'CODEBUDDY_SMALL_FAST_MODEL': config.effectiveToolModel,
+          'CODEBUDDY_CODE_SUBAGENT_MODEL': config.effectiveToolModel,
+        },
       },
       'permissions': {
         'defaultMode': 'bypassPermissions',
@@ -510,10 +519,7 @@ export PS1='\[\e[1;32m\]\u@\h\[\e[0m\]:\[\e[1;34m\]\w\[\e[0m\]\$ '
     };
     final payload = <String, dynamic>{
       'modelProviders': {
-        protocol: {
-          'protocol': protocol,
-          'models': [modelEntry],
-        },
+        protocol: [modelEntry],
       },
       'env': {
         if (config.apiKey.trim().isNotEmpty) envKey: config.apiKey.trim(),

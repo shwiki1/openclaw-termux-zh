@@ -24,7 +24,8 @@ class SettingsScreen extends StatefulWidget {
   State<SettingsScreen> createState() => _SettingsScreenState();
 }
 
-class _SettingsScreenState extends State<SettingsScreen> {
+class _SettingsScreenState extends State<SettingsScreen>
+    with WidgetsBindingObserver {
   static const _showOrgSection = false;
 
   final _prefs = PreferencesService();
@@ -43,6 +44,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _adbInstalled = false;
   bool _cpolarInstalled = false;
   bool _storageGranted = false;
+  bool _overlayGranted = false;
+  bool _floatingFileManagerRunning = false;
   bool _persistentGatewayLogs = false;
   bool _checkingUpdate = false;
   bool _updatingBonjour = false;
@@ -50,7 +53,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _loadSettings();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && mounted) {
+      _refreshPermissionState();
+    }
   }
 
   Future<void> _loadSettings() async {
@@ -69,6 +86,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       final persistentGatewayLogs =
           await NativeBridge.isGatewayLogPersistenceEnabled();
       final storageGranted = await NativeBridge.hasStoragePermission();
+      final overlayGranted = await NativeBridge.hasOverlayPermission();
+      final floatingFileManagerRunning =
+          await NativeBridge.isFloatingFileManagerRunning();
 
       // Check optional package statuses
       final filesDir = await NativeBridge.getFilesDir();
@@ -84,6 +104,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _batteryOptimized = batteryOptimized;
         _persistentGatewayLogs = persistentGatewayLogs;
         _storageGranted = storageGranted;
+        _overlayGranted = overlayGranted;
+        _floatingFileManagerRunning = floatingFileManagerRunning;
         _arch = arch;
         _prootPath = prootPath;
         _appVersionName =
@@ -135,6 +157,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
         setState(() => _updatingBonjour = false);
       }
     }
+  }
+
+  Future<void> _refreshPermissionState() async {
+    try {
+      final storageGranted = await NativeBridge.hasStoragePermission();
+      final overlayGranted = await NativeBridge.hasOverlayPermission();
+      final floatingFileManagerRunning =
+          await NativeBridge.isFloatingFileManagerRunning();
+      if (!mounted) return;
+      setState(() {
+        _storageGranted = storageGranted;
+        _overlayGranted = overlayGranted;
+        _floatingFileManagerRunning = floatingFileManagerRunning;
+      });
+    } catch (_) {}
   }
 
   @override
@@ -271,6 +308,44 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     }
                     if (!mounted) return;
                     setState(() => _storageGranted = granted);
+                  },
+                ),
+                SwitchListTile(
+                  title: const Text('悬浮文件管理器'),
+                  subtitle: Text(_overlayGranted
+                      ? '显示一个全局悬浮窗，可浏览共享存储并预览文本、图片、视频和音频。'
+                      : '需要先允许本应用显示在其他应用上层。'),
+                  secondary: const Icon(Icons.folder_copy_outlined),
+                  value: _floatingFileManagerRunning,
+                  onChanged: (value) async {
+                    if (value) {
+                      var granted = await NativeBridge.hasOverlayPermission();
+                      if (!granted) {
+                        await NativeBridge.requestOverlayPermission();
+                        granted = await NativeBridge.hasOverlayPermission();
+                      }
+                      if (!mounted) return;
+                      if (!granted) {
+                        setState(() => _overlayGranted = false);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('请在系统设置中允许悬浮窗权限后再开启。'),
+                          ),
+                        );
+                        return;
+                      }
+                      await NativeBridge.startFloatingFileManager();
+                    } else {
+                      await NativeBridge.stopFloatingFileManager();
+                    }
+                    final running =
+                        await NativeBridge.isFloatingFileManagerRunning();
+                    final overlay = await NativeBridge.hasOverlayPermission();
+                    if (!mounted) return;
+                    setState(() {
+                      _overlayGranted = overlay;
+                      _floatingFileManagerRunning = running;
+                    });
                   },
                 ),
                 const Divider(),
