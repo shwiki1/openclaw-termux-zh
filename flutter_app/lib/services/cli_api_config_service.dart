@@ -445,6 +445,9 @@ export PS1='\[\e[1;32m\]\u@\h\[\e[0m\]:\[\e[1;34m\]\w\[\e[0m\]\$ '
         ..add('export GOOGLE_GENAI_USE_VERTEXAI=false')
         ..add('export GEMINI_CLI_NO_BROWSER=1');
     }
+    if (toolId == 'codebuddy' && config.baseUrl.trim().isEmpty) {
+      lines.add('export CODEBUDDY_INTERNET_ENVIRONMENT=internal');
+    }
     lines.add('');
     return lines.join('\n');
   }
@@ -490,6 +493,8 @@ export PS1='\[\e[1;32m\]\u@\h\[\e[0m\]:\[\e[1;34m\]\w\[\e[0m\]\$ '
           'CODEBUDDY_SMALL_FAST_MODEL': config.effectiveToolModel,
           'CODEBUDDY_CODE_SUBAGENT_MODEL': config.effectiveToolModel,
         },
+        if (config.baseUrl.trim().isEmpty)
+          'CODEBUDDY_INTERNET_ENVIRONMENT': 'internal',
       },
       'permissions': {
         'defaultMode': 'bypassPermissions',

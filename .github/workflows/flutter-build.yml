@@ -79,16 +79,33 @@ jobs:
           fi
 
           echo "$(dirname "$SDKMANAGER")" >> "$GITHUB_PATH"
+          rm -rf "${SDK_ROOT}/.temp" "${SDK_ROOT}/ndk/27.0.12077973" "${SDK_ROOT}/ndk/28.2.13676358"
+
           set +o pipefail
           yes | "$SDKMANAGER" --sdk_root="$SDK_ROOT" --licenses >/dev/null
           set -o pipefail
-          "$SDKMANAGER" --sdk_root="$SDK_ROOT" \
+
+          install_sdk_package() {
+            for attempt in 1 2 3; do
+              rm -rf "${SDK_ROOT}/.temp"
+              if "$SDKMANAGER" --sdk_root="$SDK_ROOT" "$@"; then
+                return 0
+              fi
+              echo "sdkmanager attempt ${attempt} failed for: $*" >&2
+              sleep $((attempt * 5))
+            done
+            return 1
+          }
+
+          install_sdk_package \
             "platform-tools" \
             "platforms;android-36" \
-            "build-tools;36.0.0" \
-            "ndk;28.2.13676358"
+            "build-tools;36.0.0"
+          install_sdk_package "ndk;27.0.12077973"
+          install_sdk_package "ndk;28.2.13676358"
 
           test -f "${SDK_ROOT}/platforms/android-36/android.jar"
+          test -d "${SDK_ROOT}/ndk/27.0.12077973"
           test -d "${SDK_ROOT}/ndk/28.2.13676358"
 
       - name: Setup Gradle
