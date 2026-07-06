@@ -196,6 +196,25 @@ export TMPDIR="\${TMPDIR:-/tmp}"
 [ -r /root/.openclaw/terminal-theme.sh ] && . /root/.openclaw/terminal-theme.sh
 [ -r /root/.openclaw/cli-env.sh ] && . /root/.openclaw/cli-env.sh
 [ -r /root/.openclaw/cli-env-$target.sh ] && . /root/.openclaw/cli-env-$target.sh
+case "$target" in
+  codebuddy)
+    if [ -n "\${OPENCLAW_MODEL:-}" ] && [ "\${1:-}" != "--version" ] && [ "\${1:-}" != "-v" ] && [ "\${1:-}" != "--help" ] && [ "\${1:-}" != "-h" ]; then
+      set -- --model "\$OPENCLAW_MODEL" "\$@"
+    fi
+    ;;
+  gemini)
+    if [ "\${OPENCLAW_API_PROTOCOL:-gemini}" != "gemini" ] && [ "\${1:-}" != "--version" ] && [ "\${1:-}" != "-v" ] && [ "\${1:-}" != "--help" ] && [ "\${1:-}" != "-h" ]; then
+      if [ -x /usr/local/bin/gemini-openai-agent ]; then
+        exec /usr/local/bin/gemini-openai-agent "\$@"
+      fi
+      echo "Gemini CLI only supports Gemini protocol directly. Reinstall Gemini CLI to enable the OpenAI-compatible fallback agent, or switch this tool's API protocol to Gemini." >&2
+      exit 2
+    fi
+    if [ -n "\${OPENCLAW_MODEL:-}" ] && [ "\${1:-}" != "--version" ] && [ "\${1:-}" != "-v" ] && [ "\${1:-}" != "--help" ] && [ "\${1:-}" != "-h" ]; then
+      set -- --model "\$OPENCLAW_MODEL" "\$@"
+    fi
+    ;;
+esac
 exec node "$real_js" "\$@"
 OPENCLAW_NODE_WRAPPER
   chmod 0755 "/usr/local/bin/$bin_name"
@@ -413,6 +432,7 @@ echo ">>> QWEN_CODE_CLI_INSTALL_COMPLETE"
 echo ">>> Installing Gemini CLI from npm..."
 install_cli_package gemini @google/gemini-cli gemini
 write_node_wrapper gemini gemini /opt/openclaw-cli/gemini/node_modules/@google/gemini-cli/bundle/gemini.js
+write_generic_agent gemini-openai-agent generic-agent "Gemini OpenAI Agent"
 hash -r
 /usr/local/bin/gemini --version || true
 echo ">>> GEMINI_CLI_INSTALL_COMPLETE"

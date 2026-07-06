@@ -14,6 +14,10 @@ class CliApiConfigService {
   static const _codexProxyEnvPath = '/root/.openclaw/codex-proxy.env';
   static const _codexConfigPath = '/root/.codex/config.toml';
   static const _codexProxyBaseUrl = 'http://127.0.0.1:8787/v1';
+  static const _codeBuddyModelsPath = '/root/.codebuddy/models.json';
+  static const _codeBuddySettingsPath = '/root/.codebuddy/settings.json';
+  static const _qwenSettingsPath = '/root/.qwen/settings.json';
+  static const _geminiSettingsPath = '/root/.gemini/settings.json';
   static const _terminalThemePath = '/root/.openclaw/terminal-theme.sh';
   static const _prefsKey = 'cli_api_config_json';
 
@@ -186,10 +190,28 @@ class CliApiConfigService {
       _buildCodexProxyEnv(codex),
     );
     await NativeBridge.writeRootfsFile(_codexConfigPath, _buildCodexToml(codex));
+    await NativeBridge.writeRootfsFile(
+      _codeBuddyModelsPath,
+      _buildCodeBuddyModelsJson(activeConfigs['codebuddy']!),
+    );
+    await NativeBridge.writeRootfsFile(
+      _codeBuddySettingsPath,
+      _buildCodeBuddySettingsJson(activeConfigs['codebuddy']!),
+    );
+    await NativeBridge.writeRootfsFile(
+      _qwenSettingsPath,
+      _buildQwenSettingsJson(activeConfigs['qwen-code']!),
+    );
+    await NativeBridge.writeRootfsFile(
+      _geminiSettingsPath,
+      _buildGeminiSettingsJson(activeConfigs['gemini']!),
+    );
     await NativeBridge.runInProot(
       'chmod 0755 $_codexProxyPath 2>/dev/null || true; '
       'chmod 0755 $_codexProxyJsPath 2>/dev/null || true; '
       'chmod 0600 $_codexProxyEnvPath 2>/dev/null || true; '
+      'chmod 0600 $_codeBuddyModelsPath $_codeBuddySettingsPath '
+      '$_qwenSettingsPath $_geminiSettingsPath 2>/dev/null || true; '
       'chmod 0644 $_terminalThemePath 2>/dev/null || true; '
       'grep -q "openclaw/terminal-theme.sh" /root/.bashrc 2>/dev/null || '
       'printf "\\n[ -r /root/.openclaw/terminal-theme.sh ] && . /root/.openclaw/terminal-theme.sh\\n" >> /root/.bashrc; '
@@ -376,6 +398,7 @@ export PS1='\[\e[1;32m\]\u@\h\[\e[0m\]:\[\e[1;34m\]\w\[\e[0m\]\$ '
         ..add('export GOOGLE_API_KEY=${_shQuote(apiKey)}')
         ..add('export QWEN_API_KEY=${_shQuote(apiKey)}')
         ..add('export DASHSCOPE_API_KEY=${_shQuote(apiKey)}')
+        ..add('export CODEBUDDY_API_KEY=${_shQuote(apiKey)}')
         ..add('export CHINESE_LLM_API_KEY=${_shQuote(apiKey)}');
     }
     if (openAiBaseUrl.isNotEmpty) {
@@ -385,6 +408,11 @@ export PS1='\[\e[1;32m\]\u@\h\[\e[0m\]:\[\e[1;34m\]\w\[\e[0m\]\$ '
         ..add('export ANTHROPIC_BASE_URL=${_shQuote(openAiBaseUrl)}')
         ..add('export GEMINI_BASE_URL=${_shQuote(openAiBaseUrl)}')
         ..add('export GOOGLE_GEMINI_BASE_URL=${_shQuote(openAiBaseUrl)}')
+        ..add('export CODEBUDDY_BASE_URL=${_shQuote(openAiBaseUrl)}')
+        ..add(
+          'export OPENCLAW_CODEBUDDY_CHAT_URL='
+          '${_shQuote(_chatCompletionsUrl(openAiBaseUrl))}',
+        )
         ..add('export CHINESE_LLM_BASE_URL=${_shQuote(openAiBaseUrl)}');
     }
     if (toolModel.isNotEmpty) {
@@ -415,6 +443,115 @@ export PS1='\[\e[1;32m\]\u@\h\[\e[0m\]:\[\e[1;34m\]\w\[\e[0m\]\$ '
     }
     lines.add('');
     return lines.join('\n');
+  }
+
+  static String _buildCodeBuddyModelsJson(CliApiConfig config) {
+    final model = config.effectiveToolModel;
+    final baseUrl = _trimTrailingSlash(config.baseUrl);
+    final modelId = model.isEmpty ? 'openclaw-model' : model;
+    final payload = <String, dynamic>{
+      'models': [
+        {
+          'id': modelId,
+          'name': modelId,
+          'vendor': 'OpenAI',
+          'apiKey': r'${CODEBUDDY_API_KEY}',
+          if (baseUrl.isNotEmpty) 'url': _chatCompletionsUrl(baseUrl),
+          'supportsToolCall': true,
+          'supportsImages': true,
+          'supportsReasoning': config.reasoningEffort.trim().isNotEmpty,
+          'relatedModels': {
+            'lite': modelId,
+            'reasoning': modelId,
+            'subagent': modelId,
+          },
+        },
+      ],
+      'availableModels': [modelId],
+    };
+    return '${const JsonEncoder.withIndent('  ').convert(payload)}\n';
+  }
+
+  static String _buildCodeBuddySettingsJson(CliApiConfig config) {
+    final payload = <String, dynamic>{
+      'env': {
+        if (config.apiKey.trim().isNotEmpty)
+          'CODEBUDDY_API_KEY': config.apiKey.trim(),
+        if (config.baseUrl.trim().isNotEmpty)
+          'CODEBUDDY_BASE_URL': _trimTrailingSlash(config.baseUrl),
+        if (config.effectiveToolModel.isNotEmpty)
+          'OPENCLAW_MODEL': config.effectiveToolModel,
+      },
+      'permissions': {
+        'defaultMode': 'bypassPermissions',
+      },
+    };
+    return '${const JsonEncoder.withIndent('  ').convert(payload)}\n';
+  }
+
+  static String _buildQwenSettingsJson(CliApiConfig config) {
+    final protocol = _normalizedProtocol(config.effectiveApiProtocol);
+    final envKey = _apiKeyEnvKey(protocol);
+    final model = config.effectiveToolModel;
+    final baseUrl = _trimTrailingSlash(config.baseUrl);
+    final modelId = model.isEmpty ? 'openclaw-model' : model;
+    final modelEntry = <String, dynamic>{
+      'id': modelId,
+      'name': modelId,
+      'description': 'OpenClaw configured model',
+      'envKey': envKey,
+      if (baseUrl.isNotEmpty) 'baseUrl': baseUrl,
+      if (config.reasoningEffort.trim().isNotEmpty)
+        'generationConfig': {
+          'extra_body': {
+            'reasoning_effort': config.reasoningEffort.trim(),
+          },
+        },
+    };
+    final payload = <String, dynamic>{
+      'modelProviders': {
+        protocol: {
+          'protocol': protocol,
+          'models': [modelEntry],
+        },
+      },
+      'env': {
+        if (config.apiKey.trim().isNotEmpty) envKey: config.apiKey.trim(),
+        if (protocol == 'openai' && baseUrl.isNotEmpty)
+          'OPENAI_BASE_URL': baseUrl,
+        if (protocol == 'openai') 'OPENAI_MODEL': modelId,
+        if (protocol == 'anthropic') 'ANTHROPIC_MODEL': modelId,
+        if (protocol == 'gemini') 'GEMINI_MODEL': modelId,
+      },
+      'security': {
+        'auth': {
+          'selectedType': protocol,
+        },
+      },
+      'model': {
+        'name': modelId,
+      },
+    };
+    return '${const JsonEncoder.withIndent('  ').convert(payload)}\n';
+  }
+
+  static String _buildGeminiSettingsJson(CliApiConfig config) {
+    final model = config.effectiveToolModel;
+    final payload = <String, dynamic>{
+      'security': {
+        'auth': {
+          'selectedType': 'gemini-api-key',
+        },
+      },
+      if (model.isNotEmpty)
+        'model': {
+          'name': model,
+        },
+      'telemetry': {
+        'enabled': false,
+      },
+    };
+    return '${const JsonEncoder.withIndent('  ').convert(payload)}\n';
   }
 
   static String _buildCodexToml(CliApiConfig codex) {
@@ -493,6 +630,31 @@ export PS1='\[\e[1;32m\]\u@\h\[\e[0m\]:\[\e[1;34m\]\w\[\e[0m\]\$ '
       result = result.substring(0, result.length - 1);
     }
     return result;
+  }
+
+  static String _chatCompletionsUrl(String baseUrl) {
+    final trimmed = _trimTrailingSlash(baseUrl);
+    if (trimmed.isEmpty) return '';
+    if (trimmed.endsWith('/chat/completions')) return trimmed;
+    if (trimmed.endsWith('/v1')) return '$trimmed/chat/completions';
+    return '$trimmed/v1/chat/completions';
+  }
+
+  static String _normalizedProtocol(String protocol) {
+    final normalized = protocol.trim().toLowerCase();
+    return switch (normalized) {
+      'anthropic' => 'anthropic',
+      'gemini' => 'gemini',
+      _ => 'openai',
+    };
+  }
+
+  static String _apiKeyEnvKey(String protocol) {
+    return switch (_normalizedProtocol(protocol)) {
+      'anthropic' => 'ANTHROPIC_API_KEY',
+      'gemini' => 'GEMINI_API_KEY',
+      _ => 'OPENAI_API_KEY',
+    };
   }
 
   static String _buildCodexProxyPy() {
