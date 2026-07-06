@@ -103,12 +103,11 @@ jobs:
           FLUTTER_SDK="$(dirname "$(dirname "$(command -v flutter)")")"
           APP_VERSION="$(awk '/^version:/ {print $2; exit}' pubspec.yaml)"
           VERSION_BASE="${APP_VERSION%%+*}"
-          VERSION_MAJOR="$(printf '%s' "$VERSION_BASE" | cut -d. -f1)"
-          VERSION_MINOR="$(printf '%s' "$VERSION_BASE" | cut -d. -f2)"
-          VERSION_PATCH="$(printf '%s' "$VERSION_BASE" | cut -d. -f3)"
-          VERSION_PATCH="${VERSION_PATCH:-0}"
-          VERSION_NAME="${VERSION_MAJOR:-0}.${VERSION_MINOR:-0}.$((VERSION_PATCH * 100000 + GITHUB_RUN_NUMBER))"
-          VERSION_CODE="$((100000 + GITHUB_RUN_NUMBER))"
+          VERSION_CODE="${APP_VERSION#*+}"
+          if [ "$VERSION_CODE" = "$APP_VERSION" ] || [ -z "$VERSION_CODE" ]; then
+            VERSION_CODE="$GITHUB_RUN_NUMBER"
+          fi
+          VERSION_NAME="$VERSION_BASE"
           echo "APP_VERSION_NAME=${VERSION_NAME}" >> "$GITHUB_ENV"
           echo "APP_VERSION_CODE=${VERSION_CODE}" >> "$GITHUB_ENV"
 
