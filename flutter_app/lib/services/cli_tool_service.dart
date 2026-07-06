@@ -26,20 +26,27 @@ class CliToolService {
     icon: Icons.auto_awesome,
     color: Colors.green,
     installCommand: _codexInstallCommand,
-    launchCommand: 'exec /usr/local/bin/codex',
+    launchCommand:
+        'sed -i "s/ --ask-for-approval never//g; s/--ask-for-approval never //g" /usr/local/bin/codex 2>/dev/null || true; exec /usr/local/bin/codex',
     versionCommand: '/usr/local/bin/codex --version',
   );
 
   static const claudeTool = CliToolDefinition(
     id: 'claude',
     name: 'Claude Code',
-    packageName: '@anthropic-ai/claude-code',
+    packageName: '@anthropic-ai/claude-code@2.1.148',
     executable: 'claude',
     description: '通过 npm 安装的 Anthropic Claude Code CLI，适配 aarch64 Ubuntu。',
     icon: Icons.psychology,
     color: Colors.deepOrange,
     installCommand: _claudeInstallCommand,
-    launchCommand: 'exec /root/.openclaw/claude-launcher.sh',
+    launchCommand: r'''
+ver="$(/usr/local/bin/claude --version 2>/dev/null | head -n 1 || true)"
+case "$ver" in
+  2.1.148*) exec /root/.openclaw/claude-launcher.sh ;;
+  *) echo "Claude Code 当前版本为 ${ver:-未安装}，请先在 CLI Tools 页面点击「更新」，安装已验证可用的 2.1.148 版本。"; exit 2 ;;
+esac
+''',
     versionCommand: '/usr/local/bin/claude --version',
   );
 
@@ -51,6 +58,7 @@ class CliToolService {
 
   static const _commonNpmInstallPrefix = r'''
 set -eu
+export OPENCLAW_CLAUDE_CODE_VERSION=2.1.148
 export npm_config_audit=false
 export npm_config_fund=false
 export npm_config_progress=false
@@ -134,9 +142,13 @@ install_claude_package() {
     --force \
     --ignore-scripts \
     --omit=optional \
-    @anthropic-ai/claude-code@latest
+    "@anthropic-ai/claude-code@${OPENCLAW_CLAUDE_CODE_VERSION:-2.1.148}"
 
   claude_version="$(node -p "require('$staging_dir/node_modules/@anthropic-ai/claude-code/package.json').version")"
+  if [ "$claude_version" != "${OPENCLAW_CLAUDE_CODE_VERSION:-2.1.148}" ]; then
+    echo "Unexpected Claude Code version: $claude_version" >&2
+    exit 1
+  fi
   native_package="@anthropic-ai/claude-code-linux-arm64@$claude_version"
   native_dir="$staging_dir/node_modules/@anthropic-ai/claude-code-linux-arm64"
   mkdir -p "$native_dir"
@@ -222,7 +234,7 @@ for arg in "$@"; do
 done
 
 if [ "$openclaw_passthrough" != true ] && [ "$openclaw_has_sandbox_arg" != true ]; then
-  set -- --dangerously-bypass-approvals-and-sandbox --ask-for-approval never "$@"
+  set -- --dangerously-bypass-approvals-and-sandbox "$@"
 fi
 if [ "$openclaw_passthrough" != true ] || [ "$openclaw_cli_mode" = true ]; then
   set -- --no-alt-screen "$@"
@@ -337,6 +349,16 @@ fi
               .where((line) => !line.startsWith('__'))
               .join('\n')
           : null;
+      if (tool.id == claudeTool.id &&
+          installed &&
+          !version.startsWith('2.1.148')) {
+        return CliToolStatus(
+          tool: tool,
+          installed: false,
+          version: version.isEmpty ? null : version,
+          error: '当前 Claude Code 版本为 $version，请点击安装/更新切换到已验证的 2.1.148。',
+        );
+      }
       return CliToolStatus(
         tool: tool,
         installed: installed,
