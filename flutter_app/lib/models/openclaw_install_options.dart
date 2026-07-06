@@ -55,6 +55,7 @@ class OpenClawInstallOptions {
   final String? ubuntuRootfsArchivePath;
   final String? nodeArchiveUrl;
   final String? nodeArchivePath;
+  final bool installOpenClaw;
 
   const OpenClawInstallOptions({
     this.parallelJobs,
@@ -65,6 +66,7 @@ class OpenClawInstallOptions {
     this.ubuntuRootfsArchivePath,
     this.nodeArchiveUrl,
     this.nodeArchivePath,
+    this.installOpenClaw = true,
   });
 
   String? get normalizedPrebuiltRootfsUrl {
@@ -141,6 +143,7 @@ class OpenClawInstallOptions {
     String? ubuntuRootfsArchivePath,
     String? nodeArchiveUrl,
     String? nodeArchivePath,
+    bool? installOpenClaw,
     bool clearParallelJobs = false,
     bool clearPrebuiltRootfsUrl = false,
     bool clearPrebuiltRootfsArchivePath = false,
@@ -170,6 +173,7 @@ class OpenClawInstallOptions {
       nodeArchivePath: clearNodeArchivePath
           ? null
           : (nodeArchivePath ?? this.nodeArchivePath),
+      installOpenClaw: installOpenClaw ?? this.installOpenClaw,
     );
   }
 

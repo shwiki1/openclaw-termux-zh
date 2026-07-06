@@ -28,8 +28,6 @@ class TerminalScreen extends StatefulWidget {
 class _TerminalScreenState extends State<TerminalScreen> {
   late final PersistentTerminalSession _session;
   late final TerminalController _controller;
-  final _inputController = TextEditingController();
-  final _inputFocusNode = FocusNode();
   final _ctrlNotifier = ValueNotifier<bool>(false);
   final _altNotifier = ValueNotifier<bool>(false);
   final _screenshotKey = GlobalKey();
@@ -108,8 +106,6 @@ class _TerminalScreenState extends State<TerminalScreen> {
   void dispose() {
     _session.terminal.onOutput = _session.writeInput;
     _session.removeListener(_onSessionChanged);
-    _inputController.dispose();
-    _inputFocusNode.dispose();
     _ctrlNotifier.dispose();
     _altNotifier.dispose();
     _controller.dispose();
@@ -314,20 +310,8 @@ class _TerminalScreenState extends State<TerminalScreen> {
   Future<void> _paste() async {
     final data = await Clipboard.getData(Clipboard.kTextPlain);
     if (data?.text != null && data!.text!.isNotEmpty) {
-      final current = _inputController.text;
-      _inputController.text = '$current${data.text!}';
-      _inputController.selection = TextSelection.collapsed(
-        offset: _inputController.text.length,
-      );
-      _inputFocusNode.requestFocus();
+      _session.writeInput(data.text!);
     }
-  }
-
-  void _sendInputLine() {
-    final text = _inputController.text;
-    _session.writeInput('$text\r');
-    _inputController.clear();
-    _inputFocusNode.requestFocus();
   }
 
   Future<void> _takeScreenshot() async {
@@ -346,6 +330,7 @@ class _TerminalScreenState extends State<TerminalScreen> {
   Widget build(BuildContext context) {
     final compactActions = MediaQuery.sizeOf(context).width < 380;
     return Scaffold(
+      backgroundColor: Colors.black,
       appBar: AppBar(
         title: Text(widget.title),
         actions: compactActions ? [_buildOverflowMenu()] : _buildToolbarActions(),
@@ -488,18 +473,21 @@ class _TerminalScreenState extends State<TerminalScreen> {
     return Column(
       children: [
         Expanded(
-          child: RepaintBoundary(
-            key: _screenshotKey,
-            child: TerminalView(
-              _session.terminal,
-              controller: _controller,
-              textStyle: const TerminalStyle(
-                fontSize: 11,
-                height: 1.0,
-                fontFamily: 'DejaVuSansMono',
-                fontFamilyFallback: _fontFallback,
+          child: ColoredBox(
+            color: Colors.black,
+            child: RepaintBoundary(
+              key: _screenshotKey,
+              child: TerminalView(
+                _session.terminal,
+                controller: _controller,
+                textStyle: const TerminalStyle(
+                  fontSize: 11,
+                  height: 1.0,
+                  fontFamily: 'DejaVuSansMono',
+                  fontFamilyFallback: _fontFallback,
+                ),
+                onTapUp: _handleTap,
               ),
-              onTapUp: _handleTap,
             ),
           ),
         ),
@@ -508,60 +496,7 @@ class _TerminalScreenState extends State<TerminalScreen> {
           ctrlNotifier: _ctrlNotifier,
           altNotifier: _altNotifier,
         ),
-        _buildInputBar(),
       ],
-    );
-  }
-
-  Widget _buildInputBar() {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-    final fillColor = isDark ? const Color(0xFF151923) : const Color(0xFFF3F4F6);
-
-    return SafeArea(
-      top: false,
-      child: Container(
-        color: theme.colorScheme.surface,
-        padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            Expanded(
-              child: TextField(
-                controller: _inputController,
-                focusNode: _inputFocusNode,
-                minLines: 1,
-                maxLines: 4,
-                textInputAction: TextInputAction.send,
-                keyboardType: TextInputType.text,
-                enableSuggestions: true,
-                autocorrect: false,
-                decoration: InputDecoration(
-                  isDense: true,
-                  filled: true,
-                  fillColor: fillColor,
-                  hintText: '输入命令或消息，点发送写入终端',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide.none,
-                  ),
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 10,
-                  ),
-                ),
-                onSubmitted: (_) => _sendInputLine(),
-              ),
-            ),
-            const SizedBox(width: 8),
-            IconButton.filled(
-              tooltip: 'Send',
-              onPressed: _session.isRunning ? _sendInputLine : null,
-              icon: const Icon(Icons.send),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }

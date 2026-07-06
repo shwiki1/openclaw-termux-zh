@@ -4,7 +4,7 @@ class CliApiConfig {
   final String apiKey;
   final String model;
   final String reasoningEffort;
-  final String codexModelMapping;
+  final String modelMapping;
   final String apiProtocol;
   final String profileName;
 
@@ -14,7 +14,7 @@ class CliApiConfig {
     this.apiKey = '',
     this.model = '',
     this.reasoningEffort = '',
-    this.codexModelMapping = '',
+    this.modelMapping = '',
     this.apiProtocol = '',
     this.profileName = '',
   });
@@ -24,24 +24,28 @@ class CliApiConfig {
       apiKey.trim().isNotEmpty ||
       model.trim().isNotEmpty ||
       reasoningEffort.trim().isNotEmpty ||
-      codexModelMapping.trim().isNotEmpty;
+      modelMapping.trim().isNotEmpty;
 
   String get effectiveApiProtocol {
     final protocol = apiProtocol.trim();
     if (protocol.isNotEmpty) return protocol;
-    return toolId == 'claude' ? 'anthropic' : 'openai';
+    return toolId == 'gemini' ? 'gemini' : 'openai';
   }
 
-  String get effectiveCodexModel {
-    final mapped = codexModelMapping.trim();
+  String get effectiveToolModel {
+    final mapped = modelMapping.trim();
     return mapped.isNotEmpty ? mapped : model.trim();
   }
+
+  String get codexModelMapping => modelMapping;
+  String get effectiveCodexModel => effectiveToolModel;
 
   CliApiConfig copyWith({
     String? baseUrl,
     String? apiKey,
     String? model,
     String? reasoningEffort,
+    String? modelMapping,
     String? codexModelMapping,
     String? apiProtocol,
     String? profileName,
@@ -52,7 +56,7 @@ class CliApiConfig {
       apiKey: apiKey ?? this.apiKey,
       model: model ?? this.model,
       reasoningEffort: reasoningEffort ?? this.reasoningEffort,
-      codexModelMapping: codexModelMapping ?? this.codexModelMapping,
+      modelMapping: modelMapping ?? codexModelMapping ?? this.modelMapping,
       apiProtocol: apiProtocol ?? this.apiProtocol,
       profileName: profileName ?? this.profileName,
     );
@@ -64,7 +68,8 @@ class CliApiConfig {
         'apiKey': apiKey.trim(),
         'model': model.trim(),
         'reasoningEffort': reasoningEffort.trim(),
-        'codexModelMapping': codexModelMapping.trim(),
+        'modelMapping': modelMapping.trim(),
+        'codexModelMapping': modelMapping.trim(),
         'apiProtocol': effectiveApiProtocol,
       };
 
@@ -78,7 +83,10 @@ class CliApiConfig {
       apiKey: _string(json['apiKey']),
       model: _string(json['model']),
       reasoningEffort: _string(json['reasoningEffort']),
-      codexModelMapping: _string(json['codexModelMapping']),
+      modelMapping:
+          _string(json['modelMapping']).isNotEmpty
+              ? _string(json['modelMapping'])
+              : _string(json['codexModelMapping']),
       apiProtocol: _string(json['apiProtocol']),
       profileName: _string(json['profileName']),
     );

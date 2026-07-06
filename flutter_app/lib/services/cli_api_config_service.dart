@@ -14,14 +14,17 @@ class CliApiConfigService {
   static const _codexProxyEnvPath = '/root/.openclaw/codex-proxy.env';
   static const _codexConfigPath = '/root/.codex/config.toml';
   static const _codexProxyBaseUrl = 'http://127.0.0.1:8787/v1';
-  static const _claudeProxyJsPath = '/root/.openclaw/claude-proxy.cjs';
-  static const _claudeProxyEnvPath = '/root/.openclaw/claude-proxy.env';
-  static const _claudeLauncherPath = '/root/.openclaw/claude-launcher.sh';
-  static const _claudeSettingsPath = '/root/.claude/settings.json';
-  static const _claudeProxyBaseUrl = 'http://127.0.0.1:8788';
+  static const _terminalThemePath = '/root/.openclaw/terminal-theme.sh';
   static const _prefsKey = 'cli_api_config_json';
 
-  static const configurableToolIds = {'codex', 'claude'};
+  static const configurableToolIds = {
+    'codex',
+    'codebuddy',
+    'qwen-code',
+    'hermes-agent',
+    'generic-agent',
+    'gemini',
+  };
 
   static Future<CliApiConfig> load(String toolId) async {
     final configs = await _loadAll();
@@ -108,7 +111,8 @@ class CliApiConfigService {
     required String apiKey,
     String apiProtocol = '',
   }) async {
-    final endpoint = _modelsEndpoint(baseUrl);
+    final protocol = apiProtocol.trim().isEmpty ? 'openai' : apiProtocol.trim();
+    final endpoint = _modelsEndpoint(baseUrl, protocol: protocol);
     if (endpoint == null) {
       throw Exception('请先填写 API 地址');
     }
@@ -116,14 +120,14 @@ class CliApiConfigService {
       throw Exception('请先填写 API Key');
     }
 
-    final protocol = apiProtocol.trim();
-    final useAnthropicHeaders = toolId == 'claude' && protocol != 'openai';
+    final useAnthropicHeaders = protocol == 'anthropic';
+    final useGeminiHeaders = protocol == 'gemini';
     final headers = <String, String>{
       'Accept': 'application/json',
       if (useAnthropicHeaders) ...{
         'x-api-key': apiKey.trim(),
         'anthropic-version': '2023-06-01',
-      } else
+      } else if (!useGeminiHeaders)
         'Authorization': 'Bearer ${apiKey.trim()}',
     };
     if (useAnthropicHeaders) {
@@ -151,15 +155,27 @@ class CliApiConfigService {
     final allConfigs = configs ?? await _loadAll();
     final tools = _asMap(allConfigs['tools']);
     final codex = _activeConfigFromJson('codex', _asMapOrNull(tools['codex']));
-    final claude =
-        _activeConfigFromJson('claude', _asMapOrNull(tools['claude']));
+    final activeConfigs = {
+      for (final toolId in configurableToolIds)
+        toolId: _activeConfigFromJson(toolId, _asMapOrNull(tools[toolId])),
+    };
 
     await _writePrefsConfig(allConfigs);
     await NativeBridge.writeRootfsFile(
       _configPath,
       const JsonEncoder.withIndent('  ').convert(allConfigs),
     );
-    await NativeBridge.writeRootfsFile(_envPath, _buildEnvFile(codex, claude));
+    await NativeBridge.writeRootfsFile(_envPath, _buildGlobalEnvFile());
+    await NativeBridge.writeRootfsFile(
+      _terminalThemePath,
+      _buildTerminalThemeSh(),
+    );
+    for (final entry in activeConfigs.entries) {
+      await NativeBridge.writeRootfsFile(
+        _toolEnvPath(entry.key),
+        _buildToolEnvFile(entry.key, entry.value),
+      );
+    }
     await NativeBridge.writeRootfsFile(_codexProxyPath, _buildCodexProxyPy());
     await NativeBridge.writeRootfsFile(
       _codexProxyJsPath,
@@ -170,30 +186,14 @@ class CliApiConfigService {
       _buildCodexProxyEnv(codex),
     );
     await NativeBridge.writeRootfsFile(_codexConfigPath, _buildCodexToml(codex));
-    await NativeBridge.writeRootfsFile(
-      _claudeProxyJsPath,
-      _buildClaudeProxyJs(),
-    );
-    await NativeBridge.writeRootfsFile(
-      _claudeProxyEnvPath,
-      _buildClaudeProxyEnv(claude),
-    );
-    await NativeBridge.writeRootfsFile(
-      _claudeLauncherPath,
-      _buildClaudeLauncherSh(),
-    );
-    await NativeBridge.writeRootfsFile(
-      _claudeSettingsPath,
-      _buildClaudeSettingsJson(claude),
-    );
     await NativeBridge.runInProot(
       'chmod 0755 $_codexProxyPath 2>/dev/null || true; '
       'chmod 0755 $_codexProxyJsPath 2>/dev/null || true; '
       'chmod 0600 $_codexProxyEnvPath 2>/dev/null || true; '
-      'chmod 0755 $_claudeProxyJsPath 2>/dev/null || true; '
-      'chmod 0600 $_claudeProxyEnvPath 2>/dev/null || true; '
-      'chmod 0755 $_claudeLauncherPath 2>/dev/null || true; '
-      'chmod 0600 $_claudeSettingsPath 2>/dev/null || true',
+      'chmod 0644 $_terminalThemePath 2>/dev/null || true; '
+      'grep -q "openclaw/terminal-theme.sh" /root/.bashrc 2>/dev/null || '
+      'printf "\\n[ -r /root/.openclaw/terminal-theme.sh ] && . /root/.openclaw/terminal-theme.sh\\n" >> /root/.bashrc; '
+      'chmod 0600 /root/.openclaw/cli-env*.sh 2>/dev/null || true',
       timeout: 10,
     );
   }
@@ -321,82 +321,105 @@ class CliApiConfigService {
     };
   }
 
-  static String _buildEnvFile(CliApiConfig codex, CliApiConfig claude) {
-    final lines = <String>[
+  static String _buildGlobalEnvFile() {
+    return [
       '# Generated by OpenClaw app. Safe to source from CLI wrappers.',
       'export OPENCLAW_CLI_ENV_LOADED=1',
+      'export TERM="\${TERM:-xterm-256color}"',
+      'export COLORTERM="\${COLORTERM:-truecolor}"',
+      'export FORCE_COLOR=1',
+      'export TMPDIR="\${TMPDIR:-/tmp}"',
+      '',
+    ].join('\n');
+  }
+
+  static String _buildTerminalThemeSh() {
+    return r'''
+export TERM="${TERM:-xterm-256color}"
+export COLORTERM="${COLORTERM:-truecolor}"
+export FORCE_COLOR=1
+export CLICOLOR=1
+export LS_COLORS="${LS_COLORS:-di=01;34:ln=01;36:so=01;35:pi=33:ex=01;32:bd=34;46:cd=34;43:su=37;41:sg=30;43:tw=30;42:ow=34;42}"
+alias ls='ls --color=auto'
+alias grep='grep --color=auto'
+alias egrep='egrep --color=auto'
+alias fgrep='fgrep --color=auto'
+bind 'set colored-stats on' 2>/dev/null || true
+bind 'set colored-completion-prefix on' 2>/dev/null || true
+export PS1='\[\e[1;32m\]\u@\h\[\e[0m\]:\[\e[1;34m\]\w\[\e[0m\]\$ '
+''';
+  }
+
+  static String _toolEnvPath(String toolId) =>
+      '/root/.openclaw/cli-env-$toolId.sh';
+
+  static String _buildToolEnvFile(String toolId, CliApiConfig config) {
+    final lines = <String>[
+      '# Generated by OpenClaw app. Contains user API configuration.',
+      'export OPENCLAW_TOOL_ID=${_shQuote(toolId)}',
+      'export OPENCLAW_API_PROTOCOL=${_shQuote(config.effectiveApiProtocol)}',
     ];
+    final baseUrl = config.baseUrl.trim();
+    final apiKey = config.apiKey.trim();
+    final serviceModel = config.model.trim();
+    final toolModel = config.effectiveToolModel;
+    final effort = config.reasoningEffort.trim();
+    final openAiBaseUrl = toolId == 'codex' && baseUrl.isNotEmpty
+        ? _codexProxyBaseUrl
+        : _trimTrailingSlash(baseUrl);
 
-    if (codex.apiKey.trim().isNotEmpty) {
-      lines.add('export OPENAI_API_KEY=${_shQuote(codex.apiKey.trim())}');
+    if (apiKey.isNotEmpty) {
+      lines
+        ..add('export OPENAI_API_KEY=${_shQuote(apiKey)}')
+        ..add('export ANTHROPIC_API_KEY=${_shQuote(apiKey)}')
+        ..add('export GEMINI_API_KEY=${_shQuote(apiKey)}')
+        ..add('export GOOGLE_API_KEY=${_shQuote(apiKey)}')
+        ..add('export QWEN_API_KEY=${_shQuote(apiKey)}')
+        ..add('export DASHSCOPE_API_KEY=${_shQuote(apiKey)}')
+        ..add('export CHINESE_LLM_API_KEY=${_shQuote(apiKey)}');
     }
-    if (codex.baseUrl.trim().isNotEmpty) {
-      lines.add('export OPENAI_BASE_URL=${_shQuote(_codexProxyBaseUrl)}');
-      lines.add('export CODEX_BASE_URL=${_shQuote(_codexProxyBaseUrl)}');
-      lines.add(
-        'export OPENCLAW_CODEX_PROXY_UPSTREAM='
-        '${_shQuote(_trimTrailingSlash(codex.baseUrl.trim()))}',
-      );
+    if (openAiBaseUrl.isNotEmpty) {
+      lines
+        ..add('export OPENAI_BASE_URL=${_shQuote(openAiBaseUrl)}')
+        ..add('export CODEX_BASE_URL=${_shQuote(openAiBaseUrl)}')
+        ..add('export ANTHROPIC_BASE_URL=${_shQuote(openAiBaseUrl)}')
+        ..add('export GEMINI_BASE_URL=${_shQuote(openAiBaseUrl)}')
+        ..add('export GOOGLE_GEMINI_BASE_URL=${_shQuote(openAiBaseUrl)}')
+        ..add('export CHINESE_LLM_BASE_URL=${_shQuote(openAiBaseUrl)}');
     }
-    if (codex.effectiveCodexModel.isNotEmpty) {
-      lines.add('export OPENAI_MODEL=${_shQuote(codex.effectiveCodexModel)}');
-      lines.add('export CODEX_MODEL=${_shQuote(codex.effectiveCodexModel)}');
+    if (toolModel.isNotEmpty) {
+      lines
+        ..add('export OPENAI_MODEL=${_shQuote(toolModel)}')
+        ..add('export CODEX_MODEL=${_shQuote(toolModel)}')
+        ..add('export ANTHROPIC_MODEL=${_shQuote(toolModel)}')
+        ..add('export GEMINI_MODEL=${_shQuote(toolModel)}')
+        ..add('export QWEN_MODEL=${_shQuote(toolModel)}')
+        ..add('export CHINESE_LLM_MODEL=${_shQuote(toolModel)}')
+        ..add('export OPENCLAW_MODEL=${_shQuote(toolModel)}');
     }
-    if (codex.reasoningEffort.trim().isNotEmpty) {
-      final effort = codex.reasoningEffort.trim();
-      lines.add('export OPENAI_REASONING_EFFORT=${_shQuote(effort)}');
-      lines.add('export CODEX_REASONING_EFFORT=${_shQuote(effort)}');
+    if (serviceModel.isNotEmpty) {
+      lines.add('export OPENCLAW_UPSTREAM_MODEL=${_shQuote(serviceModel)}');
     }
-
-    final claudeUsesProxy = claude.baseUrl.trim().isNotEmpty;
-    if (claudeUsesProxy) {
-      lines.add('export ANTHROPIC_API_KEY=${_shQuote('dummy')}');
-      lines.add('export ANTHROPIC_BASE_URL=${_shQuote(_claudeProxyBaseUrl)}');
-      lines.add('export CLAUDE_CODE_BASE_URL=${_shQuote(_claudeProxyBaseUrl)}');
-      lines.add('export CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1');
-      lines.add('export CLAUDE_CODE_DISABLE_AUTO_UPDATE=1');
-      lines.add('export API_TIMEOUT_MS=3000000');
-      lines.add('export OTEL_SDK_DISABLED=true');
-      lines.add('unset ANTHROPIC_AUTH_TOKEN');
-    } else if (claude.apiKey.trim().isNotEmpty) {
-      lines.add('export ANTHROPIC_API_KEY=${_shQuote(claude.apiKey.trim())}');
-      lines.add(
-        'export ANTHROPIC_AUTH_TOKEN=${_shQuote(claude.apiKey.trim())}',
-      );
-      lines.add('export CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1');
-      lines.add('export CLAUDE_CODE_DISABLE_AUTO_UPDATE=1');
-      lines.add('export API_TIMEOUT_MS=3000000');
+    if (effort.isNotEmpty) {
+      lines
+        ..add('export OPENAI_REASONING_EFFORT=${_shQuote(effort)}')
+        ..add('export CODEX_REASONING_EFFORT=${_shQuote(effort)}')
+        ..add('export QWEN_REASONING_EFFORT=${_shQuote(effort)}')
+        ..add('export GEMINI_REASONING_EFFORT=${_shQuote(effort)}')
+        ..add('export OPENCLAW_REASONING_EFFORT=${_shQuote(effort)}');
     }
-    if (claude.model.trim().isNotEmpty) {
-      lines.add('export ANTHROPIC_MODEL=${_shQuote(claude.model.trim())}');
-      lines.add('export CLAUDE_CODE_MODEL=${_shQuote(claude.model.trim())}');
-      lines.add(
-        'export ANTHROPIC_SMALL_FAST_MODEL=${_shQuote(claude.model.trim())}',
-      );
-      lines.add(
-        'export ANTHROPIC_DEFAULT_SONNET_MODEL='
-        '${_shQuote(claude.model.trim())}',
-      );
-      lines.add(
-        'export ANTHROPIC_DEFAULT_OPUS_MODEL=${_shQuote(claude.model.trim())}',
-      );
-      lines.add(
-        'export ANTHROPIC_DEFAULT_HAIKU_MODEL=${_shQuote(claude.model.trim())}',
-      );
+    if (toolId == 'gemini') {
+      lines
+        ..add('export GOOGLE_GENAI_USE_VERTEXAI=false')
+        ..add('export GEMINI_CLI_NO_BROWSER=1');
     }
-    if (claude.reasoningEffort.trim().isNotEmpty) {
-      final effort = claude.reasoningEffort.trim();
-      lines.add('export ANTHROPIC_REASONING_EFFORT=${_shQuote(effort)}');
-      lines.add('export CLAUDE_CODE_REASONING_EFFORT=${_shQuote(effort)}');
-    }
-
     lines.add('');
     return lines.join('\n');
   }
 
   static String _buildCodexToml(CliApiConfig codex) {
     final lines = <String>[];
-    final model = codex.effectiveCodexModel;
+    final model = codex.effectiveToolModel;
     final baseUrl = codex.baseUrl.trim().isNotEmpty ? _codexProxyBaseUrl : '';
     final effort = codex.reasoningEffort.trim();
 
@@ -457,180 +480,11 @@ class CliApiConfigService {
     if (codex.apiKey.trim().isNotEmpty) {
       lines.add('OPENAI_API_KEY=${_shQuote(codex.apiKey.trim())}');
     }
-    lines.add('');
-    return lines.join('\n');
-  }
-
-  static String _buildClaudeProxyEnv(CliApiConfig claude) {
-    final lines = <String>[
-      'OPENCLAW_CLAUDE_PROXY_HOST=127.0.0.1',
-      'OPENCLAW_CLAUDE_PROXY_PORT=8788',
-      'OPENCLAW_CLAUDE_PROXY_PROTOCOL='
-          '${_shQuote(claude.effectiveApiProtocol == 'openai' ? 'openai' : 'anthropic')}',
-    ];
-    final upstream = claude.baseUrl.trim();
-    if (upstream.isNotEmpty) {
-      lines.add(
-        'OPENCLAW_CLAUDE_PROXY_UPSTREAM='
-        '${_shQuote(_trimTrailingSlash(upstream))}',
-      );
-    }
-    if (claude.apiKey.trim().isNotEmpty) {
-      lines.add('OPENCLAW_CLAUDE_PROXY_API_KEY=${_shQuote(claude.apiKey.trim())}');
-    }
-    if (claude.model.trim().isNotEmpty) {
-      lines.add('OPENCLAW_CLAUDE_PROXY_MODEL=${_shQuote(claude.model.trim())}');
-    }
-    if (claude.reasoningEffort.trim().isNotEmpty) {
-      lines.add(
-        'OPENCLAW_CLAUDE_PROXY_REASONING_EFFORT='
-        '${_shQuote(claude.reasoningEffort.trim())}',
-      );
+    if (codex.model.trim().isNotEmpty) {
+      lines.add('OPENCLAW_CODEX_PROXY_MODEL=${_shQuote(codex.model.trim())}');
     }
     lines.add('');
     return lines.join('\n');
-  }
-
-  static String _buildClaudeSettingsJson(CliApiConfig claude) {
-    final env = <String, String>{
-      'TMPDIR': '/tmp',
-      'API_TIMEOUT_MS': '3000000',
-      'CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC': '1',
-      'CLAUDE_CODE_DISABLE_AUTO_UPDATE': '1',
-      'OTEL_SDK_DISABLED': 'true',
-    };
-    if (claude.baseUrl.trim().isNotEmpty) {
-      env['ANTHROPIC_API_KEY'] = 'dummy';
-      env['ANTHROPIC_BASE_URL'] = _claudeProxyBaseUrl;
-    } else if (claude.apiKey.trim().isNotEmpty) {
-      env['ANTHROPIC_API_KEY'] = claude.apiKey.trim();
-      env['ANTHROPIC_AUTH_TOKEN'] = claude.apiKey.trim();
-    }
-    if (claude.model.trim().isNotEmpty) {
-      final model = claude.model.trim();
-      env['ANTHROPIC_MODEL'] = model;
-      env['CLAUDE_CODE_MODEL'] = model;
-      env['ANTHROPIC_SMALL_FAST_MODEL'] = model;
-      env['ANTHROPIC_DEFAULT_SONNET_MODEL'] = model;
-      env['ANTHROPIC_DEFAULT_OPUS_MODEL'] = model;
-      env['ANTHROPIC_DEFAULT_HAIKU_MODEL'] = model;
-    }
-
-    final settings = <String, dynamic>{
-      'env': env,
-      'permissions': <String, dynamic>{
-        'allow': const [
-          'Read(/storage/emulated/0/**)',
-          'Bash(/storage/emulated/0/**)',
-          'Read(/root/**)',
-          'Bash(/root/**)',
-          'Write(/storage/emulated/0/**)',
-          'Edit(/storage/emulated/0/**)',
-          'MultiEdit(/storage/emulated/0/**)',
-          'Write(/root/**)',
-          'Edit(/root/**)',
-          'MultiEdit(/root/**)',
-        ],
-        'additionalDirectories': const [
-          '/storage/emulated/0',
-          '/storage/emulated/0/ZeroTermux/开发',
-          '/root',
-        ],
-      },
-      'sandbox': <String, dynamic>{'enabled': false},
-      'skipDangerousModePermissionPrompt': true,
-    };
-    return '${const JsonEncoder.withIndent('  ').convert(settings)}\n';
-  }
-
-  static String _buildClaudeLauncherSh() {
-    return r'''#!/bin/sh
-export NODE_OPTIONS="${NODE_OPTIONS:---require /root/.openclaw/bionic-bypass.js}"
-export NODE_EXTRA_CA_CERTS="${NODE_EXTRA_CA_CERTS:-/etc/ssl/certs/ca-certificates.crt}"
-
-[ -r /root/.openclaw/cli-env.sh ] && . /root/.openclaw/cli-env.sh
-
-openclaw_env_value() {
-  key="$1"
-  file="$2"
-  sed -n "s/^${key}=//p" "$file" 2>/dev/null \
-    | tail -n 1 \
-    | sed "s/^'//;s/'$//;s/^\"//;s/\"$//"
-}
-
-proxy_env=/root/.openclaw/claude-proxy.env
-proxy_upstream=""
-if [ -r "$proxy_env" ]; then
-  proxy_upstream="$(openclaw_env_value OPENCLAW_CLAUDE_PROXY_UPSTREAM "$proxy_env")"
-fi
-
-if [ -n "$proxy_upstream" ]; then
-  export ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY:-dummy}"
-  export ANTHROPIC_BASE_URL="http://127.0.0.1:8788"
-  export CLAUDE_CODE_BASE_URL="http://127.0.0.1:8788"
-  export CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1
-  export CLAUDE_CODE_DISABLE_AUTO_UPDATE=1
-  export API_TIMEOUT_MS="${API_TIMEOUT_MS:-3000000}"
-  export OTEL_SDK_DISABLED=true
-  unset ANTHROPIC_AUTH_TOKEN
-
-  proxy_model="$(openclaw_env_value OPENCLAW_CLAUDE_PROXY_MODEL "$proxy_env")"
-  if [ -n "$proxy_model" ]; then
-    export ANTHROPIC_MODEL="$proxy_model"
-    export CLAUDE_CODE_MODEL="$proxy_model"
-    export ANTHROPIC_SMALL_FAST_MODEL="$proxy_model"
-    export ANTHROPIC_DEFAULT_SONNET_MODEL="$proxy_model"
-    export ANTHROPIC_DEFAULT_OPUS_MODEL="$proxy_model"
-    export ANTHROPIC_DEFAULT_HAIKU_MODEL="$proxy_model"
-  fi
-
-  proxy_healthy=false
-  if node -e 'fetch("http://127.0.0.1:8788/health", {signal: AbortSignal.timeout(1000)}).then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))' >/dev/null 2>&1; then
-    proxy_healthy=true
-  fi
-  if [ "$proxy_healthy" != true ] && [ -r /root/.openclaw/claude-proxy.cjs ]; then
-    nohup node /root/.openclaw/claude-proxy.cjs >/tmp/openclaw-claude-proxy.log 2>&1 &
-    sleep 0.5
-  fi
-else
-  case "${1:-}" in
-    --version|-v|version)
-      ;;
-    *)
-      cat >&2 <<'OPENCLAW_CLAUDE_CONFIG_REQUIRED'
-Claude Code 未配置可用的本地代理 API，已阻止直接连接官方 api.anthropic.com。
-
-国内网络环境请先在「CLI Tools -> Claude Code -> 配置」中填写：
-1. API 地址：第三方 Anthropic 兼容地址，或 OpenAI 兼容地址
-2. API Key
-3. 模型名
-4. 接口协议：OpenAI 兼容接口请选择「OpenAI 兼容转 Anthropic」
-
-保存后回到 CLI Tools 页面刷新，再点击打开 Claude。
-OPENCLAW_CLAUDE_CONFIG_REQUIRED
-      exit 2
-      ;;
-  esac
-fi
-
-node_modules=/opt/openclaw-cli/claude/node_modules
-main="$node_modules/@anthropic-ai/claude-code"
-musl="$node_modules/@anthropic-ai/claude-code-linux-arm64-musl/claude"
-glibc="$node_modules/@anthropic-ai/claude-code-linux-arm64/claude"
-if [ -f "$glibc" ]; then
-  chmod 0755 "$glibc" 2>/dev/null || true
-  exec "$glibc" "$@"
-fi
-if [ -f "$musl" ] && [ -e /lib/ld-musl-aarch64.so.1 ]; then
-  chmod 0755 "$musl" 2>/dev/null || true
-  exec "$musl" "$@"
-fi
-if [ -x "$main/bin/claude.exe" ]; then
-  exec "$main/bin/claude.exe" "$@"
-fi
-echo "Claude Code native binary is missing. Reinstall Claude from the CLI tools page." >&2
-exit 127
-''';
   }
 
   static String _trimTrailingSlash(String value) {
@@ -674,9 +528,14 @@ def config():
         or ""
     ).rstrip("/")
     token = values.get("OPENAI_API_KEY") or os.environ.get("OPENAI_API_KEY") or ""
+    model = (
+        values.get("OPENCLAW_CODEX_PROXY_MODEL")
+        or os.environ.get("OPENCLAW_UPSTREAM_MODEL")
+        or ""
+    )
     host = values.get("OPENCLAW_CODEX_PROXY_HOST") or "127.0.0.1"
     port = int(values.get("OPENCLAW_CODEX_PROXY_PORT") or "8787")
-    return upstream, token, host, port
+    return upstream, token, model, host, port
 
 
 def target_url(upstream, path):
@@ -705,14 +564,22 @@ class Handler(http.server.BaseHTTPRequestHandler):
         return
 
     def _proxy(self):
-        upstream, token, _, _ = config()
+        upstream, token, model, _, _ = config()
         parsed_path = urllib.parse.urlsplit(self.path).path
         if parsed_path == "/health":
-            send_json(self, 200, {"ok": True, "upstream": upstream, "has_key": bool(token)})
+            send_json(self, 200, {"ok": True, "upstream": upstream, "model": model, "has_key": bool(token)})
             return
 
         length = int(self.headers.get("content-length", "0") or "0")
         body = self.rfile.read(length) if length else None
+        if model and body and self.command.upper() in {"POST", "PUT", "PATCH"}:
+            try:
+                payload = json.loads(body.decode("utf-8"))
+                if isinstance(payload, dict) and isinstance(payload.get("model"), str):
+                    payload["model"] = model
+                    body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+            except Exception:
+                pass
         try:
             req = urllib.request.Request(target_url(upstream, self.path), data=body, method=self.command)
             for key, value in self.headers.items():
@@ -755,7 +622,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    _, _, host, port = config()
+    _, _, _, host, port = config()
     http.server.ThreadingHTTPServer((host, port), Handler).serve_forever()
 ''';
   }
@@ -798,6 +665,10 @@ function config() {
       ""
     ).replace(/\/+$/, ""),
     token: values.OPENAI_API_KEY || process.env.OPENAI_API_KEY || "",
+    model:
+      values.OPENCLAW_CODEX_PROXY_MODEL ||
+      process.env.OPENCLAW_UPSTREAM_MODEL ||
+      "",
     host: values.OPENCLAW_CODEX_PROXY_HOST || "127.0.0.1",
     port: Number(values.OPENCLAW_CODEX_PROXY_PORT || 8787),
   };
@@ -828,6 +699,7 @@ const server = http.createServer((clientReq, clientRes) => {
     sendJson(clientRes, 200, {
       ok: true,
       upstream: cfg.upstream,
+      model: cfg.model,
       has_key: Boolean(cfg.token),
     });
     return;
@@ -848,27 +720,43 @@ const server = http.createServer((clientReq, clientRes) => {
   delete headers.authorization;
   if (cfg.token) headers.authorization = `Bearer ${cfg.token}`;
 
-  const transport = target.protocol === "https:" ? https : http;
-  const upstreamReq = transport.request(
-    target,
-    {
-      method: clientReq.method,
-      headers,
-    },
-    (upstreamRes) => {
-      const responseHeaders = { ...upstreamRes.headers };
-      delete responseHeaders["transfer-encoding"];
-      delete responseHeaders.connection;
-      delete responseHeaders["content-encoding"];
-      clientRes.writeHead(upstreamRes.statusCode || 502, responseHeaders);
-      upstreamRes.pipe(clientRes);
-    },
-  );
+  const bodyChunks = [];
+  clientReq.on("data", (chunk) => bodyChunks.push(chunk));
+  clientReq.on("end", () => {
+    let body = Buffer.concat(bodyChunks);
+    if (cfg.model && body.length && ["POST", "PUT", "PATCH"].includes(clientReq.method || "")) {
+      try {
+        const payload = JSON.parse(body.toString("utf8"));
+        if (payload && typeof payload === "object" && typeof payload.model === "string") {
+          payload.model = cfg.model;
+          body = Buffer.from(JSON.stringify(payload));
+          headers["content-length"] = body.length;
+        }
+      } catch (_) {}
+    }
 
-  upstreamReq.on("error", (error) => {
-    sendJson(clientRes, 502, { error: String(error.message || error) });
+    const transport = target.protocol === "https:" ? https : http;
+    const upstreamReq = transport.request(
+      target,
+      {
+        method: clientReq.method,
+        headers,
+      },
+      (upstreamRes) => {
+        const responseHeaders = { ...upstreamRes.headers };
+        delete responseHeaders["transfer-encoding"];
+        delete responseHeaders.connection;
+        delete responseHeaders["content-encoding"];
+        clientRes.writeHead(upstreamRes.statusCode || 502, responseHeaders);
+        upstreamRes.pipe(clientRes);
+      },
+    );
+
+    upstreamReq.on("error", (error) => {
+      sendJson(clientRes, 502, { error: String(error.message || error) });
+    });
+    upstreamReq.end(body);
   });
-  clientReq.pipe(upstreamReq);
 });
 
 const cfg = config();
@@ -1286,7 +1174,7 @@ server.listen(cfg.port, cfg.host);
 ''';
   }
 
-  static Uri? _modelsEndpoint(String baseUrl) {
+  static Uri? _modelsEndpoint(String baseUrl, {String protocol = 'openai'}) {
     final trimmed = baseUrl.trim();
     if (trimmed.isEmpty) return null;
     final normalized = trimmed.endsWith('/')
@@ -1296,6 +1184,21 @@ server.listen(cfg.port, cfg.host);
     if (uri == null || !uri.hasScheme || uri.host.isEmpty) return null;
 
     final segments = uri.pathSegments.where((item) => item.isNotEmpty).toList();
+    if (protocol == 'gemini') {
+      if (segments.isNotEmpty && segments.last == 'models') {
+        return uri;
+      }
+      if (segments.contains('v1beta') || segments.contains('v1')) {
+        return uri.replace(pathSegments: [...segments, 'models']);
+      }
+      return uri.replace(pathSegments: ['v1beta', 'models']);
+    }
+    if (protocol == 'anthropic') {
+      if (segments.isNotEmpty && segments.last == 'models') {
+        return uri;
+      }
+      return uri.replace(pathSegments: [...segments, 'models']);
+    }
     if (segments.isEmpty) {
       return uri.replace(pathSegments: ['v1', 'models']);
     }

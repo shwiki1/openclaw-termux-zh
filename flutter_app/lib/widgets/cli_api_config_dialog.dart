@@ -34,7 +34,7 @@ class _CliApiConfigDialogState extends State<CliApiConfigDialog> {
   final _modelController = TextEditingController();
   final _mappingController = TextEditingController();
   String _reasoningEffort = '';
-  String _apiProtocol = 'anthropic';
+  String _apiProtocol = 'openai';
   List<CliApiConfig> _profiles = const [];
   int _activeProfileIndex = 0;
   List<String> _availableModels = const [];
@@ -42,9 +42,6 @@ class _CliApiConfigDialogState extends State<CliApiConfigDialog> {
   bool _saving = false;
   bool _loadingModels = false;
   String? _error;
-
-  bool get _isCodex => widget.tool.id == 'codex';
-  bool get _isClaude => widget.tool.id == 'claude';
 
   @override
   void initState() {
@@ -120,7 +117,7 @@ class _CliApiConfigDialogState extends State<CliApiConfigDialog> {
         toolId: widget.tool.id,
         baseUrl: _baseUrlController.text,
         apiKey: _apiKeyController.text,
-        apiProtocol: _isClaude ? _apiProtocol : 'openai',
+        apiProtocol: _apiProtocol,
       );
       if (!mounted) return;
       setState(() {
@@ -147,8 +144,8 @@ class _CliApiConfigDialogState extends State<CliApiConfigDialog> {
       apiKey: _apiKeyController.text,
       model: _modelController.text,
       reasoningEffort: _reasoningEffort,
-      codexModelMapping: _isCodex ? _mappingController.text : '',
-      apiProtocol: _isClaude ? _apiProtocol : 'openai',
+      modelMapping: _mappingController.text,
+      apiProtocol: _apiProtocol,
     );
   }
 
@@ -158,7 +155,7 @@ class _CliApiConfigDialogState extends State<CliApiConfigDialog> {
     _baseUrlController.text = config.baseUrl;
     _apiKeyController.text = config.apiKey;
     _modelController.text = config.model;
-    _mappingController.text = config.codexModelMapping;
+    _mappingController.text = config.modelMapping;
     _reasoningEffort = config.reasoningEffort;
     _apiProtocol = config.effectiveApiProtocol;
     _availableModels = const [];
@@ -194,7 +191,7 @@ class _CliApiConfigDialogState extends State<CliApiConfigDialog> {
     final next = CliApiConfig(
       toolId: widget.tool.id,
       profileName: 'API ${nextIndex + 1}',
-      apiProtocol: _isClaude ? _apiProtocol : 'openai',
+      apiProtocol: _apiProtocol,
     );
     setState(() {
       _profiles = [..._profiles, next];
@@ -209,7 +206,7 @@ class _CliApiConfigDialogState extends State<CliApiConfigDialog> {
         _applyConfig(CliApiConfig(
           toolId: widget.tool.id,
           profileName: '默认',
-          apiProtocol: _isClaude ? _apiProtocol : 'openai',
+          apiProtocol: _apiProtocol,
         ));
       });
       return;
@@ -244,9 +241,7 @@ class _CliApiConfigDialogState extends State<CliApiConfigDialog> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      _isCodex
-                          ? 'Codex 支持自定义 OpenAI 兼容地址。若服务端模型名和 Codex 识别名不同，可填写模型映射。'
-                          : 'Claude Code 会连接本地代理。可选择 Anthropic 兼容接口，或把 OpenAI 兼容接口转换为 Anthropic 协议。',
+                      '统一 API 配置会写入 ${widget.tool.name} 的启动环境。可添加多个 API 档案，填写地址和 Key 后获取模型，再按工具需要设置模型映射和推理强度。',
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: theme.colorScheme.onSurfaceVariant,
                       ),
@@ -305,30 +300,32 @@ class _CliApiConfigDialogState extends State<CliApiConfigDialog> {
                       ),
                     ),
                     const SizedBox(height: 12),
-                    if (_isClaude) ...[
-                      DropdownButtonFormField<String>(
-                        initialValue: _apiProtocol,
-                        isExpanded: true,
-                        decoration: const InputDecoration(
-                          labelText: '接口协议',
-                          border: OutlineInputBorder(),
-                        ),
-                        items: const [
-                          DropdownMenuItem(
-                            value: 'anthropic',
-                            child: Text('Anthropic 协议'),
-                          ),
-                          DropdownMenuItem(
-                            value: 'openai',
-                            child: Text('OpenAI 兼容转 Anthropic'),
-                          ),
-                        ],
-                        onChanged: (value) {
-                          setState(() => _apiProtocol = value ?? 'anthropic');
-                        },
+                    DropdownButtonFormField<String>(
+                      initialValue: _apiProtocol,
+                      isExpanded: true,
+                      decoration: const InputDecoration(
+                        labelText: '接口协议',
+                        border: OutlineInputBorder(),
                       ),
-                      const SizedBox(height: 12),
-                    ],
+                      items: const [
+                        DropdownMenuItem(
+                          value: 'openai',
+                          child: Text('OpenAI 兼容协议'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'anthropic',
+                          child: Text('Anthropic 协议'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'gemini',
+                          child: Text('Gemini 协议'),
+                        ),
+                      ],
+                      onChanged: (value) {
+                        setState(() => _apiProtocol = value ?? 'openai');
+                      },
+                    ),
+                    const SizedBox(height: 12),
                     TextField(
                       controller: _baseUrlController,
                       decoration: const InputDecoration(
@@ -353,10 +350,10 @@ class _CliApiConfigDialogState extends State<CliApiConfigDialog> {
                     const SizedBox(height: 12),
                     TextField(
                       controller: _modelController,
-                      decoration: InputDecoration(
-                        labelText: _isCodex ? '服务端模型名' : '模型',
-                        hintText: _isCodex ? 'gpt-5-codex' : 'claude-sonnet-4',
-                        border: const OutlineInputBorder(),
+                      decoration: const InputDecoration(
+                        labelText: '服务端模型名',
+                        hintText: '例如：qwen3-coder-plus / gemini-2.5-pro',
+                        border: OutlineInputBorder(),
                       ),
                     ),
                     const SizedBox(height: 8),
@@ -415,13 +412,13 @@ class _CliApiConfigDialogState extends State<CliApiConfigDialog> {
                         },
                       ),
                     ],
-                    if (_isCodex) ...[
+                    ...[
                       const SizedBox(height: 12),
                       TextField(
                         controller: _mappingController,
                         decoration: const InputDecoration(
-                          labelText: 'Codex 模型映射（可选）',
-                          hintText: '留空则使用服务端模型名',
+                          labelText: '工具侧模型名映射（可选）',
+                          hintText: '留空则使用服务端模型名；按 CLI 工具支持的模型名填写',
                           border: OutlineInputBorder(),
                         ),
                       ),

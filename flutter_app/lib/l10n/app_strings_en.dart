@@ -30,7 +30,7 @@ const Map<String, String> appStringsEn = {
   'commonNotConfigured': 'Not configured',
   'dashboardQuickActions': 'Quick actions',
   'dashboardTerminalTitle': 'CLI Tools & Terminal',
-  'dashboardTerminalSubtitle': 'Open Ubuntu Shell, Codex CLI, or Claude Code',
+  'dashboardTerminalSubtitle': 'Open Ubuntu Shell, Codex, Qwen, Gemini, and more CLIs',
   'dashboardWebDashboardTitle': 'Web Dashboard',
   'dashboardWebDashboardSubtitle': 'Open OpenClaw dashboard in browser',
   'dashboardStartGatewayFirst': 'Start gateway first',

@@ -68,8 +68,8 @@ class _CliToolsScreenState extends State<CliToolsScreen> {
     try {
       await CliToolService.prepareInstallAssets(tool);
     } catch (_) {
-      // Claude install can still fall back to npm when the bundled asset
-      // is unavailable or the copy step fails.
+      // Optional installer assets are best-effort; npm/runtime installers
+      // surface any real failures in the terminal.
     }
 
     await Navigator.of(context).push(

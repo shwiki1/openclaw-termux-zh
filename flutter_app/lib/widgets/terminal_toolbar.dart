@@ -108,12 +108,10 @@ class _TerminalToolbarState extends State<TerminalToolbar> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-    final bgColor = isDark ? AppColors.darkBg : const Color(0xFFE0E0E0);
-    final btnColor = isDark ? AppColors.darkSurfaceAlt : const Color(0xFFEEEEEE);
+    const bgColor = Colors.black;
+    const btnColor = Color(0xFF111111);
     const activeColor = AppColors.accent;
-    final textColor = isDark ? Colors.white70 : Colors.black87;
+    const textColor = Colors.white70;
 
     Widget keyButton(String label, {VoidCallback? onTap, String? sendData, bool active = false, double? width}) {
       return Padding(

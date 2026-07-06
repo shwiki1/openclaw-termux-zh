@@ -1,6 +1,6 @@
 class AppConstants {
   static const String appName = '次元虾';
-  static const String version = '2.0.17';
+  static const String version = '2.0.18';
   static const String packageName = 'com.openclaw.cyx';
 
   /// Matches ANSI escape sequences (e.g. color codes in terminal output).
@@ -33,11 +33,6 @@ class AppConstants {
       'https://cdimage.ubuntu.com/ubuntu-base/releases/24.04/release/ubuntu-base-24.04.3-base-';
   static const String ubuntuCodename = 'noble';
   static const String bundledBootstrapAssetDir = 'assets/bootstrap';
-  static const String claudeBundledVersion = '2.1.148';
-  static const String claudeBundleArchiveName =
-      'claude-code-2.1.148-bundle.tar.gz';
-  static const String claudeBundleAssetPath =
-      '$bundledBootstrapAssetDir/$claudeBundleArchiveName';
   static const String rootfsArm64 = '${ubuntuRootfsUrl}arm64.tar.gz';
   static const String rootfsArmhf = '${ubuntuRootfsUrl}armhf.tar.gz';
   static const String rootfsAmd64 = '${ubuntuRootfsUrl}amd64.tar.gz';

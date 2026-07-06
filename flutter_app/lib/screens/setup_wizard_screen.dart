@@ -41,6 +41,7 @@ class _SetupWizardScreenState extends State<SetupWizardScreen> {
   bool _started = false;
   bool _resolvingExistingSetupState = false;
   bool _didRestoreCompletedSetupState = false;
+  bool _installOpenClaw = true;
   List<OpenClawReleaseInfo> _availableReleases = const [];
   OpenClawReleaseInfo? _latestRelease;
   OpenClawReleaseInfo? _selectedRelease;
@@ -221,6 +222,7 @@ class _SetupWizardScreenState extends State<SetupWizardScreen> {
         nodeArchiveUrl:
             _selectedNodeArchivePath == null ? nodeArchiveUrl : null,
         nodeArchivePath: _selectedNodeArchivePath,
+        installOpenClaw: _installOpenClaw,
       ),
     );
 
@@ -327,24 +329,17 @@ class _SetupWizardScreenState extends State<SetupWizardScreen> {
       builder: (dialogContext) => SimpleDialog(
         title: const Text('第三方 API 配置'),
         children: [
-          SimpleDialogOption(
-            onPressed: () =>
-                Navigator.of(dialogContext).pop(CliToolService.codexTool),
-            child: const ListTile(
-              leading: Icon(Icons.auto_awesome),
-              title: Text('Codex'),
-              subtitle: Text('OpenAI 兼容 API、模型和推理强度'),
+          for (final tool in CliToolService.allTools.where(
+            (tool) => CliApiConfigService.configurableToolIds.contains(tool.id),
+          ))
+            SimpleDialogOption(
+              onPressed: () => Navigator.of(dialogContext).pop(tool),
+              child: ListTile(
+                leading: Icon(tool.icon, color: tool.color),
+                title: Text(tool.name),
+                subtitle: const Text('API、模型、映射和推理强度'),
+              ),
             ),
-          ),
-          SimpleDialogOption(
-            onPressed: () =>
-                Navigator.of(dialogContext).pop(CliToolService.claudeTool),
-            child: const ListTile(
-              leading: Icon(Icons.psychology),
-              title: Text('Claude'),
-              subtitle: Text('Anthropic 兼容 API、模型和推理强度'),
-            ),
-          ),
         ],
       ),
     );
@@ -747,7 +742,13 @@ class _SetupWizardScreenState extends State<SetupWizardScreen> {
                     ),
                   ] else if (!isResolvingCompletionChoice &&
                       (!_started || state.hasError)) ...[
-                    _buildVersionSelector(theme, l10n, provider.isRunning),
+                    _buildOpenClawInstallSwitch(theme, provider.isRunning),
+                    const SizedBox(height: 12),
+                    _buildVersionSelector(
+                      theme,
+                      l10n,
+                      provider.isRunning || !_installOpenClaw,
+                    ),
                     const SizedBox(height: 12),
                     _buildBootstrapResourceConfigButton(
                       theme,
@@ -1065,7 +1066,7 @@ class _SetupWizardScreenState extends State<SetupWizardScreen> {
   Widget _buildCliApiConfigButton(ThemeData theme, bool disableSelection) {
     final subtitle = _hasCliApiConfig
         ? '已配置，将在 CLI 启动时自动加载'
-        : '可选：预填 Codex/Claude 的 API、模型和推理强度';
+        : '可选：预填 CLI 工具的 API、模型、映射和推理强度';
     final fillColor =
         theme.inputDecorationTheme.fillColor ?? theme.colorScheme.surface;
     final titleColor =
@@ -1136,6 +1137,35 @@ class _SetupWizardScreenState extends State<SetupWizardScreen> {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildOpenClawInstallSwitch(ThemeData theme, bool disableSelection) {
+    final fillColor =
+        theme.inputDecorationTheme.fillColor ?? theme.colorScheme.surface;
+    return Material(
+      color: fillColor,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+        side: BorderSide(color: theme.colorScheme.outlineVariant),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: SwitchListTile(
+        value: _installOpenClaw,
+        onChanged: disableSelection
+            ? null
+            : (value) {
+                setState(() => _installOpenClaw = value);
+              },
+        secondary: Icon(
+          Icons.cloud_sync_outlined,
+          color: disableSelection
+              ? theme.disabledColor
+              : theme.colorScheme.primary,
+        ),
+        title: const Text('安装 OpenClaw 网关'),
+        subtitle: const Text('可选；关闭后仍会完成 Ubuntu、Node.js 和 CLI 运行环境安装'),
       ),
     );
   }

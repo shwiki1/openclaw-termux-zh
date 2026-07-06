@@ -30,7 +30,7 @@ const Map<String, String> appStringsZhHant = {
   'commonNotConfigured': '\u672a\u914d\u7f6e',
   'dashboardQuickActions': '快捷操作',
   'dashboardTerminalTitle': 'CLI 工具與終端',
-  'dashboardTerminalSubtitle': '打開 Ubuntu Shell、Codex CLI 或 Claude Code',
+  'dashboardTerminalSubtitle': '打開 Ubuntu Shell、Codex、Qwen、Gemini 等 CLI',
   'dashboardWebDashboardTitle': 'Web 控制台',
   'dashboardWebDashboardSubtitle': '在瀏覽器中打開 OpenClaw 控制台',
   'dashboardStartGatewayFirst': '請先啟動網關',
