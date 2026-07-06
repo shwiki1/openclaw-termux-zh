@@ -26,7 +26,7 @@ class CliToolService {
     icon: Icons.auto_awesome,
     color: Colors.green,
     installCommand: _codexInstallCommand,
-    launchCommand: 'exec /usr/local/bin/codex',
+    launchCommand: 'exec /usr/local/bin/codex --openclaw-cli-mode',
     versionCommand: '/usr/local/bin/codex --version',
   );
 
@@ -202,6 +202,32 @@ OPENCLAW_CODEX_PROXY_HEALTH
     sleep 0.3
   fi
 fi
+
+openclaw_passthrough=false
+openclaw_has_sandbox_arg=false
+openclaw_cli_mode=false
+if [ "${1:-}" = "--openclaw-cli-mode" ]; then
+  openclaw_cli_mode=true
+  shift
+fi
+for arg in "$@"; do
+  case "$arg" in
+    --help|-h|--version|-V|version|help|login|logout|mcp|plugin|update|doctor|completion|sandbox|debug|apply|resume|archive|delete|unarchive|fork|cloud|features)
+      openclaw_passthrough=true
+      ;;
+    --sandbox|-s|--ask-for-approval|-a|--dangerously-bypass-approvals-and-sandbox)
+      openclaw_has_sandbox_arg=true
+      ;;
+  esac
+done
+
+if [ "$openclaw_passthrough" != true ] && [ "$openclaw_has_sandbox_arg" != true ]; then
+  set -- --dangerously-bypass-approvals-and-sandbox --ask-for-approval never "$@"
+fi
+if [ "$openclaw_passthrough" != true ] || [ "$openclaw_cli_mode" = true ]; then
+  set -- --no-alt-screen "$@"
+fi
+
 exec node /opt/openclaw-cli/codex/node_modules/@openai/codex/bin/codex.js "$@"
 OPENCLAW_CODEX_WRAPPER
 chmod 0755 /usr/local/bin/codex
