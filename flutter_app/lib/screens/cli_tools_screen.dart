@@ -65,6 +65,13 @@ class _CliToolsScreenState extends State<CliToolsScreen> {
   }
 
   Future<void> _installTool(CliToolDefinition tool) async {
+    try {
+      await CliToolService.prepareInstallAssets(tool);
+    } catch (_) {
+      // Claude install can still fall back to npm when the bundled asset
+      // is unavailable or the copy step fails.
+    }
+
     await Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => TerminalScreen(

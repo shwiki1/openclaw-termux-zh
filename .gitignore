@@ -37,3 +37,6 @@ release/*/*
 
 # Local exported OpenClaw configs with real API keys / tokens
 openclaw-config/openclaw-config-app-*.json
+
+# Large local bootstrap archives are published as GitHub Release assets
+flutter_app/assets/bootstrap/claude-code-*-bundle.tar.gz

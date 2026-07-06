@@ -203,6 +203,18 @@ jobs:
         working-directory: flutter_app
         run: flutter pub get
 
+      - name: Download bundled Claude runtime assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p flutter_app/assets/bootstrap
+          gh release download bootstrap-assets \
+            --repo "${{ github.repository }}" \
+            --pattern "claude-code-*-bundle.tar.gz" \
+            --dir flutter_app/assets/bootstrap
+          ls -lh flutter_app/assets/bootstrap/
+
       - name: Analyze Dart code
         working-directory: flutter_app
         run: flutter analyze --no-fatal-infos

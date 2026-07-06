@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
 
+import '../constants.dart';
 import '../models/cli_tool.dart';
 import 'native_bridge.dart';
 
 class CliToolService {
+  static const _claudeBundledArchiveInRootfs =
+      '/tmp/claude-code-2.1.148-bundle.tar.gz';
+
   static const shellTool = CliToolDefinition(
     id: 'shell',
     name: 'Ubuntu Shell',
@@ -146,37 +150,53 @@ install_claude_package() {
   target_dir="/opt/openclaw-cli/claude"
   staging_dir="$target_dir.tmp"
   previous_dir="$target_dir.prev"
+  bundled_archive="${OPENCLAW_CLAUDE_BUNDLE_ARCHIVE:-/tmp/claude-code-2.1.148-bundle.tar.gz}"
   pack_dir="$staging_dir/.npm-pack"
+  bundle_ready=false
 
   rm -rf "$staging_dir" "$previous_dir"
   mkdir -p "$staging_dir" "$pack_dir"
 
-  echo ">>> Installing Claude Code main package..."
-  npm install \
-    --prefix "$staging_dir" \
-    --force \
-    --ignore-scripts \
-    --omit=optional \
-    "@anthropic-ai/claude-code@${OPENCLAW_CLAUDE_CODE_VERSION:-2.1.148}"
+  if [ -f "$bundled_archive" ]; then
+    echo ">>> Installing Claude Code from bundled archive..."
+    if tar -xzf "$bundled_archive" -C "$staging_dir"; then
+      bundle_ready=true
+    else
+      echo "Bundled Claude archive extraction failed, falling back to npm..." >&2
+      rm -rf "$staging_dir"
+      mkdir -p "$staging_dir" "$pack_dir"
+    fi
+  fi
+
+  if [ "$bundle_ready" != true ]; then
+    echo ">>> Installing Claude Code main package..."
+    npm install \
+      --prefix "$staging_dir" \
+      --force \
+      --ignore-scripts \
+      --omit=optional \
+      "@anthropic-ai/claude-code@${OPENCLAW_CLAUDE_CODE_VERSION:-2.1.148}"
+
+    claude_version="$(node -p "require('$staging_dir/node_modules/@anthropic-ai/claude-code/package.json').version")"
+    if [ "$claude_version" != "${OPENCLAW_CLAUDE_CODE_VERSION:-2.1.148}" ]; then
+      echo "Unexpected Claude Code version: $claude_version" >&2
+      exit 1
+    fi
+    native_package="@anthropic-ai/claude-code-linux-arm64@$claude_version"
+    native_dir="$staging_dir/node_modules/@anthropic-ai/claude-code-linux-arm64"
+    mkdir -p "$native_dir"
+
+    echo ">>> Installing Claude Code linux arm64 runtime $claude_version..."
+    (
+      cd "$pack_dir"
+      npm pack --force "$native_package" > pack-name.txt
+    )
+    tar -xzf "$pack_dir/$(cat "$pack_dir/pack-name.txt")" \
+      -C "$native_dir" \
+      --strip-components=1
+  fi
 
   claude_version="$(node -p "require('$staging_dir/node_modules/@anthropic-ai/claude-code/package.json').version")"
-  if [ "$claude_version" != "${OPENCLAW_CLAUDE_CODE_VERSION:-2.1.148}" ]; then
-    echo "Unexpected Claude Code version: $claude_version" >&2
-    exit 1
-  fi
-  native_package="@anthropic-ai/claude-code-linux-arm64@$claude_version"
-  native_dir="$staging_dir/node_modules/@anthropic-ai/claude-code-linux-arm64"
-  mkdir -p "$native_dir"
-
-  echo ">>> Installing Claude Code linux arm64 runtime $claude_version..."
-  (
-    cd "$pack_dir"
-    npm pack --force "$native_package" > pack-name.txt
-  )
-  tar -xzf "$pack_dir/$(cat "$pack_dir/pack-name.txt")" \
-    -C "$native_dir" \
-    --strip-components=1
-
   native_binary="$(find "$staging_dir/node_modules/@anthropic-ai" -path '*/claude' -type f 2>/dev/null | head -n 1 || true)"
   if [ -z "$native_binary" ]; then
     echo "Claude Code native binary was not installed. Installed packages:" >&2
@@ -267,6 +287,7 @@ echo ">>> CODEX_CLI_INSTALL_COMPLETE"
       r'''
 ensure_node_22
 echo ">>> Installing Claude Code from npm..."
+export OPENCLAW_CLAUDE_BUNDLE_ARCHIVE="/tmp/claude-code-2.1.148-bundle.tar.gz"
 install_claude_package
 cat > /usr/local/bin/claude <<'OPENCLAW_CLAUDE_WRAPPER'
 #!/bin/sh
@@ -412,5 +433,19 @@ fi
         error: error.toString(),
       );
     }
+  }
+
+  static Future<void> prepareInstallAssets(CliToolDefinition tool) async {
+    if (tool.id != claudeTool.id) {
+      return;
+    }
+
+    final filesDir = await NativeBridge.getFilesDir();
+    final destinationPath =
+        '$filesDir/rootfs/ubuntu$_claudeBundledArchiveInRootfs';
+    await NativeBridge.copyBundledAssetToFile(
+      assetPath: AppConstants.claudeBundleAssetPath,
+      destinationPath: destinationPath,
+    );
   }
 }

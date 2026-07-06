@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:xterm/xterm.dart';
@@ -7,7 +5,6 @@ import 'package:url_launcher/url_launcher.dart';
 import '../services/persistent_terminal_session.dart';
 import '../services/screenshot_service.dart';
 import '../widgets/responsive_layout.dart';
-import '../widgets/native_terminal_view.dart';
 import '../widgets/terminal_toolbar.dart';
 
 class TerminalScreen extends StatefulWidget {
@@ -31,7 +28,6 @@ class TerminalScreen extends StatefulWidget {
 class _TerminalScreenState extends State<TerminalScreen> {
   late final PersistentTerminalSession _session;
   late final TerminalController _controller;
-  final _nativeTerminalKey = GlobalKey<NativeTerminalViewState>();
   final _inputController = TextEditingController();
   final _inputFocusNode = FocusNode();
   final _ctrlNotifier = ValueNotifier<bool>(false);
@@ -41,6 +37,18 @@ class _TerminalScreenState extends State<TerminalScreen> {
 
   /// Box-drawing and other TUI characters that break URLs when copied
   static final _boxDrawing = RegExp(r'[│┤├┬┴┼╮╯╰╭─╌╴╶┌┐└┘◇◆]+');
+
+  static const _fontFallback = [
+    'monospace',
+    'Noto Sans Mono',
+    'Noto Sans Mono CJK SC',
+    'Noto Sans Mono CJK TC',
+    'Noto Sans Mono CJK JP',
+    'Noto Color Emoji',
+    'Noto Sans Symbols',
+    'Noto Sans Symbols 2',
+    'sans-serif',
+  ];
 
   @override
   void initState() {
@@ -157,14 +165,8 @@ class _TerminalScreenState extends State<TerminalScreen> {
     return best;
   }
 
-  Future<String?> _getPreferredSelectedText() async {
-    return await _nativeTerminalKey.currentState?.getSelectedText() ??
-        _getSelectedText();
-  }
-
-  Future<void> _copySelection() async {
-    final text = await _getPreferredSelectedText();
-    if (!mounted) return;
+  void _copySelection() {
+    final text = _getSelectedText();
     if (text == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -217,9 +219,8 @@ class _TerminalScreenState extends State<TerminalScreen> {
     );
   }
 
-  Future<void> _openSelection() async {
-    final text = await _getPreferredSelectedText();
-    if (!mounted) return;
+  void _openSelection() {
+    final text = _getSelectedText();
     if (text == null) return;
 
     final url = _extractUrl(text);
@@ -236,6 +237,78 @@ class _TerminalScreenState extends State<TerminalScreen> {
         duration: Duration(seconds: 1),
       ),
     );
+  }
+
+  /// Detect URLs near the tapped cell by joining adjacent wrapped lines.
+  void _handleTap(TapUpDetails details, CellOffset offset) {
+    final totalLines = _session.terminal.buffer.lines.length;
+    final startRow = (offset.y - 2).clamp(0, totalLines - 1);
+    final endRow = (offset.y + 2).clamp(0, totalLines - 1);
+
+    final sb = StringBuffer();
+    for (int row = startRow; row <= endRow; row++) {
+      sb.write(_getLineText(row).trimRight());
+    }
+    final url = _extractUrl(sb.toString());
+    if (url != null) {
+      _openUrl(url);
+    }
+  }
+
+  String _getLineText(int row) {
+    try {
+      final line = _session.terminal.buffer.lines[row];
+      final sb = StringBuffer();
+      for (int i = 0; i < line.length; i++) {
+        final char = line.getCodePoint(i);
+        if (char != 0) {
+          sb.writeCharCode(char);
+        }
+      }
+      return sb.toString();
+    } catch (_) {
+      return '';
+    }
+  }
+
+  Future<void> _openUrl(String url) async {
+    final uri = Uri.tryParse(url);
+    if (uri == null) return;
+
+    final shouldOpen = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Open Link'),
+        content: Text(url),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              Clipboard.setData(ClipboardData(text: url));
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Link copied'),
+                  duration: Duration(seconds: 1),
+                ),
+              );
+              Navigator.pop(ctx, false);
+            },
+            child: const Text('Copy'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Open'),
+          ),
+        ],
+      ),
+    );
+
+    if (shouldOpen == true) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
   }
 
   Future<void> _paste() async {
@@ -291,7 +364,7 @@ class _TerminalScreenState extends State<TerminalScreen> {
       IconButton(
         icon: const Icon(Icons.copy),
         tooltip: 'Copy selection',
-        onPressed: () => unawaited(_copySelection()),
+        onPressed: _copySelection,
       ),
       IconButton(
         icon: const Icon(Icons.select_all),
@@ -301,7 +374,7 @@ class _TerminalScreenState extends State<TerminalScreen> {
       IconButton(
         icon: const Icon(Icons.open_in_browser),
         tooltip: 'Open URL',
-        onPressed: () => unawaited(_openSelection()),
+        onPressed: _openSelection,
       ),
       IconButton(
         icon: const Icon(Icons.paste),
@@ -331,13 +404,13 @@ class _TerminalScreenState extends State<TerminalScreen> {
             _takeScreenshot();
             break;
           case 'copy':
-            unawaited(_copySelection());
+            _copySelection();
             break;
           case 'copyAll':
             _copyAll();
             break;
           case 'open':
-            unawaited(_openSelection());
+            _openSelection();
             break;
           case 'paste':
             _paste();
@@ -417,9 +490,16 @@ class _TerminalScreenState extends State<TerminalScreen> {
         Expanded(
           child: RepaintBoundary(
             key: _screenshotKey,
-            child: NativeTerminalView(
-              key: _nativeTerminalKey,
-              terminal: _session.terminal,
+            child: TerminalView(
+              _session.terminal,
+              controller: _controller,
+              textStyle: const TerminalStyle(
+                fontSize: 11,
+                height: 1.0,
+                fontFamily: 'DejaVuSansMono',
+                fontFamilyFallback: _fontFallback,
+              ),
+              onTapUp: _handleTap,
             ),
           ),
         ),
