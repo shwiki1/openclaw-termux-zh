@@ -9,6 +9,7 @@ import '../services/screenshot_service.dart';
 import '../services/terminal_output_buffer.dart';
 import '../services/terminal_service.dart';
 import '../widgets/responsive_layout.dart';
+import '../widgets/native_terminal_view.dart';
 import '../widgets/terminal_toolbar.dart';
 
 /// Runs an install or uninstall command for an [OptionalPackage] inside proot.
@@ -29,7 +30,6 @@ class PackageInstallScreen extends StatefulWidget {
 
 class _PackageInstallScreenState extends State<PackageInstallScreen> {
   late final Terminal _terminal;
-  late final TerminalController _controller;
   late final TerminalOutputBuffer _outputBuffer;
   Pty? _pty;
   bool _loading = true;
@@ -39,24 +39,11 @@ class _PackageInstallScreenState extends State<PackageInstallScreen> {
   final _altNotifier = ValueNotifier<bool>(false);
   final _screenshotKey = GlobalKey();
 
-  static const _fontFallback = [
-    'monospace',
-    'Noto Sans Mono',
-    'Noto Sans Mono CJK SC',
-    'Noto Sans Mono CJK TC',
-    'Noto Sans Mono CJK JP',
-    'Noto Color Emoji',
-    'Noto Sans Symbols',
-    'Noto Sans Symbols 2',
-    'sans-serif',
-  ];
-
   @override
   void initState() {
     super.initState();
     _terminal = Terminal(maxLines: terminalScrollbackLines);
     _outputBuffer = TerminalOutputBuffer(_terminal);
-    _controller = TerminalController();
     NativeBridge.startTerminalService();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _startProcess();
@@ -168,7 +155,6 @@ class _PackageInstallScreenState extends State<PackageInstallScreen> {
   void dispose() {
     _ctrlNotifier.dispose();
     _altNotifier.dispose();
-    _controller.dispose();
     _outputBuffer.dispose();
     _pty?.kill();
     NativeBridge.stopTerminalService();
@@ -251,16 +237,7 @@ class _PackageInstallScreenState extends State<PackageInstallScreen> {
             Expanded(
               child: RepaintBoundary(
                 key: _screenshotKey,
-                child: TerminalView(
-                  _terminal,
-                  controller: _controller,
-                  textStyle: const TerminalStyle(
-                    fontSize: 11,
-                    height: 1.0,
-                    fontFamily: 'DejaVuSansMono',
-                    fontFamilyFallback: _fontFallback,
-                  ),
-                ),
+                child: NativeTerminalView(terminal: _terminal),
               ),
             ),
             TerminalToolbar(

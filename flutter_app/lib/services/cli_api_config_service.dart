@@ -26,7 +26,20 @@ class CliApiConfigService {
   static Future<CliApiConfig> load(String toolId) async {
     final configs = await _loadAll();
     final tools = _asMap(configs['tools']);
-    return CliApiConfig.fromJson(toolId, _asMapOrNull(tools[toolId]));
+    return _activeConfigFromJson(toolId, _asMapOrNull(tools[toolId]));
+  }
+
+  static Future<List<CliApiConfig>> loadProfiles(String toolId) async {
+    final configs = await _loadAll();
+    final tools = _asMap(configs['tools']);
+    return _profilesFromJson(toolId, _asMapOrNull(tools[toolId]));
+  }
+
+  static Future<int> loadActiveProfileIndex(String toolId) async {
+    final configs = await _loadAll();
+    final tools = _asMap(configs['tools']);
+    final toolJson = _asMapOrNull(tools[toolId]);
+    return _activeProfileIndexFromJson(toolJson);
   }
 
   static Future<Map<String, CliApiConfig>> loadAll() async {
@@ -34,7 +47,7 @@ class CliApiConfigService {
     final tools = _asMap(configs['tools']);
     return {
       for (final toolId in configurableToolIds)
-        toolId: CliApiConfig.fromJson(toolId, _asMapOrNull(tools[toolId])),
+        toolId: _activeConfigFromJson(toolId, _asMapOrNull(tools[toolId])),
     };
   }
 
@@ -42,7 +55,43 @@ class CliApiConfigService {
     final configs = await _loadAll();
     final tools = _asMap(configs['tools']);
     configs['tools'] = tools;
-    tools[config.toolId] = config.toJson();
+    final existing = _asMapOrNull(tools[config.toolId]);
+    final profiles = _profilesFromJson(config.toolId, existing);
+    var activeIndex = _activeProfileIndexFromJson(existing);
+    if (activeIndex < 0 || activeIndex >= profiles.length) {
+      activeIndex = 0;
+    }
+    if (profiles.isEmpty) {
+      profiles.add(config);
+      activeIndex = 0;
+    } else {
+      profiles[activeIndex] = config;
+    }
+    tools[config.toolId] = _toolProfilesJson(profiles, activeIndex);
+
+    await _writePrefsConfig(configs);
+    try {
+      await regenerateRuntimeFiles(configs: configs);
+    } catch (_) {
+      // Rootfs may not exist yet during first-run preconfiguration.
+      // The setup flow calls regenerateRuntimeFiles() again after extraction.
+    }
+  }
+
+  static Future<void> saveProfiles({
+    required String toolId,
+    required List<CliApiConfig> profiles,
+    required int activeProfileIndex,
+  }) async {
+    final configs = await _loadAll();
+    final tools = _asMap(configs['tools']);
+    configs['tools'] = tools;
+    final normalized = profiles.isEmpty
+        ? [CliApiConfig(toolId: toolId, profileName: '默认')]
+        : profiles;
+    final activeIndex =
+        activeProfileIndex.clamp(0, normalized.length - 1).toInt();
+    tools[toolId] = _toolProfilesJson(normalized, activeIndex);
 
     await _writePrefsConfig(configs);
     try {
@@ -206,6 +255,70 @@ class CliApiConfigService {
   static Map<String, dynamic>? _asMapOrNull(dynamic value) {
     if (value == null) return null;
     return _asMap(value);
+  }
+
+  static CliApiConfig _activeConfigFromJson(
+    String toolId,
+    Map<String, dynamic>? json,
+  ) {
+    final profiles = _profilesFromJson(toolId, json);
+    if (profiles.isEmpty) {
+      return CliApiConfig(toolId: toolId);
+    }
+    final activeIndex = _activeProfileIndexFromJson(json);
+    final index = activeIndex.clamp(0, profiles.length - 1).toInt();
+    return profiles[index];
+  }
+
+  static List<CliApiConfig> _profilesFromJson(
+    String toolId,
+    Map<String, dynamic>? json,
+  ) {
+    if (json == null || json.isEmpty) {
+      return [CliApiConfig(toolId: toolId, profileName: '默认')];
+    }
+    final rawProfiles = json['profiles'];
+    if (rawProfiles is List) {
+      final profiles = rawProfiles
+          .map((item) => CliApiConfig.fromJson(toolId, _asMapOrNull(item)))
+          .toList();
+      if (profiles.isNotEmpty) return profiles;
+    }
+    final legacy = CliApiConfig.fromJson(toolId, json);
+    return [
+      legacy.copyWith(
+        profileName: legacy.profileName.trim().isEmpty ? '默认' : null,
+      ),
+    ];
+  }
+
+  static int _activeProfileIndexFromJson(Map<String, dynamic>? json) {
+    final value = json?['activeProfileIndex'];
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    return 0;
+  }
+
+  static Map<String, dynamic> _toolProfilesJson(
+    List<CliApiConfig> profiles,
+    int activeIndex,
+  ) {
+    final safeIndex = activeIndex.clamp(0, profiles.length - 1).toInt();
+    final active = profiles[safeIndex];
+    return <String, dynamic>{
+      ...active.toJson(),
+      'activeProfileIndex': safeIndex,
+      'profiles': [
+        for (var i = 0; i < profiles.length; i++)
+          profiles[i]
+              .copyWith(
+                profileName: profiles[i].profileName.trim().isEmpty
+                    ? 'API ${i + 1}'
+                    : profiles[i].profileName,
+              )
+              .toJson(),
+      ],
+    };
   }
 
   static String _buildEnvFile(CliApiConfig codex, CliApiConfig claude) {

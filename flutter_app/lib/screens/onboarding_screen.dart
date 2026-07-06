@@ -14,6 +14,7 @@ import '../services/terminal_service.dart';
 import '../services/preferences_service.dart';
 import '../services/provider_config_service.dart';
 import '../widgets/responsive_layout.dart';
+import '../widgets/native_terminal_view.dart';
 import '../widgets/terminal_toolbar.dart';
 import 'dashboard_screen.dart';
 
@@ -55,18 +56,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     caseSensitive: false,
   );
   String _urlScanBuffer = '';
-
-  static const _fontFallback = [
-    'monospace',
-    'Noto Sans Mono',
-    'Noto Sans Mono CJK SC',
-    'Noto Sans Mono CJK TC',
-    'Noto Sans Mono CJK JP',
-    'Noto Color Emoji',
-    'Noto Sans Symbols',
-    'Noto Sans Symbols 2',
-    'sans-serif',
-  ];
 
   String _shellQuote(String value) {
     return "'${value.replaceAll("'", r"'\''")}'";
@@ -355,79 +344,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     );
   }
 
-  void _handleTap(TapUpDetails details, CellOffset offset) {
-    // Join adjacent lines and extract URL, handling wrapped URLs
-    // and TUI box-drawing characters.
-    final totalLines = _terminal.buffer.lines.length;
-    final startRow = (offset.y - 2).clamp(0, totalLines - 1);
-    final endRow = (offset.y + 2).clamp(0, totalLines - 1);
-
-    final sb = StringBuffer();
-    for (int row = startRow; row <= endRow; row++) {
-      sb.write(_getLineText(row).trimRight());
-    }
-    final url = _extractUrl(sb.toString());
-    if (url != null) {
-      _openUrl(url);
-    }
-  }
-
-  String _getLineText(int row) {
-    try {
-      final line = _terminal.buffer.lines[row];
-      final sb = StringBuffer();
-      for (int i = 0; i < line.length; i++) {
-        final char = line.getCodePoint(i);
-        if (char != 0) {
-          sb.writeCharCode(char);
-        }
-      }
-      return sb.toString();
-    } catch (_) {
-      return '';
-    }
-  }
-
-  Future<void> _openUrl(String url) async {
-    final uri = Uri.tryParse(url);
-    if (uri == null) return;
-
-    final shouldOpen = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(context.l10n.t('commonOpenLink')),
-        content: Text(url),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: Text(context.l10n.t('commonCancel')),
-          ),
-          TextButton(
-            onPressed: () {
-              Clipboard.setData(ClipboardData(text: url));
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(context.l10n.t('commonLinkCopied')),
-                  duration: const Duration(seconds: 1),
-                ),
-              );
-              Navigator.pop(ctx, false);
-            },
-            child: Text(context.l10n.t('commonCopy')),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: Text(context.l10n.t('commonOpen')),
-          ),
-        ],
-      ),
-    );
-
-    if (shouldOpen == true) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    }
-  }
-
   Future<void> _goToDashboard() async {
     final navigator = Navigator.of(context);
     final prefs = PreferencesService();
@@ -534,17 +450,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             Expanded(
               child: RepaintBoundary(
                 key: _screenshotKey,
-                child: TerminalView(
-                  _terminal,
-                  controller: _controller,
-                  textStyle: const TerminalStyle(
-                    fontSize: 11,
-                    height: 1.0,
-                    fontFamily: 'DejaVuSansMono',
-                    fontFamilyFallback: _fontFallback,
-                  ),
-                  onTapUp: _handleTap,
-                ),
+                child: NativeTerminalView(terminal: _terminal),
               ),
             ),
             TerminalToolbar(

@@ -11,6 +11,7 @@ import '../services/screenshot_service.dart';
 import '../services/terminal_output_buffer.dart';
 import '../services/terminal_service.dart';
 import '../widgets/responsive_layout.dart';
+import '../widgets/native_terminal_view.dart';
 import '../widgets/terminal_toolbar.dart';
 
 /// Runs `openclaw configure` in a terminal so the user can manage
@@ -37,18 +38,6 @@ class _ConfigureScreenState extends State<ConfigureScreen> {
   final _screenshotKey = GlobalKey();
   static final _anyUrlRegex = RegExp(r'https?://[^\s<>\[\]"' "'" r'\)]+');
   static final _boxDrawing = RegExp(r'[│┤├┬┴┼╮╯╰╭─╌╴╶┌┐└┘◇◆]+');
-
-  static const _fontFallback = [
-    'monospace',
-    'Noto Sans Mono',
-    'Noto Sans Mono CJK SC',
-    'Noto Sans Mono CJK TC',
-    'Noto Sans Mono CJK JP',
-    'Noto Color Emoji',
-    'Noto Sans Symbols',
-    'Noto Sans Symbols 2',
-    'sans-serif',
-  ];
 
   String _shellQuote(String value) {
     return "'${value.replaceAll("'", r"'\''")}'";
@@ -375,16 +364,7 @@ class _ConfigureScreenState extends State<ConfigureScreen> {
             Expanded(
               child: RepaintBoundary(
                 key: _screenshotKey,
-                child: TerminalView(
-                  _terminal,
-                  controller: _controller,
-                  textStyle: const TerminalStyle(
-                    fontSize: 11,
-                    height: 1.0,
-                    fontFamily: 'DejaVuSansMono',
-                    fontFamilyFallback: _fontFallback,
-                  ),
-                ),
+                child: NativeTerminalView(terminal: _terminal),
               ),
             ),
             TerminalToolbar(

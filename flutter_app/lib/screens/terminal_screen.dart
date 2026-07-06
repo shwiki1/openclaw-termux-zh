@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../services/persistent_terminal_session.dart';
 import '../services/screenshot_service.dart';
 import '../widgets/responsive_layout.dart';
+import '../widgets/native_terminal_view.dart';
 import '../widgets/terminal_toolbar.dart';
 
 class TerminalScreen extends StatefulWidget {
@@ -37,18 +38,6 @@ class _TerminalScreenState extends State<TerminalScreen> {
 
   /// Box-drawing and other TUI characters that break URLs when copied
   static final _boxDrawing = RegExp(r'[│┤├┬┴┼╮╯╰╭─╌╴╶┌┐└┘◇◆]+');
-
-  static const _fontFallback = [
-    'monospace',
-    'Noto Sans Mono',
-    'Noto Sans Mono CJK SC',
-    'Noto Sans Mono CJK TC',
-    'Noto Sans Mono CJK JP',
-    'Noto Color Emoji',
-    'Noto Sans Symbols',
-    'Noto Sans Symbols 2',
-    'sans-serif',
-  ];
 
   @override
   void initState() {
@@ -270,79 +259,6 @@ class _TerminalScreenState extends State<TerminalScreen> {
     );
   }
 
-  /// Detect URLs in terminal at tap position. Joins adjacent lines
-  /// and strips box-drawing chars to handle wrapped URLs.
-  void _handleTap(TapUpDetails details, CellOffset offset) {
-    final totalLines = _session.terminal.buffer.lines.length;
-    final startRow = (offset.y - 2).clamp(0, totalLines - 1);
-    final endRow = (offset.y + 2).clamp(0, totalLines - 1);
-
-    final sb = StringBuffer();
-    for (int row = startRow; row <= endRow; row++) {
-      sb.write(_getLineText(row).trimRight());
-    }
-    final url = _extractUrl(sb.toString());
-    if (url != null) {
-      _openUrl(url);
-    }
-  }
-
-  String _getLineText(int row) {
-    try {
-      final line = _session.terminal.buffer.lines[row];
-      final sb = StringBuffer();
-      for (int i = 0; i < line.length; i++) {
-        final char = line.getCodePoint(i);
-        if (char != 0) {
-          sb.writeCharCode(char);
-        }
-      }
-      return sb.toString();
-    } catch (_) {
-      return '';
-    }
-  }
-
-  Future<void> _openUrl(String url) async {
-    final uri = Uri.tryParse(url);
-    if (uri == null) return;
-
-    final shouldOpen = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Open Link'),
-        content: Text(url),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () {
-              Clipboard.setData(ClipboardData(text: url));
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Link copied'),
-                  duration: Duration(seconds: 1),
-                ),
-              );
-              Navigator.pop(ctx, false);
-            },
-            child: const Text('Copy'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Open'),
-          ),
-        ],
-      ),
-    );
-
-    if (shouldOpen == true) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final compactActions = MediaQuery.sizeOf(context).width < 380;
@@ -491,17 +407,7 @@ class _TerminalScreenState extends State<TerminalScreen> {
         Expanded(
           child: RepaintBoundary(
             key: _screenshotKey,
-            child: TerminalView(
-              _session.terminal,
-              controller: _controller,
-              textStyle: const TerminalStyle(
-                fontSize: 11,
-                height: 1.0,
-                fontFamily: 'DejaVuSansMono',
-                fontFamilyFallback: _fontFallback,
-              ),
-              onTapUp: _handleTap,
-            ),
+            child: NativeTerminalView(terminal: _session.terminal),
           ),
         ),
         TerminalToolbar(

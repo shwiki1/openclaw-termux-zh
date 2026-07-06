@@ -13,6 +13,7 @@ import '../services/screenshot_service.dart';
 import '../services/terminal_output_buffer.dart';
 import '../services/terminal_service.dart';
 import '../widgets/terminal_toolbar.dart';
+import '../widgets/native_terminal_view.dart';
 
 /// Runs the Weixin installer command in an interactive terminal so the user
 /// can scan the QR code or open the login link shown by the installer.
@@ -37,18 +38,6 @@ class _WeixinInstallerScreenState extends State<WeixinInstallerScreen> {
 
   static final _anyUrlRegex = RegExp(r'https?://[^\s<>\[\]"' "'" r'\)]+');
   static final _boxDrawing = RegExp(r'[\u2500-\u257F\u25C6\u25C7]+');
-  static const _fontFallback = [
-    'monospace',
-    'Noto Sans Mono',
-    'Noto Sans Mono CJK SC',
-    'Noto Sans Mono CJK TC',
-    'Noto Sans Mono CJK JP',
-    'Noto Color Emoji',
-    'Noto Sans Symbols',
-    'Noto Sans Symbols 2',
-    'sans-serif',
-  ];
-
   @override
   void initState() {
     super.initState();
@@ -265,77 +254,6 @@ class _WeixinInstallerScreenState extends State<WeixinInstallerScreen> {
     );
   }
 
-  void _handleTap(TapUpDetails details, CellOffset offset) {
-    final totalLines = _terminal.buffer.lines.length;
-    final startRow = (offset.y - 2).clamp(0, totalLines - 1);
-    final endRow = (offset.y + 2).clamp(0, totalLines - 1);
-
-    final sb = StringBuffer();
-    for (int row = startRow; row <= endRow; row++) {
-      sb.write(_getLineText(row).trimRight());
-    }
-    final url = _extractUrl(sb.toString());
-    if (url != null) {
-      _openUrl(url);
-    }
-  }
-
-  String _getLineText(int row) {
-    try {
-      final line = _terminal.buffer.lines[row];
-      final sb = StringBuffer();
-      for (int i = 0; i < line.length; i++) {
-        final char = line.getCodePoint(i);
-        if (char != 0) {
-          sb.writeCharCode(char);
-        }
-      }
-      return sb.toString();
-    } catch (_) {
-      return '';
-    }
-  }
-
-  Future<void> _openUrl(String url) async {
-    final uri = Uri.tryParse(url);
-    if (uri == null) return;
-
-    final shouldOpen = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(context.l10n.t('commonOpenLink')),
-        content: Text(url),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: Text(context.l10n.t('commonCancel')),
-          ),
-          TextButton(
-            onPressed: () {
-              Clipboard.setData(ClipboardData(text: url));
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(context.l10n.t('commonLinkCopied')),
-                  duration: const Duration(seconds: 1),
-                ),
-              );
-              Navigator.pop(ctx, false);
-            },
-            child: Text(context.l10n.t('commonCopy')),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: Text(context.l10n.t('commonOpen')),
-          ),
-        ],
-      ),
-    );
-
-    if (shouldOpen == true) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
@@ -424,17 +342,7 @@ class _WeixinInstallerScreenState extends State<WeixinInstallerScreen> {
             Expanded(
               child: RepaintBoundary(
                 key: _screenshotKey,
-                child: TerminalView(
-                  _terminal,
-                  controller: _controller,
-                  textStyle: const TerminalStyle(
-                    fontSize: 11,
-                    height: 1.0,
-                    fontFamily: 'DejaVuSansMono',
-                    fontFamilyFallback: _fontFallback,
-                  ),
-                  onTapUp: _handleTap,
-                ),
+                child: NativeTerminalView(terminal: _terminal),
               ),
             ),
             TerminalToolbar(

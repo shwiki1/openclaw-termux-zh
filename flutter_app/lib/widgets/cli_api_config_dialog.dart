@@ -28,12 +28,15 @@ class CliApiConfigDialog extends StatefulWidget {
 }
 
 class _CliApiConfigDialogState extends State<CliApiConfigDialog> {
+  final _profileNameController = TextEditingController();
   final _baseUrlController = TextEditingController();
   final _apiKeyController = TextEditingController();
   final _modelController = TextEditingController();
   final _mappingController = TextEditingController();
   String _reasoningEffort = '';
   String _apiProtocol = 'anthropic';
+  List<CliApiConfig> _profiles = const [];
+  int _activeProfileIndex = 0;
   List<String> _availableModels = const [];
   bool _loading = true;
   bool _saving = false;
@@ -51,6 +54,7 @@ class _CliApiConfigDialogState extends State<CliApiConfigDialog> {
 
   @override
   void dispose() {
+    _profileNameController.dispose();
     _baseUrlController.dispose();
     _apiKeyController.dispose();
     _modelController.dispose();
@@ -60,15 +64,16 @@ class _CliApiConfigDialogState extends State<CliApiConfigDialog> {
 
   Future<void> _load() async {
     try {
-      final config = await CliApiConfigService.load(widget.tool.id);
+      final profiles = await CliApiConfigService.loadProfiles(widget.tool.id);
+      final activeIndex =
+          await CliApiConfigService.loadActiveProfileIndex(widget.tool.id);
       if (!mounted) return;
+      final safeIndex = activeIndex.clamp(0, profiles.length - 1).toInt();
+      final config = profiles[safeIndex];
+      _applyConfig(config);
       setState(() {
-        _baseUrlController.text = config.baseUrl;
-        _apiKeyController.text = config.apiKey;
-        _modelController.text = config.model;
-        _mappingController.text = config.codexModelMapping;
-        _reasoningEffort = config.reasoningEffort;
-        _apiProtocol = config.effectiveApiProtocol;
+        _profiles = profiles;
+        _activeProfileIndex = safeIndex;
         _loading = false;
       });
     } catch (error) {
@@ -87,16 +92,11 @@ class _CliApiConfigDialogState extends State<CliApiConfigDialog> {
     });
 
     try {
-      await CliApiConfigService.save(
-        CliApiConfig(
-          toolId: widget.tool.id,
-          baseUrl: _baseUrlController.text,
-          apiKey: _apiKeyController.text,
-          model: _modelController.text,
-          reasoningEffort: _reasoningEffort,
-          codexModelMapping: _isCodex ? _mappingController.text : '',
-          apiProtocol: _isClaude ? _apiProtocol : 'openai',
-        ),
+      _persistCurrentProfileInMemory();
+      await CliApiConfigService.saveProfiles(
+        toolId: widget.tool.id,
+        profiles: _profiles,
+        activeProfileIndex: _activeProfileIndex,
       );
       if (!mounted) return;
       Navigator.of(context).pop(true);
@@ -139,6 +139,92 @@ class _CliApiConfigDialogState extends State<CliApiConfigDialog> {
     }
   }
 
+  CliApiConfig _configFromControllers() {
+    return CliApiConfig(
+      toolId: widget.tool.id,
+      profileName: _profileNameController.text.trim(),
+      baseUrl: _baseUrlController.text,
+      apiKey: _apiKeyController.text,
+      model: _modelController.text,
+      reasoningEffort: _reasoningEffort,
+      codexModelMapping: _isCodex ? _mappingController.text : '',
+      apiProtocol: _isClaude ? _apiProtocol : 'openai',
+    );
+  }
+
+  void _applyConfig(CliApiConfig config) {
+    _profileNameController.text =
+        config.profileName.trim().isEmpty ? '默认' : config.profileName;
+    _baseUrlController.text = config.baseUrl;
+    _apiKeyController.text = config.apiKey;
+    _modelController.text = config.model;
+    _mappingController.text = config.codexModelMapping;
+    _reasoningEffort = config.reasoningEffort;
+    _apiProtocol = config.effectiveApiProtocol;
+    _availableModels = const [];
+  }
+
+  void _persistCurrentProfileInMemory() {
+    final profiles = _profiles.isEmpty
+        ? [CliApiConfig(toolId: widget.tool.id, profileName: '默认')]
+        : List<CliApiConfig>.from(_profiles);
+    final index = _activeProfileIndex.clamp(0, profiles.length - 1).toInt();
+    profiles[index] = _configFromControllers().copyWith(
+      profileName: _profileNameController.text.trim().isEmpty
+          ? 'API ${index + 1}'
+          : _profileNameController.text.trim(),
+    );
+    _profiles = profiles;
+    _activeProfileIndex = index;
+  }
+
+  void _selectProfile(int index) {
+    _persistCurrentProfileInMemory();
+    final safeIndex = index.clamp(0, _profiles.length - 1).toInt();
+    final config = _profiles[safeIndex];
+    setState(() {
+      _activeProfileIndex = safeIndex;
+      _applyConfig(config);
+    });
+  }
+
+  void _addProfile() {
+    _persistCurrentProfileInMemory();
+    final nextIndex = _profiles.length;
+    final next = CliApiConfig(
+      toolId: widget.tool.id,
+      profileName: 'API ${nextIndex + 1}',
+      apiProtocol: _isClaude ? _apiProtocol : 'openai',
+    );
+    setState(() {
+      _profiles = [..._profiles, next];
+      _activeProfileIndex = nextIndex;
+      _applyConfig(next);
+    });
+  }
+
+  void _deleteProfile() {
+    if (_profiles.length <= 1) {
+      setState(() {
+        _applyConfig(CliApiConfig(
+          toolId: widget.tool.id,
+          profileName: '默认',
+          apiProtocol: _isClaude ? _apiProtocol : 'openai',
+        ));
+      });
+      return;
+    }
+    final profiles = List<CliApiConfig>.from(_profiles)
+      ..removeAt(_activeProfileIndex);
+    final nextIndex = _activeProfileIndex.clamp(0, profiles.length - 1).toInt();
+    final next = profiles[nextIndex];
+    setState(() {
+      _profiles = profiles;
+      _activeProfileIndex = nextIndex;
+      _applyConfig(next);
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -166,6 +252,59 @@ class _CliApiConfigDialogState extends State<CliApiConfigDialog> {
                       ),
                     ),
                     const SizedBox(height: 14),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: DropdownButtonFormField<int>(
+                            initialValue: _activeProfileIndex,
+                            isExpanded: true,
+                            decoration: const InputDecoration(
+                              labelText: 'API 配置档案',
+                              border: OutlineInputBorder(),
+                            ),
+                            items: [
+                              for (var i = 0; i < _profiles.length; i++)
+                                DropdownMenuItem(
+                                  value: i,
+                                  child: Text(
+                                    _profiles[i].profileName.trim().isEmpty
+                                        ? 'API ${i + 1}'
+                                        : _profiles[i].profileName.trim(),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                            ],
+                            onChanged: (value) {
+                              if (value == null) return;
+                              _selectProfile(value);
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        IconButton.outlined(
+                          tooltip: '新增 API',
+                          onPressed: _saving || _loadingModels ? null : _addProfile,
+                          icon: const Icon(Icons.add),
+                        ),
+                        const SizedBox(width: 4),
+                        IconButton.outlined(
+                          tooltip: '删除当前 API',
+                          onPressed:
+                              _saving || _loadingModels ? null : _deleteProfile,
+                          icon: const Icon(Icons.delete_outline),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: _profileNameController,
+                      decoration: const InputDecoration(
+                        labelText: '配置名称',
+                        hintText: '例如：主线路 / 备用线路',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
                     if (_isClaude) ...[
                       DropdownButtonFormField<String>(
                         initialValue: _apiProtocol,

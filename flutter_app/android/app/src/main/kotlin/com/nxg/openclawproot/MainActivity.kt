@@ -63,6 +63,13 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        flutterEngine
+            .platformViewsController
+            .registry
+            .registerViewFactory(
+                "com.openclaw.cyx/native_terminal",
+                OpenClawNativeTerminalViewFactory(flutterEngine.dartExecutor.binaryMessenger),
+            )
 
         val filesDir = applicationContext.filesDir.absolutePath
         val nativeLibDir = applicationContext.applicationInfo.nativeLibraryDir

@@ -6,6 +6,7 @@ class CliApiConfig {
   final String reasoningEffort;
   final String codexModelMapping;
   final String apiProtocol;
+  final String profileName;
 
   const CliApiConfig({
     required this.toolId,
@@ -15,6 +16,7 @@ class CliApiConfig {
     this.reasoningEffort = '',
     this.codexModelMapping = '',
     this.apiProtocol = '',
+    this.profileName = '',
   });
 
   bool get isConfigured =>
@@ -42,6 +44,7 @@ class CliApiConfig {
     String? reasoningEffort,
     String? codexModelMapping,
     String? apiProtocol,
+    String? profileName,
   }) {
     return CliApiConfig(
       toolId: toolId,
@@ -51,10 +54,12 @@ class CliApiConfig {
       reasoningEffort: reasoningEffort ?? this.reasoningEffort,
       codexModelMapping: codexModelMapping ?? this.codexModelMapping,
       apiProtocol: apiProtocol ?? this.apiProtocol,
+      profileName: profileName ?? this.profileName,
     );
   }
 
   Map<String, dynamic> toJson() => {
+        'profileName': profileName.trim(),
         'baseUrl': baseUrl.trim(),
         'apiKey': apiKey.trim(),
         'model': model.trim(),
@@ -75,6 +80,7 @@ class CliApiConfig {
       reasoningEffort: _string(json['reasoningEffort']),
       codexModelMapping: _string(json['codexModelMapping']),
       apiProtocol: _string(json['apiProtocol']),
+      profileName: _string(json['profileName']),
     );
   }
 
