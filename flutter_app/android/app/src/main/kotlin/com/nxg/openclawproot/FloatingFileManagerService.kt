@@ -9,6 +9,7 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Color
 import android.graphics.Typeface
+import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
@@ -17,6 +18,8 @@ import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
+import android.widget.FrameLayout
+import android.widget.HorizontalScrollView
 import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.LinearLayout
@@ -31,12 +34,18 @@ import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlin.math.abs
+import kotlin.math.max
+import kotlin.math.min
 
 class FloatingFileManagerService : Service() {
     private lateinit var windowManager: WindowManager
     private var rootView: View? = null
     private var params: WindowManager.LayoutParams? = null
     private var currentDir: File = Environment.getExternalStorageDirectory()
+    private var viewMode = ViewMode.LIST
+    private var sortMode = SortMode.NAME
+    private var showHidden = false
     private var previewing = false
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -101,16 +110,18 @@ class FloatingFileManagerService : Service() {
             width,
             height,
             overlayType(),
-            WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
+            WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
+                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
             android.graphics.PixelFormat.TRANSLUCENT,
         ).apply {
             gravity = Gravity.TOP or Gravity.START
             x = 24
-            y = 180
+            y = 140
         }
     }
 
     private fun replaceView(view: View, width: Int, height: Int) {
+        val oldParams = params
         rootView?.let {
             try {
                 windowManager.removeView(it)
@@ -118,85 +129,204 @@ class FloatingFileManagerService : Service() {
             }
         }
         val nextParams = baseParams(width, height)
+        if (oldParams != null) {
+            nextParams.x = oldParams.x
+            nextParams.y = oldParams.y
+        }
         params = nextParams
         rootView = view
         windowManager.addView(view, nextParams)
     }
 
     private fun showMinimizedBubble() {
-        val bubble = TextView(this).apply {
-            text = "Files"
+        val bubble = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            setPadding(dp(14), dp(10), dp(14), dp(10))
+            background = rounded(0xEE161616.toInt(), 18, 0, 0)
+            setOnClickListener { showFilePanel() }
+        }
+        bubble.addView(TextView(this).apply {
+            text = "文件"
             setTextColor(Color.WHITE)
             textSize = 13f
             typeface = Typeface.DEFAULT_BOLD
-            gravity = Gravity.CENTER
-            setPadding(18, 12, 18, 12)
-            setBackgroundColor(Color.rgb(26, 26, 26))
-            setOnClickListener { showFilePanel() }
-        }
+        })
         attachDrag(bubble)
-        replaceView(bubble, WindowManager.LayoutParams.WRAP_CONTENT, WindowManager.LayoutParams.WRAP_CONTENT)
+        replaceView(
+            bubble,
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.WRAP_CONTENT,
+        )
     }
 
     private fun showFilePanel() {
         previewing = false
-        val panel = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setBackgroundColor(Color.rgb(18, 18, 18))
-            setPadding(10, 10, 10, 10)
-        }
+        val panel = basePanel()
+        panel.addView(toolbar(currentDir.name.ifBlank { "内部存储" }))
+        panel.addView(quickRoots())
+        panel.addView(breadcrumb())
+        panel.addView(controlBar())
 
-        val header = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
+        val files = visibleFiles(currentDir)
+        val listContent = if (files.isEmpty()) {
+            emptyRow("没有文件，或当前目录无读取权限")
+        } else if (viewMode == ViewMode.GRID) {
+            gridContent(files)
+        } else {
+            listContent(files)
         }
-        attachDrag(header)
-
-        val title = TextView(this).apply {
-            text = currentDir.absolutePath
-            setTextColor(Color.WHITE)
-            textSize = 13f
-            maxLines = 2
-        }
-        header.addView(title, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-        header.addView(iconButton(android.R.drawable.ic_menu_revert) { goBackOrMinimize() })
-        header.addView(iconButton(android.R.drawable.ic_menu_close_clear_cancel) { stopSelf() })
-        panel.addView(header)
-
-        val list = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-        }
-        buildDirectoryRows(list)
         val scroll = ScrollView(this).apply {
-            addView(list)
+            isFillViewport = false
+            addView(listContent)
         }
         panel.addView(scroll, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
-        replaceView(panel, dp(330), dp(480))
+        panel.addView(statusBar(files))
+        replaceView(panel, panelWidth(), panelHeight())
     }
 
-    private fun buildDirectoryRows(list: LinearLayout) {
-        val files = currentDir.listFiles()
-            ?.filter { !it.isHidden || it.name.startsWith(".") }
-            ?.sortedWith(compareBy<File> { if (it.isDirectory) 0 else 1 }.thenBy { it.name.lowercase(Locale.ROOT) })
-            ?: emptyList()
-        if (currentDir.parentFile != null) {
-            list.addView(fileRow("..", "Parent directory") {
-                currentDir.parentFile?.let {
-                    currentDir = it
+    private fun basePanel(): LinearLayout {
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(10), dp(10), dp(10), dp(8))
+            background = rounded(0xF2131313.toInt(), 18, 1, 0xFF343434.toInt())
+        }
+    }
+
+    private fun toolbar(titleText: String): LinearLayout {
+        val toolbar = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(2), dp(2), dp(2), dp(8))
+        }
+        attachDrag(toolbar)
+
+        toolbar.addView(TextView(this).apply {
+            text = titleText
+            setTextColor(Color.WHITE)
+            textSize = 15f
+            typeface = Typeface.DEFAULT_BOLD
+            maxLines = 1
+        }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+
+        toolbar.addView(tinyButton("上级") { goParent() })
+        toolbar.addView(tinyButton("最小") { showMinimizedBubble() })
+        toolbar.addView(iconButton(android.R.drawable.ic_menu_close_clear_cancel) { stopSelf() })
+        return toolbar
+    }
+
+    private fun quickRoots(): HorizontalScrollView {
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(0, 0, 0, dp(8))
+        }
+        quickRootFiles().forEach { (label, file) ->
+            if (file.exists()) {
+                row.addView(chip(label, currentDir.absolutePath == file.absolutePath) {
+                    currentDir = file
                     showFilePanel()
+                })
+            }
+        }
+        return HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            addView(row)
+        }
+    }
+
+    private fun breadcrumb(): HorizontalScrollView {
+        val storage = Environment.getExternalStorageDirectory()
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(0, 0, 0, dp(8))
+        }
+        row.addView(chip("内部存储", currentDir.absolutePath == storage.absolutePath) {
+            currentDir = storage
+            showFilePanel()
+        })
+        val relative = currentDir.relativeToOrNull(storage)
+        var cursor = storage
+        if (relative != null && relative.path != ".") {
+            relative.path.split(File.separatorChar)
+                .filter { it.isNotBlank() }
+                .forEach { part ->
+                    row.addView(TextView(this).apply {
+                        text = "›"
+                        setTextColor(0xFF777777.toInt())
+                        textSize = 16f
+                        setPadding(dp(4), 0, dp(4), 0)
+                    })
+                    cursor = File(cursor, part)
+                    val target = cursor
+                    row.addView(chip(part, currentDir.absolutePath == target.absolutePath) {
+                        currentDir = target
+                        showFilePanel()
+                    })
                 }
+        }
+        return HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            addView(row)
+        }
+    }
+
+    private fun controlBar(): LinearLayout {
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(0, 0, 0, dp(8))
+            addView(chip(if (viewMode == ViewMode.LIST) "列表" else "网格", true) {
+                viewMode = if (viewMode == ViewMode.LIST) ViewMode.GRID else ViewMode.LIST
+                showFilePanel()
+            })
+            addView(chip(sortMode.label, false) {
+                sortMode = sortMode.next()
+                showFilePanel()
+            })
+            addView(chip(if (showHidden) "隐藏:开" else "隐藏:关", showHidden) {
+                showHidden = !showHidden
+                showFilePanel()
+            })
+            addView(chip("刷新", false) { showFilePanel() })
+        }
+    }
+
+    private fun listContent(files: List<File>): LinearLayout {
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            currentDir.parentFile?.let { parent ->
+                addView(fileRow("..", "返回上级目录", true) {
+                    currentDir = parent
+                    showFilePanel()
+                })
+            }
+            files.forEach { file ->
+                addView(fileRow(file.name, fileMeta(file), file.isDirectory) {
+                    if (file.isDirectory) {
+                        currentDir = file
+                        showFilePanel()
+                    } else {
+                        openPreview(file)
+                    }
+                })
+            }
+        }
+    }
+
+    private fun gridContent(files: List<File>): LinearLayout {
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+        }
+        val cells = mutableListOf<View>()
+        currentDir.parentFile?.let { parent ->
+            cells.add(gridCell("..", "上级", true) {
+                currentDir = parent
+                showFilePanel()
             })
         }
-        if (files.isEmpty()) {
-            list.addView(emptyRow("Empty or no permission"))
-        }
-        for (file in files) {
-            val meta = if (file.isDirectory) {
-                "Folder"
-            } else {
-                "${formatSize(file.length())}  ${formatDate(file.lastModified())}"
-            }
-            list.addView(fileRow(file.name, meta) {
+        files.forEach { file ->
+            cells.add(gridCell(file.name, fileMeta(file), file.isDirectory) {
                 if (file.isDirectory) {
                     currentDir = file
                     showFilePanel()
@@ -205,35 +335,178 @@ class FloatingFileManagerService : Service() {
                 }
             })
         }
+        cells.chunked(2).forEach { pair ->
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+            }
+            pair.forEach { cell ->
+                row.addView(cell, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                    setMargins(dp(3), dp(3), dp(3), dp(3))
+                })
+            }
+            if (pair.size == 1) {
+                row.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f))
+            }
+            container.addView(row)
+        }
+        return container
     }
 
-    private fun fileRow(name: String, meta: String, onClick: () -> Unit): View {
+    private fun fileRow(name: String, meta: String, directory: Boolean, onClick: () -> Unit): View {
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(10), dp(8), dp(10), dp(8))
+            background = rounded(0xFF202020.toInt(), 12, 1, 0xFF2F2F2F.toInt())
+            setOnClickListener { onClick() }
+
+            addView(typeIcon(directory, name), LinearLayout.LayoutParams(dp(34), dp(34)))
+            addView(LinearLayout(context).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(dp(10), 0, 0, 0)
+                addView(TextView(context).apply {
+                    text = name
+                    setTextColor(Color.WHITE)
+                    textSize = 14f
+                    maxLines = 1
+                })
+                addView(TextView(context).apply {
+                    text = meta
+                    setTextColor(0xFFAAAAAA.toInt())
+                    textSize = 11f
+                    maxLines = 1
+                })
+            }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        }.apply {
+            val lp = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            )
+            lp.setMargins(0, 0, 0, dp(6))
+            layoutParams = lp
+        }
+    }
+
+    private fun gridCell(name: String, meta: String, directory: Boolean, onClick: () -> Unit): View {
         return LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(8, 10, 8, 10)
-            setBackgroundColor(Color.rgb(24, 24, 24))
+            gravity = Gravity.CENTER_HORIZONTAL
+            setPadding(dp(8), dp(10), dp(8), dp(8))
+            background = rounded(0xFF202020.toInt(), 14, 1, 0xFF303030.toInt())
             setOnClickListener { onClick() }
+            addView(typeIcon(directory, name), LinearLayout.LayoutParams(dp(42), dp(42)))
             addView(TextView(context).apply {
                 text = name
                 setTextColor(Color.WHITE)
-                textSize = 14f
-                maxLines = 1
+                textSize = 12f
+                maxLines = 2
+                gravity = Gravity.CENTER
             })
             addView(TextView(context).apply {
                 text = meta
-                setTextColor(Color.rgb(170, 170, 170))
-                textSize = 11f
+                setTextColor(0xFF9A9A9A.toInt())
+                textSize = 10f
                 maxLines = 1
+                gravity = Gravity.CENTER
             })
         }
     }
 
-    private fun emptyRow(message: String): View {
+    private fun typeIcon(directory: Boolean, name: String): TextView {
+        val ext = File(name).extension.lowercase(Locale.ROOT)
+        val label = when {
+            directory -> "DIR"
+            ext in imageExtensions -> "IMG"
+            ext in videoExtensions -> "VID"
+            ext in audioExtensions -> "AUD"
+            ext in textExtensions -> "TXT"
+            ext == "pdf" -> "PDF"
+            else -> "FILE"
+        }
+        val color = when {
+            directory -> 0xFF315A9C.toInt()
+            ext in imageExtensions -> 0xFF2C7A55.toInt()
+            ext in videoExtensions -> 0xFF7C3B82.toInt()
+            ext in audioExtensions -> 0xFF8A5B2E.toInt()
+            ext in textExtensions -> 0xFF3D6477.toInt()
+            else -> 0xFF555555.toInt()
+        }
         return TextView(this).apply {
-            text = message
-            setTextColor(Color.rgb(180, 180, 180))
+            text = label
             gravity = Gravity.CENTER
-            setPadding(12, 36, 12, 36)
+            setTextColor(Color.WHITE)
+            textSize = 9f
+            typeface = Typeface.DEFAULT_BOLD
+            background = rounded(color, 10, 0, 0)
+        }
+    }
+
+    private fun emptyRow(message: String): View {
+        return FrameLayout(this).apply {
+            setPadding(dp(8), dp(28), dp(8), dp(28))
+            addView(TextView(context).apply {
+                text = message
+                setTextColor(0xFFB8B8B8.toInt())
+                gravity = Gravity.CENTER
+                textSize = 13f
+            }, FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                Gravity.CENTER,
+            ))
+        }
+    }
+
+    private fun statusBar(files: List<File>): TextView {
+        val folderCount = files.count { it.isDirectory }
+        val fileCount = files.size - folderCount
+        return TextView(this).apply {
+            text = "$folderCount 个文件夹 · $fileCount 个文件 · ${currentDir.absolutePath}"
+            setTextColor(0xFF8F8F8F.toInt())
+            textSize = 10f
+            maxLines = 1
+            setPadding(dp(4), dp(6), dp(4), 0)
+        }
+    }
+
+    private fun chip(label: String, selected: Boolean, action: () -> Unit): TextView {
+        return TextView(this).apply {
+            text = label
+            setTextColor(Color.WHITE)
+            textSize = 12f
+            gravity = Gravity.CENTER
+            setPadding(dp(10), dp(6), dp(10), dp(6))
+            background = rounded(
+                if (selected) 0xFF2F5F9F.toInt() else 0xFF242424.toInt(),
+                16,
+                1,
+                if (selected) 0xFF6EA7FF.toInt() else 0xFF3A3A3A.toInt(),
+            )
+            setOnClickListener { action() }
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            ).apply {
+                setMargins(0, 0, dp(6), 0)
+            }
+        }
+    }
+
+    private fun tinyButton(label: String, action: () -> Unit): TextView {
+        return TextView(this).apply {
+            text = label
+            setTextColor(Color.WHITE)
+            textSize = 11f
+            gravity = Gravity.CENTER
+            setPadding(dp(8), dp(5), dp(8), dp(5))
+            background = rounded(0xFF252525.toInt(), 12, 1, 0xFF3A3A3A.toInt())
+            setOnClickListener { action() }
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            ).apply {
+                setMargins(dp(5), 0, 0, 0)
+            }
         }
     }
 
@@ -241,77 +514,88 @@ class FloatingFileManagerService : Service() {
         return ImageButton(this).apply {
             setImageResource(icon)
             setColorFilter(Color.WHITE)
-            setBackgroundColor(Color.TRANSPARENT)
+            background = rounded(0x00252525, 12, 0, 0)
+            setPadding(dp(6), dp(6), dp(6), dp(6))
             setOnClickListener { action() }
         }
     }
 
     private fun openPreview(file: File) {
         previewing = true
-        val panel = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setBackgroundColor(Color.rgb(14, 14, 14))
-            setPadding(10, 10, 10, 10)
-        }
+        val panel = basePanel()
         val header = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(2), dp(2), dp(2), dp(8))
         }
         attachDrag(header)
         header.addView(TextView(this).apply {
             text = file.name
             setTextColor(Color.WHITE)
-            textSize = 13f
+            textSize = 14f
+            typeface = Typeface.DEFAULT_BOLD
             maxLines = 1
         }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-        header.addView(iconButton(android.R.drawable.ic_media_previous) { showFilePanel() })
-        header.addView(iconButton(android.R.drawable.ic_menu_share) { openExternal(file) })
+        header.addView(tinyButton("返回") { showFilePanel() })
+        header.addView(tinyButton("打开") { openExternal(file) })
+        header.addView(tinyButton("分享") { shareFile(file) })
         header.addView(iconButton(android.R.drawable.ic_menu_close_clear_cancel) { stopSelf() })
         panel.addView(header)
+
+        panel.addView(TextView(this).apply {
+            text = "${formatSize(file.length())} · ${formatDate(file.lastModified())} · ${file.absolutePath}"
+            setTextColor(0xFFA8A8A8.toInt())
+            textSize = 11f
+            maxLines = 2
+            setPadding(dp(2), 0, dp(2), dp(8))
+        })
 
         val ext = file.extension.lowercase(Locale.ROOT)
         val content = when {
             ext in textExtensions -> textPreview(file)
             ext in imageExtensions -> imagePreview(file)
             ext in videoExtensions || ext in audioExtensions -> mediaPreview(file)
-            else -> emptyRow("Preview not supported. Tap share to open with another app.")
+            else -> emptyRow("此格式不支持悬浮预览，可点击“打开”调用外部应用。")
         }
         panel.addView(content, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
-        replaceView(panel, dp(340), dp(500))
+        replaceView(panel, panelWidth(), panelHeight())
     }
 
     private fun textPreview(file: File): View {
         val text = try {
             file.inputStream().bufferedReader().use { it.readText().take(300_000) }
         } catch (e: Exception) {
-            "Failed to read file: ${e.message}"
+            "读取失败: ${e.message}"
         }
         return ScrollView(this).apply {
+            background = rounded(Color.BLACK, 12, 1, 0xFF303030.toInt())
             addView(TextView(context).apply {
                 this.text = text
                 setTextColor(Color.WHITE)
                 textSize = 12f
                 typeface = Typeface.MONOSPACE
-                setPadding(8, 8, 8, 8)
+                setPadding(dp(10), dp(10), dp(10), dp(10))
             })
         }
     }
 
     private fun imagePreview(file: File): View {
         return ImageView(this).apply {
-            setBackgroundColor(Color.BLACK)
+            background = rounded(Color.BLACK, 12, 1, 0xFF303030.toInt())
             scaleType = ImageView.ScaleType.FIT_CENTER
+            adjustViewBounds = true
             setImageURI(Uri.fromFile(file))
         }
     }
 
     private fun mediaPreview(file: File): View {
         return VideoView(this).apply {
+            background = rounded(Color.BLACK, 12, 1, 0xFF303030.toInt())
             setVideoURI(Uri.fromFile(file))
             setMediaController(MediaController(context).also { it.setAnchorView(this) })
             setOnPreparedListener { start() }
             setOnErrorListener { _, _, _ ->
-                Toast.makeText(context, "Cannot play this file in floating window", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, "悬浮窗无法播放此文件，请用外部应用打开", Toast.LENGTH_SHORT).show()
                 true
             }
         }
@@ -324,18 +608,42 @@ class FloatingFileManagerService : Service() {
                 setDataAndType(uri, mimeFor(file))
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
             }
-            startActivity(intent)
+            startActivity(Intent.createChooser(intent, "打开文件").apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            })
         } catch (e: Exception) {
-            Toast.makeText(this, "No app can open this file", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "没有可打开此文件的应用", Toast.LENGTH_SHORT).show()
         }
     }
 
-    private fun goBackOrMinimize() {
+    private fun shareFile(file: File) {
+        try {
+            val uri = FileProvider.getUriForFile(this, "${packageName}.fileprovider", file)
+            val intent = Intent(Intent.ACTION_SEND).apply {
+                type = mimeFor(file)
+                putExtra(Intent.EXTRA_STREAM, uri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            startActivity(Intent.createChooser(intent, "分享文件").apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            })
+        } catch (e: Exception) {
+            Toast.makeText(this, "无法分享此文件", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun goParent() {
         if (previewing) {
             showFilePanel()
             return
         }
-        showMinimizedBubble()
+        val parent = currentDir.parentFile
+        if (parent != null && parent.canRead()) {
+            currentDir = parent
+            showFilePanel()
+        } else {
+            showMinimizedBubble()
+        }
     }
 
     private fun attachDrag(view: View) {
@@ -360,7 +668,7 @@ class FloatingFileManagerService : Service() {
                     true
                 }
                 MotionEvent.ACTION_UP -> {
-                    val moved = kotlin.math.abs(event.rawX - downX) + kotlin.math.abs(event.rawY - downY)
+                    val moved = abs(event.rawX - downX) + abs(event.rawY - downY)
                     if (moved < 12f) {
                         view.performClick()
                     }
@@ -369,6 +677,45 @@ class FloatingFileManagerService : Service() {
                 else -> true
             }
         }
+    }
+
+    private fun visibleFiles(dir: File): List<File> {
+        val files = dir.listFiles()
+            ?.filter { showHidden || !it.isHidden }
+            ?: emptyList()
+        val comparator = when (sortMode) {
+            SortMode.NAME -> compareBy<File> { if (it.isDirectory) 0 else 1 }
+                .thenBy { it.name.lowercase(Locale.ROOT) }
+            SortMode.DATE -> compareByDescending<File> { it.lastModified() }
+                .thenBy { it.name.lowercase(Locale.ROOT) }
+            SortMode.SIZE -> compareBy<File> { if (it.isDirectory) 0 else 1 }
+                .thenByDescending { if (it.isDirectory) 0L else it.length() }
+            SortMode.TYPE -> compareBy<File> { if (it.isDirectory) "0" else it.extension.lowercase(Locale.ROOT) }
+                .thenBy { it.name.lowercase(Locale.ROOT) }
+        }
+        return files.sortedWith(comparator)
+    }
+
+    private fun fileMeta(file: File): String {
+        return if (file.isDirectory) {
+            val count = file.listFiles()?.size
+            if (count == null) "文件夹 · 无权限" else "文件夹 · $count 项"
+        } else {
+            "${formatSize(file.length())} · ${formatDate(file.lastModified())}"
+        }
+    }
+
+    private fun quickRootFiles(): List<Pair<String, File>> {
+        val root = Environment.getExternalStorageDirectory()
+        return listOf(
+            "内部" to root,
+            "下载" to Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
+            "图片" to Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES),
+            "DCIM" to Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM),
+            "文档" to Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS),
+            "视频" to Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES),
+            "音乐" to Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC),
+        )
     }
 
     private fun mimeFor(file: File): String {
@@ -381,6 +728,26 @@ class FloatingFileManagerService : Service() {
             ext == "pdf" -> "application/pdf"
             else -> "*/*"
         }
+    }
+
+    private fun rounded(color: Int, radius: Int, strokeWidth: Int, strokeColor: Int): GradientDrawable {
+        return GradientDrawable().apply {
+            setColor(color)
+            cornerRadius = dp(radius).toFloat()
+            if (strokeWidth > 0) {
+                setStroke(dp(strokeWidth), strokeColor)
+            }
+        }
+    }
+
+    private fun panelWidth(): Int {
+        val width = resources.displayMetrics.widthPixels
+        return min(max(dp(350), width - dp(28)), dp(520))
+    }
+
+    private fun panelHeight(): Int {
+        val height = resources.displayMetrics.heightPixels
+        return min(max(dp(500), (height * 0.72f).toInt()), height - dp(80))
     }
 
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
@@ -398,15 +765,34 @@ class FloatingFileManagerService : Service() {
         return SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.ROOT).format(Date(time))
     }
 
+    private enum class ViewMode {
+        LIST,
+        GRID,
+    }
+
+    private enum class SortMode(val label: String) {
+        NAME("按名称"),
+        DATE("按时间"),
+        SIZE("按大小"),
+        TYPE("按类型");
+
+        fun next(): SortMode {
+            val values = SortMode.values()
+            return values[(ordinal + 1) % values.size]
+        }
+    }
+
     companion object {
         private const val NOTIFICATION_ID = 7071
+
         @Volatile
         var running: Boolean = false
             private set
+
         private val textExtensions = setOf(
             "txt", "md", "json", "xml", "html", "htm", "css", "js", "ts",
             "dart", "kt", "java", "py", "sh", "log", "yaml", "yml", "toml",
-            "ini", "conf", "csv",
+            "ini", "conf", "csv", "properties", "gradle",
         )
         private val imageExtensions = setOf("jpg", "jpeg", "png", "webp", "gif", "bmp")
         private val videoExtensions = setOf("mp4", "mkv", "webm", "3gp", "mov", "avi")
