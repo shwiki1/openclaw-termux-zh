@@ -13,9 +13,9 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.Typeface
-import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Build
@@ -1202,20 +1202,80 @@ class FloatingFileManagerService : Service() {
     }
 
     private fun imagePreview(file: File): View {
-        return FrameLayout(this).apply {
-            addView(
-                android.widget.ImageView(context).apply {
-                    scaleType = android.widget.ImageView.ScaleType.FIT_CENTER
-                    adjustViewBounds = true
-                    setImageURI(Uri.fromFile(file))
-                },
-                FrameLayout.LayoutParams(
-                    FrameLayout.LayoutParams.MATCH_PARENT,
-                    FrameLayout.LayoutParams.MATCH_PARENT,
-                    Gravity.CENTER,
-                ),
-            )
+        val info = readImageInfo(file)
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(14), dp(14), dp(14), dp(14))
+            setBackgroundColor(Color.BLACK)
         }
+        val hero = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = rounded(CARD_SURFACE_COLOR, 18, 1, CARD_BORDER_COLOR)
+            setPadding(dp(14), dp(14), dp(14), dp(14))
+        }
+        hero.addView(TextView(this).apply {
+            text = file.name
+            setTextColor(Color.WHITE)
+            textSize = 17f
+            typeface = Typeface.DEFAULT_BOLD
+            maxLines = 2
+        })
+        hero.addView(TextView(this).apply {
+            text = buildString {
+                append("${info.width} × ${info.height}")
+                info.mimeType?.takeIf { it.isNotBlank() }?.let {
+                    append(" · ")
+                    append(it.substringAfter('/').uppercase(Locale.ROOT))
+                }
+                append(" · ")
+                append(formatSize(file.length()))
+            }
+            setTextColor(TEXT_SECONDARY_COLOR)
+            textSize = 12f
+            setPadding(0, dp(6), 0, 0)
+            maxLines = 2
+        })
+        container.addView(hero)
+
+        val actionRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(0, dp(12), 0, dp(10))
+        }
+        actionRow.addView(chip("图片信息", false) { showImageInfoDialog(file) })
+        if (canTransformImage(file)) {
+            actionRow.addView(chip("旋转 90°", false) { rotateImagePrompt(file) })
+            actionRow.addView(chip("水平镜像", false) { mirrorImagePrompt(file) })
+            actionRow.addView(chip("导出 JPG", false) { exportImagePrompt(file, ImageExportFormat.JPG) })
+            actionRow.addView(chip("导出 WEBP", false) { exportImagePrompt(file, ImageExportFormat.WEBP) })
+        }
+        container.addView(HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            addView(actionRow)
+        })
+
+        container.addView(
+            FrameLayout(this).apply {
+                background = rounded(0xFF10161F.toInt(), 18, 1, 0xFF263243.toInt())
+                addView(
+                    ImageView(context).apply {
+                        scaleType = ImageView.ScaleType.FIT_CENTER
+                        adjustViewBounds = true
+                        setImageURI(Uri.fromFile(file))
+                    },
+                    FrameLayout.LayoutParams(
+                        FrameLayout.LayoutParams.MATCH_PARENT,
+                        FrameLayout.LayoutParams.MATCH_PARENT,
+                        Gravity.CENTER,
+                    ),
+                )
+            },
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                0,
+                1f,
+            ),
+        )
+        return container
     }
 
     private fun archivePreview(file: File): View {
@@ -1880,6 +1940,160 @@ class FloatingFileManagerService : Service() {
         dialog.show()
     }
 
+    private fun showImageInfoDialog(file: File) {
+        val info = readImageInfo(file)
+        val text = buildString {
+            appendLine("文件: ${file.name}")
+            appendLine("分辨率: ${info.width} × ${info.height}")
+            info.mimeType?.takeIf { it.isNotBlank() }?.let { appendLine("类型: $it") }
+            appendLine("大小: ${formatSize(file.length())}")
+            appendLine("修改时间: ${formatDate(file.lastModified())}")
+            append("路径: ${file.absolutePath}")
+        }
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("图片信息")
+            .setMessage(text)
+            .setPositiveButton("确定", null)
+            .create()
+        dialog.window?.setType(overlayType())
+        dialog.show()
+    }
+
+    private fun rotateImagePrompt(file: File) {
+        val defaultName = "${file.nameWithoutExtension.ifBlank { file.name }}-rotated.${file.extension.ifBlank { "png" }}"
+        showTextInputDialog("旋转图片", "输出文件名", defaultName) { input ->
+            val suffix = file.extension.ifBlank { "png" }
+            val normalized = if (input.contains('.')) input else "$input.$suffix"
+            val target = uniqueDestination(activeTab().currentDir, normalized)
+            transformImageFile(file, target, "正在旋转图片...") { source ->
+                Bitmap.createBitmap(
+                    source,
+                    0,
+                    0,
+                    source.width,
+                    source.height,
+                    Matrix().apply { postRotate(90f) },
+                    true,
+                )
+            }
+        }
+    }
+
+    private fun mirrorImagePrompt(file: File) {
+        val defaultName = "${file.nameWithoutExtension.ifBlank { file.name }}-mirror.${file.extension.ifBlank { "png" }}"
+        showTextInputDialog("镜像图片", "输出文件名", defaultName) { input ->
+            val suffix = file.extension.ifBlank { "png" }
+            val normalized = if (input.contains('.')) input else "$input.$suffix"
+            val target = uniqueDestination(activeTab().currentDir, normalized)
+            transformImageFile(file, target, "正在镜像图片...") { source ->
+                Bitmap.createBitmap(
+                    source,
+                    0,
+                    0,
+                    source.width,
+                    source.height,
+                    Matrix().apply { preScale(-1f, 1f) },
+                    true,
+                )
+            }
+        }
+    }
+
+    private fun exportImagePrompt(file: File, format: ImageExportFormat) {
+        val defaultName = "${file.nameWithoutExtension.ifBlank { file.name }}.${format.extension}"
+        showTextInputDialog("导出 ${format.label}", "输出文件名", defaultName) { input ->
+            val normalized = if (input.lowercase(Locale.ROOT).endsWith(".${format.extension}")) {
+                input
+            } else {
+                "$input.${format.extension}"
+            }
+            val target = uniqueDestination(activeTab().currentDir, normalized)
+            exportImageFile(file, target, format)
+        }
+    }
+
+    private fun transformImageFile(
+        source: File,
+        target: File,
+        progressText: String,
+        transformer: (Bitmap) -> Bitmap,
+    ) {
+        showLoading(progressText)
+        worker.execute {
+            val result = runCatching {
+                val input = BitmapFactory.decodeFile(source.absolutePath)
+                    ?: error("无法读取图片")
+                val output = transformer(input)
+                saveBitmapToFile(output, target)
+                if (output !== input) {
+                    output.recycle()
+                }
+                input.recycle()
+            }
+            mainHandler.post {
+                hideOperationProgress()
+                if (result.isSuccess) {
+                    renderDirectoryState(forceReload = true)
+                    Toast.makeText(this, "已生成 ${target.name}", Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(
+                        this,
+                        "图片处理失败: ${result.exceptionOrNull()?.message}",
+                        Toast.LENGTH_LONG,
+                    ).show()
+                }
+            }
+        }
+    }
+
+    private fun exportImageFile(source: File, target: File, format: ImageExportFormat) {
+        showLoading("正在导出图片...")
+        worker.execute {
+            val result = runCatching {
+                val input = BitmapFactory.decodeFile(source.absolutePath)
+                    ?: error("无法读取图片")
+                saveBitmapToFile(input, target, format)
+                input.recycle()
+            }
+            mainHandler.post {
+                hideOperationProgress()
+                if (result.isSuccess) {
+                    renderDirectoryState(forceReload = true)
+                    Toast.makeText(this, "已导出 ${target.name}", Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(
+                        this,
+                        "导出失败: ${result.exceptionOrNull()?.message}",
+                        Toast.LENGTH_LONG,
+                    ).show()
+                }
+            }
+        }
+    }
+
+    private fun saveBitmapToFile(bitmap: Bitmap, target: File, format: ImageExportFormat? = null) {
+        val exportFormat = format ?: ImageExportFormat.fromFile(target)
+        target.parentFile?.mkdirs()
+        FileOutputStream(target).use { output ->
+            val ok = bitmap.compress(exportFormat.compressFormat(), exportFormat.quality, output)
+            if (!ok) {
+                throw IllegalStateException("Bitmap 压缩失败")
+            }
+        }
+    }
+
+    private fun readImageInfo(file: File): ImageInfo {
+        val options = BitmapFactory.Options().apply {
+            inJustDecodeBounds = true
+        }
+        BitmapFactory.decodeFile(file.absolutePath, options)
+        return ImageInfo(
+            width = options.outWidth.coerceAtLeast(0),
+            height = options.outHeight.coerceAtLeast(0),
+            mimeType = options.outMimeType,
+        )
+    }
+
     private fun convertAudioToMp3Prompt(file: File) {
         val defaultName = "${file.nameWithoutExtension.ifBlank { file.name }}.mp3"
         showTextInputDialog("转为 MP3", "输出文件名", defaultName) { input ->
@@ -1920,98 +2134,179 @@ class FloatingFileManagerService : Service() {
         }
     }
 
-    private fun showItemMenu(anchor: View, entry: FileEntry) {
+    private fun showItemMenu(entry: FileEntry) {
         val file = entry.file ?: return
-        PopupMenu(this, anchor).apply {
-            if (entry.isDirectory) {
-                menu.add(0, 1, 0, "新标签打开")
-            } else {
-                menu.add(0, 2, 1, "预览")
-            }
-            menu.add(0, 3, 2, "重命名")
-            menu.add(0, 4, 3, "复制")
-            menu.add(0, 5, 4, "移动")
-            menu.add(0, 6, 5, "删除")
-            menu.add(0, 7, 6, "多选")
-            menu.add(0, 9, 7, "压缩为 ZIP")
-            if (!entry.isDirectory && isArchiveFile(file)) {
-                menu.add(0, 8, 8, "解压到当前目录")
-            }
-            if (!entry.isDirectory && isAudioFile(file)) {
-                menu.add(0, 10, 9, "转为 MP3")
-                menu.add(0, 12, 10, "媒体信息")
-            } else if (!entry.isDirectory && isVideoFile(file)) {
-                menu.add(0, 11, 9, "提取音频")
-                menu.add(0, 12, 10, "媒体信息")
-            }
-            setOnMenuItemClickListener { item ->
-                when (item.itemId) {
-                    1 -> {
-                        if (tabs.size >= MAX_TABS) {
-                            Toast.makeText(this@FloatingFileManagerService, "最多同时打开 $MAX_TABS 个标签页", Toast.LENGTH_SHORT).show()
-                        } else {
-                            val next = createTab(file)
-                            activeTabId = next.id
-                            clearSelection()
-                            bindPanelScaffold()
-                            renderDirectoryState(forceReload = true)
-                        }
-                        true
-                    }
-                    2 -> {
-                        openPreview(file)
-                        true
-                    }
-                    3 -> {
-                        renameFile(file)
-                        true
-                    }
-                    4 -> {
-                        captureClipboard(move = false, files = listOf(file))
-                        true
-                    }
-                    5 -> {
-                        captureClipboard(move = true, files = listOf(file))
-                        true
-                    }
-                    6 -> {
-                        selectedPaths.clear()
-                        selectedPaths.add(file.absolutePath)
-                        selectionMode = true
-                        deleteSelected()
-                        true
-                    }
-                    7 -> {
-                        selectionMode = true
-                        selectedPaths.add(file.absolutePath)
-                        bindPanelScaffold()
-                        fileAdapter?.notifyDataSetChanged()
-                        true
-                    }
-                    8 -> {
-                        extractArchiveToCurrentDir(file)
-                        true
-                    }
-                    9 -> {
-                        compressFilesPrompt(listOf(file))
-                        true
-                    }
-                    10 -> {
-                        convertAudioToMp3Prompt(file)
-                        true
-                    }
-                    11 -> {
-                        extractAudioFromVideoPrompt(file)
-                        true
-                    }
-                    12 -> {
-                        showMediaInfoDialog(file)
-                        true
-                    }
-                    else -> false
+        val actions = mutableListOf<ActionSheetItem>()
+        if (entry.isDirectory) {
+            actions += ActionSheetItem("新标签打开", "在新标签页浏览这个文件夹", ActionTone.ACCENT) {
+                if (tabs.size >= MAX_TABS) {
+                    Toast.makeText(this, "最多同时打开 $MAX_TABS 个标签页", Toast.LENGTH_SHORT).show()
+                } else {
+                    val next = createTab(file)
+                    activeTabId = next.id
+                    clearSelection()
+                    bindPanelScaffold()
+                    renderDirectoryState(forceReload = true)
                 }
             }
-            show()
+        } else {
+            actions += ActionSheetItem("预览", "在悬浮窗里打开预览", ActionTone.ACCENT) {
+                openPreview(file)
+            }
+        }
+        actions += ActionSheetItem("重命名", "修改文件或目录名称") { renameFile(file) }
+        actions += ActionSheetItem("复制", "加入复制剪贴板") {
+            captureClipboard(move = false, files = listOf(file))
+        }
+        actions += ActionSheetItem("移动", "加入移动剪贴板") {
+            captureClipboard(move = true, files = listOf(file))
+        }
+        actions += ActionSheetItem("多选", "将它加入当前选择集") {
+            selectionMode = true
+            selectedPaths.add(file.absolutePath)
+            bindPanelScaffold()
+            fileAdapter?.notifyDataSetChanged()
+        }
+        actions += ActionSheetItem("压缩为 ZIP", "生成一个新的压缩包") {
+            compressFilesPrompt(listOf(file))
+        }
+        if (!entry.isDirectory && isArchiveFile(file)) {
+            actions += ActionSheetItem("解压到当前目录", "在这里直接解压") {
+                extractArchiveToCurrentDir(file)
+            }
+        }
+        if (!entry.isDirectory && isImageFile(file)) {
+            actions += ActionSheetItem("图片信息", "查看分辨率和格式") { showImageInfoDialog(file) }
+            if (canTransformImage(file)) {
+                actions += ActionSheetItem("旋转 90°", "输出一张旋转后的新图片") { rotateImagePrompt(file) }
+                actions += ActionSheetItem("水平镜像", "输出一张镜像后的新图片") { mirrorImagePrompt(file) }
+                actions += ActionSheetItem("导出 JPG", "压缩导出为 JPG") {
+                    exportImagePrompt(file, ImageExportFormat.JPG)
+                }
+                actions += ActionSheetItem("导出 WEBP", "导出为 WEBP") {
+                    exportImagePrompt(file, ImageExportFormat.WEBP)
+                }
+            }
+        }
+        if (!entry.isDirectory && isAudioFile(file)) {
+            actions += ActionSheetItem("转为 MP3", "调用 FFmpeg 转换为 MP3") {
+                convertAudioToMp3Prompt(file)
+            }
+            actions += ActionSheetItem("媒体信息", "查看音频元数据") { showMediaInfoDialog(file) }
+        } else if (!entry.isDirectory && isVideoFile(file)) {
+            actions += ActionSheetItem("提取音频", "从视频中提取音轨") {
+                extractAudioFromVideoPrompt(file)
+            }
+            actions += ActionSheetItem("媒体信息", "查看视频元数据") { showMediaInfoDialog(file) }
+        }
+        actions += ActionSheetItem("删除", "删除此项目", ActionTone.DANGER) {
+            selectedPaths.clear()
+            selectedPaths.add(file.absolutePath)
+            selectionMode = true
+            deleteSelected()
+        }
+        showActionSheet(file.name, entry.meta, actions)
+    }
+
+    private fun showActionSheet(title: String, subtitle: String?, actions: List<ActionSheetItem>) {
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(16), dp(16), dp(16), dp(12))
+            background = rounded(PANEL_SURFACE_COLOR, 22, 1, PANEL_BORDER_COLOR)
+        }
+        root.addView(TextView(this).apply {
+            text = title
+            setTextColor(Color.WHITE)
+            textSize = 17f
+            typeface = Typeface.DEFAULT_BOLD
+            maxLines = 2
+        })
+        subtitle?.takeIf { it.isNotBlank() }?.let { meta ->
+            root.addView(TextView(this).apply {
+                text = meta
+                setTextColor(TEXT_SECONDARY_COLOR)
+                textSize = 12f
+                setPadding(0, dp(6), 0, 0)
+                maxLines = 2
+            })
+        }
+
+        val actionList = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+        }
+        root.addView(
+            ScrollView(this).apply {
+                isVerticalScrollBarEnabled = false
+                addView(actionList)
+            },
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                min(dp(360), panelHeight() / 2),
+            ).apply {
+                topMargin = dp(12)
+            },
+        )
+
+        val dialog = AlertDialog.Builder(this)
+            .setView(root)
+            .create()
+        dialog.window?.setType(overlayType())
+        dialog.window?.setBackgroundDrawable(GradientDrawable().apply { setColor(Color.TRANSPARENT) })
+
+        actions.forEachIndexed { index, item ->
+            actionList.addView(actionCard(item) {
+                dialog.dismiss()
+                item.action()
+            })
+            if (index != actions.lastIndex) {
+                actionList.addView(View(this).apply {
+                    setBackgroundColor(0x142C3647)
+                }, LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    dp(1),
+                ).apply {
+                    topMargin = dp(6)
+                    bottomMargin = dp(6)
+                })
+            }
+        }
+        actionList.addView(tinyButton("关闭") { dialog.dismiss() }.apply {
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            ).apply {
+                topMargin = dp(10)
+            }
+        })
+        dialog.show()
+    }
+
+    private fun actionCard(item: ActionSheetItem, onClick: () -> Unit): View {
+        val (surface, border, titleColor) = when (item.tone) {
+            ActionTone.ACCENT -> Triple(0xFF13253A.toInt(), 0xFF3D6FA4.toInt(), 0xFFD7EBFF.toInt())
+            ActionTone.DANGER -> Triple(0xFF31181A.toInt(), 0xFF8F3E46.toInt(), 0xFFFFD8DC.toInt())
+            ActionTone.NEUTRAL -> Triple(0xFF171D26.toInt(), 0xFF2B3442.toInt(), Color.WHITE)
+        }
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = rounded(surface, 16, 1, border)
+            setPadding(dp(12), dp(12), dp(12), dp(12))
+            setOnClickListener { onClick() }
+            addView(TextView(context).apply {
+                text = item.title
+                setTextColor(titleColor)
+                textSize = 14f
+                typeface = Typeface.DEFAULT_BOLD
+            })
+            item.subtitle?.takeIf { it.isNotBlank() }?.let { desc ->
+                addView(TextView(context).apply {
+                    text = desc
+                    setTextColor(TEXT_MUTED_COLOR)
+                    textSize = 11f
+                    setPadding(0, dp(4), 0, 0)
+                    maxLines = 2
+                })
+            }
         }
     }
 
@@ -2136,6 +2431,14 @@ class FloatingFileManagerService : Service() {
         return file.extension.lowercase(Locale.ROOT) in textExtensions
     }
 
+    private fun isImageFile(file: File): Boolean {
+        return file.extension.lowercase(Locale.ROOT) in imageExtensions
+    }
+
+    private fun canTransformImage(file: File): Boolean {
+        return file.extension.lowercase(Locale.ROOT) in editableImageExtensions
+    }
+
     private fun isAudioFile(file: File): Boolean {
         return file.extension.lowercase(Locale.ROOT) in audioExtensions
     }
@@ -2160,12 +2463,12 @@ class FloatingFileManagerService : Service() {
             setTextColor(Color.WHITE)
             textSize = 12f
             gravity = Gravity.CENTER
-            setPadding(dp(10), dp(6), dp(10), dp(6))
+            setPadding(dp(12), dp(7), dp(12), dp(7))
             background = rounded(
-                if (selected) 0xFF2F5F9F.toInt() else 0xFF242424.toInt(),
+                if (selected) CHIP_ACTIVE_COLOR else CHIP_SURFACE_COLOR,
                 16,
                 1,
-                if (selected) 0xFF6EA7FF.toInt() else 0xFF3A3A3A.toInt(),
+                if (selected) CHIP_ACTIVE_BORDER_COLOR else CHIP_BORDER_COLOR,
             )
             setOnClickListener { action() }
             layoutParams = LinearLayout.LayoutParams(
@@ -2183,8 +2486,8 @@ class FloatingFileManagerService : Service() {
             setTextColor(Color.WHITE)
             textSize = 11f
             gravity = Gravity.CENTER
-            setPadding(dp(8), dp(5), dp(8), dp(5))
-            background = rounded(0xFF252525.toInt(), 12, 1, 0xFF3A3A3A.toInt())
+            setPadding(dp(10), dp(6), dp(10), dp(6))
+            background = rounded(TOOLBAR_BUTTON_COLOR, 14, 1, TOOLBAR_BUTTON_BORDER_COLOR)
             setOnClickListener { action() }
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT,
@@ -2199,40 +2502,9 @@ class FloatingFileManagerService : Service() {
         return ImageButton(this).apply {
             setImageResource(icon)
             setColorFilter(Color.WHITE)
-            background = rounded(0x00252525, 12, 0, 0)
-            setPadding(dp(6), dp(6), dp(6), dp(6))
+            background = rounded(TOOLBAR_BUTTON_COLOR, 14, 1, TOOLBAR_BUTTON_BORDER_COLOR)
+            setPadding(dp(7), dp(7), dp(7), dp(7))
             setOnClickListener { action() }
-        }
-    }
-
-    private fun typeIcon(directory: Boolean, fileName: String): TextView {
-        val ext = File(fileName).extension.lowercase(Locale.ROOT)
-        val label = when {
-            directory -> "DIR"
-            ext in imageExtensions -> "IMG"
-            ext in videoExtensions -> "VID"
-            ext in audioExtensions -> "AUD"
-            ext in textExtensions -> "TXT"
-            ext in archiveExtensions -> "ZIP"
-            ext == "pdf" -> "PDF"
-            else -> "FILE"
-        }
-        val color = when {
-            directory -> 0xFF315A9C.toInt()
-            ext in imageExtensions -> 0xFF2C7A55.toInt()
-            ext in videoExtensions -> 0xFF7C3B82.toInt()
-            ext in audioExtensions -> 0xFF8A5B2E.toInt()
-            ext in textExtensions -> 0xFF3D6477.toInt()
-            ext in archiveExtensions -> 0xFF7F5B1F.toInt()
-            else -> 0xFF555555.toInt()
-        }
-        return TextView(this).apply {
-            text = label
-            gravity = Gravity.CENTER
-            setTextColor(Color.WHITE)
-            textSize = 9f
-            typeface = Typeface.DEFAULT_BOLD
-            background = rounded(color, 10, 0, 0)
         }
     }
 
@@ -2240,9 +2512,9 @@ class FloatingFileManagerService : Service() {
         val row = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(10), dp(8), dp(10), dp(8))
+            setPadding(dp(10), dp(9), dp(10), dp(9))
         }
-        val icon = TextView(this).apply {
+        val icon = FrameLayout(this).apply {
             layoutParams = LinearLayout.LayoutParams(dp(38), dp(38))
         }
         row.addView(icon)
@@ -2286,7 +2558,7 @@ class FloatingFileManagerService : Service() {
             gravity = Gravity.CENTER_HORIZONTAL
             setPadding(dp(8), dp(10), dp(8), dp(8))
         }
-        val icon = TextView(this).apply {
+        val icon = FrameLayout(this).apply {
             layoutParams = LinearLayout.LayoutParams(dp(50), dp(50))
         }
         val title = TextView(this).apply {
@@ -2320,11 +2592,21 @@ class FloatingFileManagerService : Service() {
         holder.title.text = entry.title
         holder.meta.text = entry.meta
         bindIcon(holder.icon, file, entry, grid)
+        val baseSurface = when {
+            selected -> 0xFF1E416C.toInt()
+            entry.isDirectory || entry.isParent -> 0xFF1A2028.toInt()
+            else -> 0xFF161A20.toInt()
+        }
+        val baseBorder = when {
+            selected -> 0xFF79B1FF.toInt()
+            entry.isDirectory || entry.isParent -> 0xFF485462.toInt()
+            else -> 0xFF2B3440.toInt()
+        }
         holder.itemView.background = rounded(
-            if (selected) 0xFF244A7C.toInt() else 0xFF202020.toInt(),
+            baseSurface,
             if (grid) 14 else 12,
             1,
-            if (selected) 0xFF79B1FF.toInt() else 0xFF2F2F2F.toInt(),
+            baseBorder,
         )
         holder.itemView.setOnClickListener {
             when {
@@ -2348,7 +2630,7 @@ class FloatingFileManagerService : Service() {
                     true
                 }
                 else -> {
-                    showItemMenu(holder.itemView, entry)
+                    showItemMenu(entry)
                     true
                 }
             }
@@ -2362,27 +2644,24 @@ class FloatingFileManagerService : Service() {
         }
     }
 
-    private fun bindIcon(icon: TextView, file: File?, entry: FileEntry, grid: Boolean) {
+    private fun bindIcon(icon: FrameLayout, file: File?, entry: FileEntry, grid: Boolean) {
         val size = if (grid) dp(50) else dp(38)
-        icon.layoutParams = (icon.layoutParams as LinearLayout.LayoutParams).apply {
-            width = size
-            height = size
-        }
+        icon.layoutParams.width = size
+        icon.layoutParams.height = size
+        icon.removeAllViews()
+        icon.background = null
         if (file != null && !entry.isDirectory && file.extension.lowercase(Locale.ROOT) in imageExtensions) {
             val thumb = loadThumbnail(file, size)
             if (thumb != null) {
-                icon.text = ""
-                icon.background = BitmapDrawable(resources, thumb)
+                renderThumbnailIcon(icon, thumb, imageBadgeLabel(file))
                 return
             }
         }
-        val replacementIcon = typeIcon(entry.isDirectory, entry.title)
-        icon.text = replacementIcon.text
-        icon.gravity = Gravity.CENTER
-        icon.setTextColor(replacementIcon.currentTextColor)
-        icon.textSize = replacementIcon.textSize / resources.displayMetrics.scaledDensity
-        icon.typeface = Typeface.DEFAULT_BOLD
-        icon.background = replacementIcon.background
+        if (entry.isDirectory || entry.isParent) {
+            renderFolderIcon(icon, if (entry.isParent) "UP" else "DIR")
+        } else {
+            renderFileIcon(icon, fileBadgeLabel(file))
+        }
     }
 
     private fun loadThumbnail(file: File, size: Int): Bitmap? {
@@ -2401,6 +2680,121 @@ class FloatingFileManagerService : Service() {
             }
         } catch (_: Exception) {
             null
+        }
+    }
+
+    private fun renderThumbnailIcon(container: FrameLayout, bitmap: Bitmap, badge: String) {
+        container.addView(ImageView(this).apply {
+            scaleType = ImageView.ScaleType.CENTER_CROP
+            setImageBitmap(bitmap)
+            background = rounded(0xFF1C2531.toInt(), 14, 1, 0xFF3F536D.toInt())
+        }, FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT,
+            FrameLayout.LayoutParams.MATCH_PARENT,
+        ))
+        container.addView(iconBadge(badge, 0xFF1C3C66.toInt()), FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.WRAP_CONTENT,
+            FrameLayout.LayoutParams.WRAP_CONTENT,
+            Gravity.BOTTOM or Gravity.END,
+        ).apply {
+            rightMargin = dp(2)
+            bottomMargin = dp(2)
+        })
+    }
+
+    private fun renderFolderIcon(container: FrameLayout, label: String) {
+        container.addView(View(this).apply {
+            background = rounded(0xFFF2B84B.toInt(), 12, 0, 0)
+        }, FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT,
+            dp(28),
+            Gravity.BOTTOM,
+        ))
+        container.addView(View(this).apply {
+            background = rounded(0xFFF9D17F.toInt(), 8, 0, 0)
+        }, FrameLayout.LayoutParams(
+            dp(22),
+            dp(10),
+            Gravity.TOP or Gravity.START,
+        ).apply {
+            leftMargin = dp(3)
+            topMargin = dp(4)
+        })
+        container.addView(TextView(this).apply {
+            text = label
+            setTextColor(0xFF4C3412.toInt())
+            textSize = 8f
+            typeface = Typeface.DEFAULT_BOLD
+            gravity = Gravity.CENTER
+        }, FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT,
+            dp(28),
+            Gravity.BOTTOM,
+        ))
+    }
+
+    private fun renderFileIcon(container: FrameLayout, badge: String) {
+        container.addView(View(this).apply {
+            background = rounded(0xFF263445.toInt(), 12, 1, 0xFF42576F.toInt())
+        }, FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT,
+            FrameLayout.LayoutParams.MATCH_PARENT,
+        ))
+        container.addView(View(this).apply {
+            background = rounded(0xFF3A5068.toInt(), 4, 0, 0)
+        }, FrameLayout.LayoutParams(
+            dp(10),
+            dp(10),
+            Gravity.TOP or Gravity.END,
+        ).apply {
+            rightMargin = dp(3)
+            topMargin = dp(3)
+        })
+        container.addView(TextView(this).apply {
+            text = badge
+            setTextColor(0xFFDDEBFF.toInt())
+            textSize = 8f
+            typeface = Typeface.DEFAULT_BOLD
+            gravity = Gravity.CENTER
+        }, FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT,
+            FrameLayout.LayoutParams.MATCH_PARENT,
+            Gravity.CENTER,
+        ))
+    }
+
+    private fun iconBadge(label: String, backgroundColor: Int): TextView {
+        return TextView(this).apply {
+            text = label
+            setTextColor(Color.WHITE)
+            textSize = 7f
+            typeface = Typeface.DEFAULT_BOLD
+            gravity = Gravity.CENTER
+            setPadding(dp(4), dp(2), dp(4), dp(2))
+            background = rounded(backgroundColor, 8, 0, 0)
+        }
+    }
+
+    private fun imageBadgeLabel(file: File): String {
+        return when (file.extension.lowercase(Locale.ROOT)) {
+            "png" -> "PNG"
+            "jpg", "jpeg" -> "JPG"
+            "webp" -> "WEBP"
+            "gif" -> "GIF"
+            else -> "IMG"
+        }
+    }
+
+    private fun fileBadgeLabel(file: File?): String {
+        val ext = file?.extension?.lowercase(Locale.ROOT).orEmpty()
+        return when {
+            ext in videoExtensions -> "VID"
+            ext in audioExtensions -> "AUD"
+            ext in textExtensions -> "TXT"
+            ext in archiveExtensions -> "ZIP"
+            ext == "pdf" -> "PDF"
+            ext.isBlank() -> "FILE"
+            else -> ext.take(4).uppercase(Locale.ROOT)
         }
     }
 
@@ -2766,7 +3160,7 @@ class FloatingFileManagerService : Service() {
 
     private class FileViewHolder(
         itemView: View,
-        val icon: TextView,
+        val icon: FrameLayout,
         val title: TextView,
         val meta: TextView,
     ) : RecyclerView.ViewHolder(itemView)
@@ -2792,6 +3186,58 @@ class FloatingFileManagerService : Service() {
         val files: List<File>,
         val move: Boolean,
     )
+
+    private data class ActionSheetItem(
+        val title: String,
+        val subtitle: String? = null,
+        val tone: ActionTone = ActionTone.NEUTRAL,
+        val action: () -> Unit,
+    )
+
+    private data class ImageInfo(
+        val width: Int,
+        val height: Int,
+        val mimeType: String?,
+    )
+
+    private enum class ActionTone {
+        NEUTRAL,
+        ACCENT,
+        DANGER,
+    }
+
+    private enum class ImageExportFormat(
+        val extension: String,
+        val label: String,
+        val quality: Int,
+    ) {
+        JPG("jpg", "JPG", 92),
+        PNG("png", "PNG", 100),
+        WEBP("webp", "WEBP", 90);
+
+        fun compressFormat(): Bitmap.CompressFormat {
+            return when (this) {
+                JPG -> Bitmap.CompressFormat.JPEG
+                PNG -> Bitmap.CompressFormat.PNG
+                WEBP -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    Bitmap.CompressFormat.WEBP_LOSSY
+                } else {
+                    @Suppress("DEPRECATION")
+                    Bitmap.CompressFormat.WEBP
+                }
+            }
+        }
+
+        companion object {
+            fun fromFile(file: File): ImageExportFormat {
+                return when (file.extension.lowercase(Locale.ROOT)) {
+                    "jpg", "jpeg" -> JPG
+                    "webp" -> WEBP
+                    else -> PNG
+                }
+            }
+        }
+    }
 
     private enum class ViewMode {
         LIST,
@@ -2838,9 +3284,22 @@ class FloatingFileManagerService : Service() {
             "ini", "conf", "csv", "properties", "gradle",
         )
         private val imageExtensions = setOf("jpg", "jpeg", "png", "webp", "gif", "bmp")
+        private val editableImageExtensions = setOf("jpg", "jpeg", "png", "webp", "bmp")
         private val videoExtensions = setOf("mp4", "mkv", "webm", "3gp", "mov", "avi")
         private val audioExtensions = setOf("mp3", "m4a", "aac", "wav", "ogg", "flac")
         private val archiveExtensions = setOf("zip", "apk", "jar")
+        private val PANEL_SURFACE_COLOR = 0xFF0F141B.toInt()
+        private val PANEL_BORDER_COLOR = 0xFF283241.toInt()
+        private val CARD_SURFACE_COLOR = 0xFF141C26.toInt()
+        private val CARD_BORDER_COLOR = 0xFF2A3647.toInt()
+        private val CHIP_SURFACE_COLOR = 0xFF18202A.toInt()
+        private val CHIP_BORDER_COLOR = 0xFF334253.toInt()
+        private val CHIP_ACTIVE_COLOR = 0xFF1F4471.toInt()
+        private val CHIP_ACTIVE_BORDER_COLOR = 0xFF6FA8EE.toInt()
+        private val TOOLBAR_BUTTON_COLOR = 0xFF1A2430.toInt()
+        private val TOOLBAR_BUTTON_BORDER_COLOR = 0xFF33465B.toInt()
+        private val TEXT_SECONDARY_COLOR = 0xFF9EB1C8.toInt()
+        private val TEXT_MUTED_COLOR = 0xFF7F8FA2.toInt()
 
         fun start(context: Context) {
             val intent = Intent(context, FloatingFileManagerService::class.java)
