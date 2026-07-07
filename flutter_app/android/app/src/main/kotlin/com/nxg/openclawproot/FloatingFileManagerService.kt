@@ -54,28 +54,31 @@ class FloatingFileManagerService : Service() {
     private lateinit var windowManager: WindowManager
     private val mainHandler = Handler(Looper.getMainLooper())
     private val directoryExecutor = Executors.newSingleThreadExecutor()
-    private val loadGeneration = AtomicInteger(0)
+    private val requestIdGenerator = AtomicInteger(0)
+    private val tabIdGenerator = AtomicInteger(0)
 
     private var rootView: View? = null
     private var params: WindowManager.LayoutParams? = null
     private var panelRoot: LinearLayout? = null
 
-    private var currentDir: File = Environment.getExternalStorageDirectory()
-    private var currentEntries: List<FileEntry> = emptyList()
+    private val tabs = mutableListOf<FileTab>()
+    private var activeTabId: Int = -1
+
     private var currentPreviewFile: File? = null
     private var currentPlayer: ExoPlayer? = null
+    private var previewing = false
 
     private var viewMode = ViewMode.LIST
     private var sortMode = SortMode.NAME
     private var showHidden = false
-    private var previewing = false
-    private var directoryLoading = false
 
     private var titleView: TextView? = null
     private var backButton: TextView? = null
     private var openButton: TextView? = null
     private var shareButton: TextView? = null
     private var minimizeButton: TextView? = null
+    private var tabsScroll: HorizontalScrollView? = null
+    private var tabsRow: LinearLayout? = null
     private var quickRootsScroll: HorizontalScrollView? = null
     private var quickRootsRow: LinearLayout? = null
     private var breadcrumbScroll: HorizontalScrollView? = null
@@ -93,13 +96,13 @@ class FloatingFileManagerService : Service() {
         super.onCreate()
         running = true
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
+        ensureDefaultTabs()
         startForeground(NOTIFICATION_ID, buildNotification())
         showMinimizedBubble()
     }
 
     override fun onDestroy() {
         releasePlayer()
-        loadGeneration.incrementAndGet()
         directoryExecutor.shutdownNow()
         rootView?.let {
             try {
@@ -133,7 +136,7 @@ class FloatingFileManagerService : Service() {
         return NotificationCompat.Builder(this, channelId)
             .setSmallIcon(android.R.drawable.ic_menu_upload)
             .setContentTitle("Floating file manager")
-            .setContentText("Tap the floating button to browse shared storage.")
+            .setContentText("Tap the floating button to browse shared and app-private storage.")
             .setContentIntent(pendingIntent)
             .setOngoing(true)
             .build()
@@ -181,6 +184,43 @@ class FloatingFileManagerService : Service() {
         windowManager.addView(view, nextParams)
     }
 
+    private fun ensureDefaultTabs() {
+        if (tabs.isNotEmpty()) {
+            return
+        }
+        val shared = createTab(defaultSharedRoot())
+        createTab(appPrivateRoot())
+        activeTabId = shared.id
+    }
+
+    private fun createTab(initialDir: File): FileTab {
+        val safeDir = if (initialDir.exists()) initialDir else defaultSharedRoot()
+        val tab = FileTab(
+            id = tabIdGenerator.incrementAndGet(),
+            title = shortDirLabel(safeDir),
+            currentDir = safeDir,
+        )
+        tabs.add(tab)
+        return tab
+    }
+
+    private fun activeTab(): FileTab {
+        ensureDefaultTabs()
+        return tabs.firstOrNull { it.id == activeTabId } ?: tabs.first().also { activeTabId = it.id }
+    }
+
+    private fun findTab(id: Int): FileTab? = tabs.firstOrNull { it.id == id }
+
+    private fun setActiveDir(dir: File) {
+        val tab = activeTab()
+        tab.currentDir = dir
+        tab.title = shortDirLabel(dir)
+    }
+
+    private fun defaultSharedRoot(): File = Environment.getExternalStorageDirectory()
+
+    private fun appPrivateRoot(): File = filesDir.parentFile ?: filesDir
+
     private fun showMinimizedBubble() {
         releasePlayer()
         previewing = false
@@ -209,6 +249,7 @@ class FloatingFileManagerService : Service() {
         releasePlayer()
         previewing = false
         currentPreviewFile = null
+        ensureDefaultTabs()
         ensurePanelBuilt()
         panelRoot?.let { panel ->
             if (rootView !== panel) {
@@ -230,6 +271,19 @@ class FloatingFileManagerService : Service() {
         }
 
         panel.addView(buildToolbar())
+
+        val tabScroll = HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            val row = LinearLayout(context).apply {
+                orientation = LinearLayout.HORIZONTAL
+                setPadding(0, 0, 0, dp(8))
+            }
+            tabsRow = row
+            addView(row)
+        }
+        tabsScroll = tabScroll
+        panel.addView(tabScroll)
+
         val rootsScroll = HorizontalScrollView(this).apply {
             isHorizontalScrollBarEnabled = false
             val row = LinearLayout(context).apply {
@@ -353,10 +407,11 @@ class FloatingFileManagerService : Service() {
     }
 
     private fun bindPanelScaffold() {
+        val tab = activeTab()
         titleView?.text = if (previewing) {
             currentPreviewFile?.name ?: "预览"
         } else {
-            currentDir.name.ifBlank { "内部存储" }
+            "${tab.title} · ${tab.currentDir.absolutePath}"
         }
 
         backButton?.text = if (previewing) "返回" else "上级"
@@ -365,11 +420,13 @@ class FloatingFileManagerService : Service() {
         minimizeButton?.visibility = View.VISIBLE
 
         val browserVisibility = if (previewing) View.GONE else View.VISIBLE
+        tabsScroll?.visibility = browserVisibility
         quickRootsScroll?.visibility = browserVisibility
         breadcrumbScroll?.visibility = browserVisibility
         controlBarRow?.visibility = browserVisibility
 
         if (!previewing) {
+            rebuildTabs()
             rebuildQuickRoots()
             rebuildBreadcrumb()
             rebuildControlBar()
@@ -377,13 +434,109 @@ class FloatingFileManagerService : Service() {
         }
     }
 
+    private fun rebuildTabs() {
+        val row = tabsRow ?: return
+        val currentTabId = activeTab().id
+        row.removeAllViews()
+        tabs.forEach { tab ->
+            row.addView(tabChip(tab, tab.id == currentTabId))
+        }
+        row.addView(chip("＋ 新页", false) {
+            if (tabs.size >= MAX_TABS) {
+                Toast.makeText(this, "最多同时打开 $MAX_TABS 个标签页", Toast.LENGTH_SHORT).show()
+            } else {
+                val next = createTab(activeTab().currentDir)
+                activeTabId = next.id
+                previewing = false
+                currentPreviewFile = null
+                bindPanelScaffold()
+                renderDirectoryState(forceReload = true)
+            }
+        })
+    }
+
+    private fun tabChip(tab: FileTab, selected: Boolean): View {
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(10), dp(6), dp(8), dp(6))
+            background = rounded(
+                if (selected) 0xFF2F5F9F.toInt() else 0xFF202020.toInt(),
+                16,
+                1,
+                if (selected) 0xFF6EA7FF.toInt() else 0xFF3A3A3A.toInt(),
+            )
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            ).apply {
+                setMargins(0, 0, dp(6), 0)
+            }
+            setOnClickListener {
+                if (activeTabId != tab.id) {
+                    releasePlayer()
+                    previewing = false
+                    currentPreviewFile = null
+                    activeTabId = tab.id
+                    bindPanelScaffold()
+                    renderDirectoryState(forceReload = tab.entries.isEmpty())
+                }
+            }
+        }
+        box.addView(TextView(this).apply {
+            text = tab.title
+            setTextColor(Color.WHITE)
+            textSize = 12f
+            maxLines = 1
+        })
+        if (tabs.size > 1) {
+            box.addView(TextView(this).apply {
+                text = " ×"
+                setTextColor(0xFFD6E7FF.toInt())
+                textSize = 12f
+                setOnClickListener {
+                    closeTab(tab.id)
+                }
+            })
+        }
+        return box
+    }
+
+    private fun closeTab(id: Int) {
+        if (tabs.size <= 1) {
+            val tab = tabs.firstOrNull() ?: return
+            tab.currentDir = defaultSharedRoot()
+            tab.title = shortDirLabel(tab.currentDir)
+            tab.entries = emptyList()
+            activeTabId = tab.id
+            renderDirectoryState(forceReload = true)
+            return
+        }
+        val index = tabs.indexOfFirst { it.id == id }
+        if (index < 0) {
+            return
+        }
+        val wasActive = activeTabId == id
+        tabs.removeAt(index)
+        if (wasActive) {
+            releasePlayer()
+            val nextIndex = min(index, tabs.lastIndex)
+            activeTabId = tabs[nextIndex].id
+            previewing = false
+            currentPreviewFile = null
+        }
+        bindPanelScaffold()
+        renderDirectoryState(forceReload = activeTab().entries.isEmpty())
+    }
+
     private fun rebuildQuickRoots() {
         val row = quickRootsRow ?: return
+        val currentDir = activeTab().currentDir
         row.removeAllViews()
         quickRootFiles().forEach { (label, file) ->
             if (file.exists()) {
                 row.addView(chip(label, currentDir.absolutePath == file.absolutePath) {
-                    currentDir = file
+                    setActiveDir(file)
                     renderDirectoryState(forceReload = true)
                 })
             }
@@ -392,31 +545,56 @@ class FloatingFileManagerService : Service() {
 
     private fun rebuildBreadcrumb() {
         val row = breadcrumbRow ?: return
+        val currentDir = activeTab().currentDir
+        val (baseLabel, baseDir) = breadcrumbBase(currentDir)
         row.removeAllViews()
-        val storage = Environment.getExternalStorageDirectory()
-        row.addView(chip("内部存储", currentDir.absolutePath == storage.absolutePath) {
-            currentDir = storage
+        row.addView(chip(baseLabel, currentDir.absolutePath == baseDir.absolutePath) {
+            setActiveDir(baseDir)
             renderDirectoryState(forceReload = true)
         })
-        val relative = currentDir.relativeToOrNull(storage)
-        var cursor = storage
-        if (relative != null && relative.path != ".") {
-            relative.path.split(File.separatorChar)
+
+        val segments = breadcrumbSegments(baseDir, currentDir)
+        var cursor = baseDir
+        segments.forEach { part ->
+            row.addView(TextView(this).apply {
+                text = "›"
+                setTextColor(0xFF777777.toInt())
+                textSize = 16f
+                setPadding(dp(4), 0, dp(4), 0)
+            })
+            cursor = if (cursor.absolutePath == File.separator) {
+                File(File.separator, part)
+            } else {
+                File(cursor, part)
+            }
+            val target = cursor
+            row.addView(chip(part, currentDir.absolutePath == target.absolutePath) {
+                setActiveDir(target)
+                renderDirectoryState(forceReload = true)
+            })
+        }
+    }
+
+    private fun breadcrumbBase(dir: File): Pair<String, File> {
+        val privateRoot = appPrivateRoot()
+        val sharedRoot = defaultSharedRoot()
+        return when {
+            dir.absolutePath.startsWith(privateRoot.absolutePath) -> "应用私有" to privateRoot
+            dir.absolutePath.startsWith(sharedRoot.absolutePath) -> "内部存储" to sharedRoot
+            else -> "/" to File(File.separator)
+        }
+    }
+
+    private fun breadcrumbSegments(baseDir: File, currentDir: File): List<String> {
+        return if (baseDir.absolutePath == File.separator) {
+            currentDir.absolutePath.trim(File.separatorChar)
+                .split(File.separatorChar)
                 .filter { it.isNotBlank() }
-                .forEach { part ->
-                    row.addView(TextView(this).apply {
-                        text = "›"
-                        setTextColor(0xFF777777.toInt())
-                        textSize = 16f
-                        setPadding(dp(4), 0, dp(4), 0)
-                    })
-                    cursor = File(cursor, part)
-                    val target = cursor
-                    row.addView(chip(part, currentDir.absolutePath == target.absolutePath) {
-                        currentDir = target
-                        renderDirectoryState(forceReload = true)
-                    })
-                }
+        } else {
+            currentDir.relativeToOrNull(baseDir)?.path
+                ?.split(File.separatorChar)
+                ?.filter { it.isNotBlank() && it != "." }
+                ?: emptyList()
         }
     }
 
@@ -451,36 +629,41 @@ class FloatingFileManagerService : Service() {
         previewing = false
         currentPreviewFile = null
         bindPanelScaffold()
+        val tab = activeTab()
         if (forceReload) {
-            loadDirectoryAsync()
+            loadDirectoryAsync(tab.id, tab.currentDir)
         } else {
-            fileAdapter?.submitList(currentEntries)
-            showContent(if (currentEntries.isEmpty()) "没有文件，或当前目录无读取权限" else null)
-            updateDirectoryStatus()
+            fileAdapter?.submitList(tab.entries)
+            showContent(if (tab.entries.isEmpty()) "没有文件，或当前目录无读取权限" else null)
+            updateDirectoryStatus(tab)
         }
     }
 
-    private fun loadDirectoryAsync() {
-        directoryLoading = true
+    private fun loadDirectoryAsync(tabId: Int, requestedDir: File) {
+        val tab = findTab(tabId) ?: return
+        val requestId = requestIdGenerator.incrementAndGet()
+        tab.lastRequestId = requestId
+        tab.currentDir = requestedDir
+        tab.title = shortDirLabel(requestedDir)
         showContent("正在读取目录...")
-        statusView?.text = currentDir.absolutePath
-        val requestedDir = currentDir
-        val generation = loadGeneration.incrementAndGet()
+        statusView?.text = requestedDir.absolutePath
+
         directoryExecutor.execute {
             val files = visibleFiles(requestedDir)
             val entries = buildEntries(requestedDir, files)
             mainHandler.post {
-                if (generation != loadGeneration.get()) {
+                val targetTab = findTab(tabId) ?: return@post
+                if (targetTab.lastRequestId != requestId || targetTab.currentDir.absolutePath != requestedDir.absolutePath) {
                     return@post
                 }
-                if (previewing || currentDir.absolutePath != requestedDir.absolutePath) {
-                    return@post
+                targetTab.entries = entries
+                targetTab.title = shortDirLabel(targetTab.currentDir)
+                if (!previewing && activeTabId == tabId) {
+                    bindPanelScaffold()
+                    fileAdapter?.submitList(entries)
+                    showContent(if (entries.isEmpty()) "没有文件，或当前目录无读取权限" else null)
+                    updateDirectoryStatus(targetTab)
                 }
-                directoryLoading = false
-                currentEntries = entries
-                fileAdapter?.submitList(entries)
-                showContent(if (entries.isEmpty()) "没有文件，或当前目录无读取权限" else null)
-                updateDirectoryStatus()
             }
         }
     }
@@ -539,10 +722,11 @@ class FloatingFileManagerService : Service() {
         }
     }
 
-    private fun updateDirectoryStatus() {
-        val folderCount = currentEntries.count { !it.isParent && it.isDirectory }
-        val fileCount = currentEntries.count { !it.isParent && !it.isDirectory }
-        statusView?.text = "$folderCount 个文件夹 · $fileCount 个文件 · ${currentDir.absolutePath}"
+    private fun updateDirectoryStatus(tab: FileTab) {
+        val folderCount = tab.entries.count { !it.isParent && it.isDirectory }
+        val fileCount = tab.entries.count { !it.isParent && !it.isDirectory }
+        val activeIndex = tabs.indexOfFirst { it.id == tab.id } + 1
+        statusView?.text = "标签 $activeIndex/${tabs.size} · $folderCount 个文件夹 · $fileCount 个文件 · ${tab.currentDir.absolutePath}"
     }
 
     private fun openPreview(file: File) {
@@ -750,9 +934,10 @@ class FloatingFileManagerService : Service() {
             closePreview()
             return
         }
+        val currentDir = activeTab().currentDir
         val parent = currentDir.parentFile
         if (parent != null && parent.canRead()) {
-            currentDir = parent
+            setActiveDir(parent)
             renderDirectoryState(forceReload = true)
         } else {
             showMinimizedBubble()
@@ -814,16 +999,40 @@ class FloatingFileManagerService : Service() {
     }
 
     private fun quickRootFiles(): List<Pair<String, File>> {
-        val root = Environment.getExternalStorageDirectory()
-        return listOf(
-            "内部" to root,
-            "下载" to Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
-            "图片" to Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES),
-            "DCIM" to Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM),
-            "文档" to Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS),
-            "视频" to Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES),
-            "音乐" to Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC),
-        )
+        val sharedRoot = defaultSharedRoot()
+        val privateRoot = appPrivateRoot()
+        val externalPrivate = getExternalFilesDir(null)
+        return buildList {
+            add("内部" to sharedRoot)
+            add("私有根" to privateRoot)
+            add("files" to filesDir)
+            add("cache" to cacheDir)
+            if (noBackupFilesDir.exists()) {
+                add("no_backup" to noBackupFilesDir)
+            }
+            if (externalPrivate != null && externalPrivate.exists()) {
+                add("外部私有" to externalPrivate)
+            }
+            add("下载" to Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS))
+            add("图片" to Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES))
+            add("DCIM" to Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM))
+            add("文档" to Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS))
+            add("视频" to Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES))
+            add("音乐" to Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC))
+        }.filter { it.second.exists() }
+    }
+
+    private fun shortDirLabel(dir: File): String {
+        val path = dir.absolutePath
+        return when {
+            path == defaultSharedRoot().absolutePath -> "内部存储"
+            path == appPrivateRoot().absolutePath -> "应用私有"
+            path == filesDir.absolutePath -> "files"
+            path == cacheDir.absolutePath -> "cache"
+            path == noBackupFilesDir.absolutePath -> "no_backup"
+            getExternalFilesDir(null)?.absolutePath == path -> "外部私有"
+            else -> dir.name.ifBlank { "/" }
+        }
     }
 
     private fun mimeFor(file: File): String {
@@ -1019,10 +1228,10 @@ class FloatingFileManagerService : Service() {
         holder.meta.text = entry.meta
         holder.itemView.setOnClickListener {
             if (entry.isParent) {
-                currentDir = entry.file ?: currentDir
+                setActiveDir(entry.file ?: activeTab().currentDir)
                 renderDirectoryState(forceReload = true)
             } else if (entry.isDirectory) {
-                currentDir = entry.file ?: currentDir
+                setActiveDir(entry.file ?: activeTab().currentDir)
                 renderDirectoryState(forceReload = true)
             } else {
                 entry.file?.let { openPreview(it) }
@@ -1113,6 +1322,14 @@ class FloatingFileManagerService : Service() {
         val isParent: Boolean,
     )
 
+    private data class FileTab(
+        val id: Int,
+        var title: String,
+        var currentDir: File,
+        var entries: List<FileEntry> = emptyList(),
+        var lastRequestId: Int = 0,
+    )
+
     private enum class ViewMode {
         LIST,
         GRID,
@@ -1132,6 +1349,7 @@ class FloatingFileManagerService : Service() {
 
     companion object {
         private const val NOTIFICATION_ID = 7071
+        private const val MAX_TABS = 6
 
         @Volatile
         var running: Boolean = false
