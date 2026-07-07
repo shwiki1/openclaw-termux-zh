@@ -2639,7 +2639,7 @@ class FloatingFileManagerService : Service() {
             inputType = InputType.TYPE_CLASS_TEXT or
                 InputType.TYPE_TEXT_FLAG_MULTI_LINE or
                 InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
-            isHorizontallyScrolling = true
+            setHorizontallyScrolling(true)
             setPadding(gutterWidth() + dp(12), dp(12), dp(18), dp(12))
             addTextChangedListener(object : TextWatcher {
                 override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
