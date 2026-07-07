@@ -6,6 +6,8 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.content.res.ColorStateList
@@ -298,6 +300,8 @@ class FloatingFileManagerService : Service() {
         if (!keepSelection) {
             clearSelection()
         }
+        tab.scrollPosition = 0
+        tab.scrollOffset = 0
     }
 
     private fun showMinimizedBubble() {
@@ -871,9 +875,46 @@ class FloatingFileManagerService : Service() {
 
     private fun updateLayoutManager() {
         val recycler = recyclerView ?: return
+        val current = recycler.layoutManager
+        val canReuse = when (viewMode) {
+            ViewMode.LIST -> current is LinearLayoutManager && current !is GridLayoutManager
+            ViewMode.GRID -> current is GridLayoutManager && current.spanCount == gridSpanCount()
+        }
+        if (canReuse) {
+            return
+        }
+        saveActiveScrollState()
         recycler.layoutManager = when (viewMode) {
             ViewMode.LIST -> LinearLayoutManager(this)
             ViewMode.GRID -> GridLayoutManager(this, gridSpanCount())
+        }
+        restoreActiveScrollState()
+    }
+
+    private fun saveActiveScrollState() {
+        val recycler = recyclerView ?: return
+        val manager = recycler.layoutManager as? LinearLayoutManager ?: return
+        val position = manager.findFirstVisibleItemPosition()
+        if (position == RecyclerView.NO_POSITION) {
+            return
+        }
+        val firstView = manager.findViewByPosition(position)
+        val offset = (firstView?.top ?: recycler.paddingTop) - recycler.paddingTop
+        activeTab().scrollPosition = position
+        activeTab().scrollOffset = offset
+    }
+
+    private fun restoreActiveScrollState() {
+        val recycler = recyclerView ?: return
+        val tab = activeTab()
+        if (tab.entries.isEmpty()) {
+            return
+        }
+        val position = tab.scrollPosition.coerceIn(0, tab.entries.lastIndex)
+        val offset = tab.scrollOffset
+        recycler.post {
+            val manager = recycler.layoutManager as? LinearLayoutManager ?: return@post
+            manager.scrollToPositionWithOffset(position, offset)
         }
     }
 
@@ -907,6 +948,7 @@ class FloatingFileManagerService : Service() {
         } else {
             fileAdapter?.submitList(tab.entries)
             showContent(if (tab.entries.isEmpty()) "没有文件，或当前目录无读取权限" else null)
+            restoreActiveScrollState()
             updateDirectoryStatus(tab)
         }
     }
@@ -934,6 +976,7 @@ class FloatingFileManagerService : Service() {
                     bindPanelScaffold()
                     fileAdapter?.submitList(entries)
                     showContent(if (entries.isEmpty()) "没有文件，或当前目录无读取权限" else null)
+                    restoreActiveScrollState()
                     updateDirectoryStatus(targetTab)
                 }
             }
@@ -1006,6 +1049,7 @@ class FloatingFileManagerService : Service() {
     }
 
     private fun openPreview(file: File) {
+        saveActiveScrollState()
         releasePlayer()
         currentTextEditor = null
         previewing = true
@@ -1050,12 +1094,77 @@ class FloatingFileManagerService : Service() {
         } catch (e: Exception) {
             "读取失败: ${e.message}"
         }
-        return ScrollView(this).apply {
-            addView(CodeEditorEditText(context).apply {
-                currentTextEditor = this
-                setText(text)
-                setSelection(text.length.coerceAtMost(length()))
-            })
+        val editor = CodeEditorEditText(this).apply {
+            currentTextEditor = this
+            setText(text)
+            setSelection(text.length.coerceAtMost(length()))
+        }
+        val cursorStatus = TextView(this).apply {
+            setTextColor(TEXT_MUTED_COLOR)
+            textSize = 11f
+            setPadding(dp(10), dp(8), dp(10), dp(8))
+            text = editor.cursorLabel()
+        }
+        fun refreshCursorStatus() {
+            cursorStatus.text = editor.cursorLabel()
+        }
+        editor.setCursorStatusListener { refreshCursorStatus() }
+
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(Color.BLACK)
+            addView(
+                HorizontalScrollView(context).apply {
+                    isHorizontalScrollBarEnabled = false
+                    addView(
+                        LinearLayout(context).apply {
+                            orientation = LinearLayout.HORIZONTAL
+                            setPadding(dp(10), dp(10), dp(10), dp(6))
+                            addView(chip("查找", false) {
+                                showTextInputDialog("查找文本", "输入关键词", "") { query ->
+                                    if (!editor.findNext(query)) {
+                                        Toast.makeText(this@FloatingFileManagerService, "未找到: $query", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            })
+                            addView(chip("跳行", false) {
+                                showTextInputDialog("跳转到行", "输入行号", "1") { input ->
+                                    val line = input.toIntOrNull()
+                                    if (line == null || !editor.jumpToLine(line)) {
+                                        Toast.makeText(this@FloatingFileManagerService, "行号无效", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            })
+                            addView(chip("插入Tab", false) { editor.insertAtCursor("    ") })
+                            addView(chip("全选", false) { editor.selectAll() })
+                            addView(chip("换行", false) {
+                                editor.toggleWrap()
+                                Toast.makeText(
+                                    this@FloatingFileManagerService,
+                                    if (editor.wrapEnabled) "已开启自动换行" else "已切换为横向滚动",
+                                    Toast.LENGTH_SHORT,
+                                ).show()
+                            })
+                            addView(chip("复制路径", false) { copyTextToClipboard("文件路径", file.absolutePath) })
+                        },
+                    )
+                },
+                LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                ),
+            )
+            addView(cursorStatus)
+            addView(
+                ScrollView(context).apply {
+                    addView(editor)
+                },
+                LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    0,
+                    1f,
+                ),
+            )
         }
     }
 
@@ -1323,15 +1432,32 @@ class FloatingFileManagerService : Service() {
         }
 
         val hero = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = GradientDrawable(
+                GradientDrawable.Orientation.TL_BR,
+                intArrayOf(0xFF172437.toInt(), 0xFF0F151D.toInt(), 0xFF1D1627.toInt()),
+            ).apply {
+                cornerRadius = dp(24).toFloat()
+                setStroke(dp(1), 0xFF31465D.toInt())
+            }
+            setPadding(dp(16), dp(16), dp(16), dp(16))
+        }
+
+        val topRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            background = rounded(0xFF11161E.toInt(), 18, 1, 0xFF263445.toInt())
-            setPadding(dp(14), dp(14), dp(14), dp(14))
         }
         val coverFrame = FrameLayout(this).apply {
-            background = rounded(0xFF1B2430.toInt(), 16, 1, 0xFF314357.toInt())
+            background = GradientDrawable(
+                GradientDrawable.Orientation.TOP_BOTTOM,
+                intArrayOf(0xFF263D58.toInt(), 0xFF121A25.toInt()),
+            ).apply {
+                cornerRadius = dp(22).toFloat()
+                setStroke(dp(1), 0xFF5E7DA0.toInt())
+            }
+            elevation = dp(3).toFloat()
         }
-        val coverSize = dp(92)
+        val coverSize = dp(118)
         if (info?.embeddedArt != null) {
             val bitmap = BitmapFactory.decodeByteArray(info.embeddedArt, 0, info.embeddedArt.size)
             coverFrame.addView(
@@ -1343,17 +1469,28 @@ class FloatingFileManagerService : Service() {
             )
         } else {
             coverFrame.addView(
-                TextView(this).apply {
-                    text = "AUDIO"
+                LinearLayout(this).apply {
+                    orientation = LinearLayout.VERTICAL
                     gravity = Gravity.CENTER
-                    setTextColor(0xFFD7E6FF.toInt())
-                    textSize = 16f
-                    typeface = Typeface.DEFAULT_BOLD
+                    addView(TextView(context).apply {
+                        text = "♪"
+                        gravity = Gravity.CENTER
+                        setTextColor(0xFFDCEAFF.toInt())
+                        textSize = 44f
+                        typeface = Typeface.DEFAULT_BOLD
+                    })
+                    addView(TextView(context).apply {
+                        text = file.extension.uppercase(Locale.ROOT).ifBlank { "AUDIO" }
+                        gravity = Gravity.CENTER
+                        setTextColor(0xFF9DB6D8.toInt())
+                        textSize = 12f
+                        typeface = Typeface.DEFAULT_BOLD
+                    })
                 },
                 FrameLayout.LayoutParams(coverSize, coverSize, Gravity.CENTER),
             )
         }
-        hero.addView(
+        topRow.addView(
             coverFrame,
             LinearLayout.LayoutParams(coverSize, coverSize),
         )
@@ -1400,11 +1537,101 @@ class FloatingFileManagerService : Service() {
             maxLines = 2
             setPadding(0, dp(8), 0, 0)
         })
-        hero.addView(
+        topRow.addView(
             infoColumn,
             LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f),
         )
+        hero.addView(topRow)
+
+        hero.addView(
+            LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.BOTTOM
+                setPadding(0, dp(18), 0, dp(4))
+                val heights = intArrayOf(14, 30, 20, 44, 24, 36, 18, 50, 28, 40, 22, 34, 16, 46, 26, 38)
+                heights.forEachIndexed { index, height ->
+                    addView(
+                        View(context).apply {
+                            background = rounded(
+                                if (index % 3 == 0) 0xFF69A7FF.toInt() else 0xFFB9D6FF.toInt(),
+                                8,
+                                0,
+                                0,
+                            )
+                            alpha = if (index % 2 == 0) 0.9f else 0.55f
+                        },
+                        LinearLayout.LayoutParams(0, dp(height), 1f).apply {
+                            setMargins(dp(2), 0, dp(2), 0)
+                        },
+                    )
+                }
+            },
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            ),
+        )
         container.addView(hero)
+
+        val metaPanel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = rounded(0xFF101821.toInt(), 18, 1, 0xFF263648.toInt())
+            setPadding(dp(12), dp(12), dp(12), dp(12))
+        }
+        metaPanel.addView(TextView(this).apply {
+            text = "音频信息"
+            setTextColor(Color.WHITE)
+            textSize = 13f
+            typeface = Typeface.DEFAULT_BOLD
+        })
+        val metaRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(0, dp(10), 0, 0)
+        }
+        fun addMeta(label: String, value: String) {
+            metaRow.addView(
+                LinearLayout(this).apply {
+                    orientation = LinearLayout.VERTICAL
+                    background = rounded(0xFF17212C.toInt(), 14, 1, 0xFF314154.toInt())
+                    setPadding(dp(10), dp(8), dp(10), dp(8))
+                    addView(TextView(context).apply {
+                        text = label
+                        setTextColor(TEXT_MUTED_COLOR)
+                        textSize = 10f
+                    })
+                    addView(TextView(context).apply {
+                        text = value
+                        setTextColor(Color.WHITE)
+                        textSize = 12f
+                        typeface = Typeface.DEFAULT_BOLD
+                        maxLines = 1
+                    })
+                },
+                LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                ).apply {
+                    setMargins(0, 0, dp(8), 0)
+                },
+            )
+        }
+        addMeta("时长", info?.durationMs?.takeIf { it > 0 }?.let(MediaToolbox::formatDuration) ?: "--:--")
+        addMeta("码率", info?.bitrate?.takeIf { it > 0 }?.let { "${it / 1000} kbps" } ?: "未知")
+        addMeta("采样率", info?.sampleRate?.takeIf { it > 0 }?.let { "${it} Hz" } ?: "未知")
+        addMeta("大小", formatSize(file.length()))
+        metaPanel.addView(HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            addView(metaRow)
+        })
+        container.addView(
+            metaPanel,
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            ).apply {
+                topMargin = dp(12)
+            },
+        )
 
         val actionRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -1414,7 +1641,12 @@ class FloatingFileManagerService : Service() {
         if (file.extension.lowercase(Locale.ROOT) != "mp3") {
             actionRow.addView(chip("转 MP3", false) { convertAudioToMp3Prompt(file) })
         }
-        container.addView(actionRow)
+        actionRow.addView(chip("外部打开", false) { openExternal(file) })
+        actionRow.addView(chip("分享", false) { shareFile(file) })
+        container.addView(HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            addView(actionRow)
+        })
 
         val controlView = PlayerControlView(this).apply {
             setPlayer(player)
@@ -1422,7 +1654,8 @@ class FloatingFileManagerService : Service() {
             setShowNextButton(false)
             setShowPreviousButton(false)
             setShowShuffleButton(false)
-            setBackgroundColor(0xFF101010.toInt())
+            background = rounded(0xFF111820.toInt(), 18, 1, 0xFF2D4055.toInt())
+            setPadding(dp(8), dp(6), dp(8), dp(6))
         }
         container.addView(
             controlView,
@@ -1430,7 +1663,7 @@ class FloatingFileManagerService : Service() {
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT,
             ).apply {
-                topMargin = dp(4)
+                topMargin = dp(6)
             },
         )
 
@@ -1632,6 +1865,12 @@ class FloatingFileManagerService : Service() {
         } catch (_: Exception) {
             Toast.makeText(this, "无法分享此文件", Toast.LENGTH_SHORT).show()
         }
+    }
+
+    private fun copyTextToClipboard(label: String, value: String) {
+        val manager = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        manager.setPrimaryClip(ClipData.newPlainText(label, value))
+        Toast.makeText(this, "已复制到剪贴板", Toast.LENGTH_SHORT).show()
     }
 
     private fun goParent() {
@@ -3018,6 +3257,9 @@ class FloatingFileManagerService : Service() {
             typeface = Typeface.MONOSPACE
         }
         private var applyingHighlight = false
+        var wrapEnabled: Boolean = false
+            private set
+        private var cursorStatusListener: (() -> Unit)? = null
         private val highlightRunnable = Runnable {
             applySyntaxHighlighting()
             invalidate()
@@ -3046,6 +3288,95 @@ class FloatingFileManagerService : Service() {
 
                 override fun afterTextChanged(s: Editable?) = Unit
             })
+        }
+
+        fun setCursorStatusListener(listener: () -> Unit) {
+            cursorStatusListener = listener
+        }
+
+        override fun onSelectionChanged(selStart: Int, selEnd: Int) {
+            super.onSelectionChanged(selStart, selEnd)
+            cursorStatusListener?.invoke()
+        }
+
+        fun cursorLabel(): String {
+            val content = text?.toString().orEmpty()
+            val offset = selectionStart.coerceIn(0, content.length)
+            val line = content.take(offset).count { it == '\n' } + 1
+            val lineStart = if (offset == 0) {
+                0
+            } else {
+                content.lastIndexOf('\n', offset - 1).let { if (it < 0) 0 else it + 1 }
+            }
+            val column = offset - lineStart + 1
+            return "行 $line · 列 $column · ${content.length} 字符"
+        }
+
+        fun jumpToLine(lineNumber: Int): Boolean {
+            if (lineNumber < 1) {
+                return false
+            }
+            val content = text?.toString().orEmpty()
+            var line = 1
+            var index = 0
+            while (line < lineNumber && index < content.length) {
+                val next = content.indexOf('\n', index)
+                if (next < 0) {
+                    return false
+                }
+                index = next + 1
+                line++
+            }
+            setSelection(index.coerceIn(0, length()))
+            post {
+                layout?.let { textLayout ->
+                    val targetLine = textLayout.getLineForOffset(index.coerceIn(0, length()))
+                    val top = textLayout.getLineTop(targetLine)
+                    (parent as? ScrollView)?.smoothScrollTo(0, top)
+                }
+            }
+            return true
+        }
+
+        fun findNext(query: String): Boolean {
+            if (query.isBlank()) {
+                return false
+            }
+            val source = text?.toString().orEmpty()
+            if (source.isEmpty()) {
+                return false
+            }
+            val start = selectionEnd.coerceAtLeast(0).coerceAtMost(source.length)
+            var index = source.indexOf(query, start, ignoreCase = true)
+            if (index < 0 && start > 0) {
+                index = source.indexOf(query, 0, ignoreCase = true)
+            }
+            if (index < 0) {
+                return false
+            }
+            requestFocus()
+            setSelection(index, index + query.length)
+            post {
+                layout?.let { textLayout ->
+                    val targetLine = textLayout.getLineForOffset(index)
+                    val top = textLayout.getLineTop(targetLine)
+                    (parent as? ScrollView)?.smoothScrollTo(0, top)
+                }
+            }
+            return true
+        }
+
+        fun insertAtCursor(value: String) {
+            val editable = text ?: return
+            val start = selectionStart.coerceAtLeast(0)
+            val end = selectionEnd.coerceAtLeast(0)
+            editable.replace(min(start, end), max(start, end), value)
+        }
+
+        fun toggleWrap() {
+            wrapEnabled = !wrapEnabled
+            setHorizontallyScrolling(!wrapEnabled)
+            isHorizontalScrollBarEnabled = !wrapEnabled
         }
 
         override fun onDraw(canvas: Canvas) {
@@ -3180,6 +3511,8 @@ class FloatingFileManagerService : Service() {
         var entries: List<FileEntry> = emptyList(),
         var lastRequestId: Int = 0,
         var pinned: Boolean = false,
+        var scrollPosition: Int = 0,
+        var scrollOffset: Int = 0,
     )
 
     private data class ClipboardState(
