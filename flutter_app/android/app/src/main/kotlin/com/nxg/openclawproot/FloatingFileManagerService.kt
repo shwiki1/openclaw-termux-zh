@@ -1,4 +1,4 @@
-package com.openclaw.cyx
+package com.agent.cyx
 
 import android.app.AlertDialog
 import android.app.Notification
@@ -11,7 +11,9 @@ import android.content.Intent
 import android.content.res.ColorStateList
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.Paint
 import android.graphics.Typeface
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.GradientDrawable
@@ -21,17 +23,23 @@ import android.os.Environment
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.text.Editable
 import android.text.InputType
+import android.text.TextWatcher
+import android.text.style.ForegroundColorSpan
 import android.util.LruCache
 import android.view.Gravity
+import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.TextureView
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
+import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.HorizontalScrollView
+import android.widget.ImageView
 import android.widget.ImageButton
 import android.widget.LinearLayout
 import android.widget.PopupMenu
@@ -44,6 +52,7 @@ import androidx.core.content.FileProvider
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.common.VideoSize
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerControlView
 import androidx.recyclerview.widget.GridLayoutManager
@@ -66,6 +75,7 @@ import java.util.zip.ZipOutputStream
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.roundToInt
 
 class FloatingFileManagerService : Service() {
     private lateinit var windowManager: WindowManager
@@ -81,13 +91,14 @@ class FloatingFileManagerService : Service() {
     private var rootView: View? = null
     private var params: WindowManager.LayoutParams? = null
     private var panelRoot: LinearLayout? = null
+    private var overlayFocusable = false
 
     private val tabs = mutableListOf<FileTab>()
     private var activeTabId: Int = -1
 
     private var currentPreviewFile: File? = null
     private var currentPlayer: ExoPlayer? = null
-    private var currentTextEditor: EditText? = null
+    private var currentTextEditor: CodeEditorEditText? = null
     private var previewing = false
 
     private var viewMode = ViewMode.LIST
@@ -188,13 +199,44 @@ class FloatingFileManagerService : Service() {
             width,
             height,
             overlayType(),
-            WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
-                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+            buildWindowFlags(overlayFocusable),
             android.graphics.PixelFormat.TRANSLUCENT,
         ).apply {
             gravity = Gravity.TOP or Gravity.START
             x = 24
             y = 140
+        }
+    }
+
+    private fun buildWindowFlags(focusable: Boolean): Int {
+        var flags = WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
+            WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
+        if (!focusable) {
+            flags = flags or WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+        }
+        return flags
+    }
+
+    private fun updateOverlayFocusability(focusable: Boolean, inputTarget: View? = null) {
+        overlayFocusable = focusable
+        val lp = params ?: return
+        val nextFlags = buildWindowFlags(focusable)
+        if (lp.flags != nextFlags) {
+            lp.flags = nextFlags
+            rootView?.let { windowManager.updateViewLayout(it, lp) }
+        }
+        val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+        if (focusable) {
+            panelRoot?.isFocusableInTouchMode = true
+            panelRoot?.requestFocus()
+            inputTarget?.post {
+                inputTarget.requestFocus()
+                imm.showSoftInput(inputTarget, InputMethodManager.SHOW_IMPLICIT)
+            }
+        } else {
+            rootView?.clearFocus()
+            val token = currentTextEditor?.windowToken ?: panelRoot?.windowToken ?: rootView?.windowToken
+            token?.let { imm.hideSoftInputFromWindow(it, 0) }
         }
     }
 
@@ -262,6 +304,7 @@ class FloatingFileManagerService : Service() {
         releasePlayer()
         currentTextEditor = null
         previewing = false
+        updateOverlayFocusability(false)
         clearSelection()
         val bubble = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -289,6 +332,7 @@ class FloatingFileManagerService : Service() {
         currentTextEditor = null
         previewing = false
         currentPreviewFile = null
+        updateOverlayFocusability(false)
         ensureDefaultTabs()
         ensurePanelBuilt()
         panelRoot?.let { panel ->
@@ -308,6 +352,19 @@ class FloatingFileManagerService : Service() {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(10), dp(10), dp(10), dp(8))
             background = rounded(0xF2131313.toInt(), 18, 1, 0xFF343434.toInt())
+            isFocusableInTouchMode = true
+            setOnKeyListener { _, keyCode, event ->
+                if (keyCode == KeyEvent.KEYCODE_BACK && event.action == KeyEvent.ACTION_UP) {
+                    if (previewing) {
+                        closePreview()
+                    } else {
+                        showMinimizedBubble()
+                    }
+                    true
+                } else {
+                    false
+                }
+            }
         }
 
         panel.addView(buildToolbar())
@@ -842,6 +899,7 @@ class FloatingFileManagerService : Service() {
         previewing = false
         currentPreviewFile = null
         currentTextEditor = null
+        updateOverlayFocusability(false)
         bindPanelScaffold()
         val tab = activeTab()
         if (forceReload) {
@@ -960,7 +1018,7 @@ class FloatingFileManagerService : Service() {
             ext in textExtensions -> textPreview(file)
             ext in imageExtensions -> imagePreview(file)
             ext in videoExtensions -> mediaPreview(file, isVideo = true)
-            ext in audioExtensions -> mediaPreview(file, isVideo = false)
+            ext in audioExtensions -> audioPreview(file)
             ext in archiveExtensions -> archivePreview(file)
             else -> unsupportedPreview()
         }
@@ -973,6 +1031,7 @@ class FloatingFileManagerService : Service() {
                 FrameLayout.LayoutParams.MATCH_PARENT,
             ),
         )
+        updateOverlayFocusability(isTextFile(file), currentTextEditor)
     }
 
     private fun closePreview() {
@@ -980,6 +1039,7 @@ class FloatingFileManagerService : Service() {
         currentTextEditor = null
         previewing = false
         currentPreviewFile = null
+        updateOverlayFocusability(false)
         bindPanelScaffold()
         renderDirectoryState(forceReload = false)
     }
@@ -991,19 +1051,10 @@ class FloatingFileManagerService : Service() {
             "读取失败: ${e.message}"
         }
         return ScrollView(this).apply {
-            addView(EditText(context).apply {
+            addView(CodeEditorEditText(context).apply {
                 currentTextEditor = this
                 setText(text)
-                setTextColor(Color.WHITE)
-                textSize = 12f
-                typeface = Typeface.MONOSPACE
-                gravity = Gravity.TOP or Gravity.START
-                inputType = InputType.TYPE_CLASS_TEXT or
-                    InputType.TYPE_TEXT_FLAG_MULTI_LINE or
-                    InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
-                setBackgroundColor(Color.BLACK)
-                setHintTextColor(0xFF888888.toInt())
-                setPadding(dp(12), dp(12), dp(12), dp(12))
+                setSelection(text.length.coerceAtMost(length()))
             })
         }
     }
@@ -1196,12 +1247,155 @@ class FloatingFileManagerService : Service() {
         }
     }
 
+    private fun audioPreview(file: File): View {
+        val player = ExoPlayer.Builder(this).build()
+        currentPlayer = player
+        val info = try {
+            MediaToolbox.readMediaInfo(file)
+        } catch (_: Exception) {
+            null
+        }
+
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(14), dp(14), dp(14), dp(14))
+            setBackgroundColor(Color.BLACK)
+        }
+
+        val hero = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            background = rounded(0xFF11161E.toInt(), 18, 1, 0xFF263445.toInt())
+            setPadding(dp(14), dp(14), dp(14), dp(14))
+        }
+        val coverFrame = FrameLayout(this).apply {
+            background = rounded(0xFF1B2430.toInt(), 16, 1, 0xFF314357.toInt())
+        }
+        val coverSize = dp(92)
+        if (info?.embeddedArt != null) {
+            val bitmap = BitmapFactory.decodeByteArray(info.embeddedArt, 0, info.embeddedArt.size)
+            coverFrame.addView(
+                ImageView(this).apply {
+                    scaleType = ImageView.ScaleType.CENTER_CROP
+                    setImageBitmap(bitmap)
+                },
+                FrameLayout.LayoutParams(coverSize, coverSize, Gravity.CENTER),
+            )
+        } else {
+            coverFrame.addView(
+                TextView(this).apply {
+                    text = "AUDIO"
+                    gravity = Gravity.CENTER
+                    setTextColor(0xFFD7E6FF.toInt())
+                    textSize = 16f
+                    typeface = Typeface.DEFAULT_BOLD
+                },
+                FrameLayout.LayoutParams(coverSize, coverSize, Gravity.CENTER),
+            )
+        }
+        hero.addView(
+            coverFrame,
+            LinearLayout.LayoutParams(coverSize, coverSize),
+        )
+
+        val infoColumn = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(14), 0, 0, 0)
+        }
+        infoColumn.addView(TextView(this).apply {
+            text = info?.title?.takeIf { it.isNotBlank() } ?: file.nameWithoutExtension.ifBlank { file.name }
+            setTextColor(Color.WHITE)
+            textSize = 18f
+            typeface = Typeface.DEFAULT_BOLD
+            maxLines = 2
+        })
+        infoColumn.addView(TextView(this).apply {
+            text = buildString {
+                append(info?.artist?.takeIf { it.isNotBlank() } ?: "未知艺术家")
+                val album = info?.album?.takeIf { it.isNotBlank() }
+                if (album != null) {
+                    append(" · ")
+                    append(album)
+                }
+            }
+            setTextColor(0xFF9FB0C5.toInt())
+            textSize = 12f
+            maxLines = 2
+        })
+        infoColumn.addView(TextView(this).apply {
+            text = buildString {
+                val duration = info?.durationMs?.takeIf { it > 0 }?.let(MediaToolbox::formatDuration) ?: "--:--"
+                append(duration)
+                info?.bitrate?.takeIf { it > 0 }?.let {
+                    append(" · ")
+                    append("${it / 1000} kbps")
+                }
+                info?.sampleRate?.takeIf { it > 0 }?.let {
+                    append(" · ")
+                    append("${it} Hz")
+                }
+            }
+            setTextColor(0xFF7F8DA3.toInt())
+            textSize = 11f
+            maxLines = 2
+            setPadding(0, dp(8), 0, 0)
+        })
+        hero.addView(
+            infoColumn,
+            LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f),
+        )
+        container.addView(hero)
+
+        val actionRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(0, dp(12), 0, dp(8))
+        }
+        actionRow.addView(chip("媒体信息", false) { showMediaInfoDialog(file) })
+        if (file.extension.lowercase(Locale.ROOT) != "mp3") {
+            actionRow.addView(chip("转 MP3", false) { convertAudioToMp3Prompt(file) })
+        }
+        container.addView(actionRow)
+
+        val controlView = PlayerControlView(this).apply {
+            setPlayer(player)
+            setShowTimeoutMs(0)
+            setShowNextButton(false)
+            setShowPreviousButton(false)
+            setShowShuffleButton(false)
+            setBackgroundColor(0xFF101010.toInt())
+        }
+        container.addView(
+            controlView,
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            ).apply {
+                topMargin = dp(4)
+            },
+        )
+
+        player.addListener(object : Player.Listener {
+            override fun onPlayerError(error: PlaybackException) {
+                Toast.makeText(
+                    this@FloatingFileManagerService,
+                    "音频播放失败，请尝试外部应用打开",
+                    Toast.LENGTH_SHORT,
+                ).show()
+            }
+        })
+        player.setMediaItem(MediaItem.fromUri(Uri.fromFile(file)))
+        player.prepare()
+        player.playWhenReady = true
+        return ScrollView(this).apply { addView(container) }
+    }
+
     private fun mediaPreview(file: File, isVideo: Boolean): View {
         val player = ExoPlayer.Builder(this).build()
         currentPlayer = player
 
         val container = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
+            setBackgroundColor(Color.BLACK)
         }
 
         val mediaSurface = FrameLayout(this).apply {
@@ -1216,17 +1410,19 @@ class FloatingFileManagerService : Service() {
             ),
         )
 
+        var textureView: TextureView? = null
         if (isVideo) {
-            val textureView = TextureView(this)
+            val videoTextureView = TextureView(this)
+            textureView = videoTextureView
             mediaSurface.addView(
-                textureView,
+                videoTextureView,
                 FrameLayout.LayoutParams(
-                    FrameLayout.LayoutParams.MATCH_PARENT,
-                    FrameLayout.LayoutParams.MATCH_PARENT,
+                    FrameLayout.LayoutParams.WRAP_CONTENT,
+                    FrameLayout.LayoutParams.WRAP_CONTENT,
                     Gravity.CENTER,
                 ),
             )
-            player.setVideoTextureView(textureView)
+            player.setVideoTextureView(videoTextureView)
         } else {
             mediaSurface.addView(
                 TextView(this).apply {
@@ -1258,6 +1454,47 @@ class FloatingFileManagerService : Service() {
                 LinearLayout.LayoutParams.WRAP_CONTENT,
             ),
         )
+        if (isVideo) {
+            container.addView(
+                LinearLayout(this).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    setPadding(dp(12), dp(10), dp(12), dp(12))
+                    addView(chip("媒体信息", false) { showMediaInfoDialog(file) })
+                    addView(chip("提取音频", false) { extractAudioFromVideoPrompt(file) })
+                },
+                LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                ),
+            )
+        }
+
+        fun updateVideoBounds(videoSize: VideoSize) {
+            val targetView = textureView ?: return
+            mediaSurface.post {
+                val containerWidth = mediaSurface.width
+                val containerHeight = mediaSurface.height
+                if (containerWidth <= 0 || containerHeight <= 0 || videoSize.height <= 0) {
+                    return@post
+                }
+                val pixelRatio =
+                    if (videoSize.pixelWidthHeightRatio > 0f) videoSize.pixelWidthHeightRatio else 1f
+                val videoRatio = (videoSize.width * pixelRatio) / videoSize.height.toFloat()
+                var targetWidth = containerWidth
+                var targetHeight = (targetWidth / videoRatio).roundToInt()
+                if (targetHeight > containerHeight) {
+                    targetHeight = containerHeight
+                    targetWidth = (targetHeight * videoRatio).roundToInt()
+                }
+                val layoutParams = targetView.layoutParams as FrameLayout.LayoutParams
+                if (layoutParams.width != targetWidth || layoutParams.height != targetHeight) {
+                    layoutParams.width = targetWidth
+                    layoutParams.height = targetHeight
+                    layoutParams.gravity = Gravity.CENTER
+                    targetView.layoutParams = layoutParams
+                }
+            }
+        }
 
         player.addListener(object : Player.Listener {
             override fun onPlayerError(error: PlaybackException) {
@@ -1267,10 +1504,19 @@ class FloatingFileManagerService : Service() {
                     Toast.LENGTH_SHORT,
                 ).show()
             }
+
+            override fun onVideoSizeChanged(videoSize: VideoSize) {
+                updateVideoBounds(videoSize)
+            }
         })
         player.setMediaItem(MediaItem.fromUri(Uri.fromFile(file)))
         player.prepare()
         player.playWhenReady = true
+        if (isVideo) {
+            mediaSurface.post {
+                player.videoSize.takeIf { it != VideoSize.UNKNOWN }?.let(::updateVideoBounds)
+            }
+        }
         return container
     }
 
@@ -1602,6 +1848,11 @@ class FloatingFileManagerService : Service() {
             .create()
         dialog.window?.setType(overlayType())
         dialog.show()
+        input.post {
+            input.requestFocus()
+            val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+            imm.showSoftInput(input, InputMethodManager.SHOW_IMPLICIT)
+        }
     }
 
     private fun showConfirmDialog(message: String, onConfirm: () -> Unit) {
@@ -1612,6 +1863,61 @@ class FloatingFileManagerService : Service() {
             .create()
         dialog.window?.setType(overlayType())
         dialog.show()
+    }
+
+    private fun showMediaInfoDialog(file: File) {
+        val infoText = try {
+            MediaToolbox.readMediaInfo(file).summaryLines(file).joinToString("\n")
+        } catch (e: Exception) {
+            "无法读取媒体信息: ${e.message}"
+        }
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("媒体信息")
+            .setMessage(infoText)
+            .setPositiveButton("确定", null)
+            .create()
+        dialog.window?.setType(overlayType())
+        dialog.show()
+    }
+
+    private fun convertAudioToMp3Prompt(file: File) {
+        val defaultName = "${file.nameWithoutExtension.ifBlank { file.name }}.mp3"
+        showTextInputDialog("转为 MP3", "输出文件名", defaultName) { input ->
+            val target = uniqueDestination(activeTab().currentDir, if (input.endsWith(".mp3", true)) input else "$input.mp3")
+            showLoading("FFmpeg 正在转码音频...")
+            worker.execute {
+                val result = MediaToolbox.convertAudioToMp3(file, target)
+                mainHandler.post {
+                    hideOperationProgress()
+                    if (result.success) {
+                        renderDirectoryState(forceReload = true)
+                        Toast.makeText(this, result.message, Toast.LENGTH_SHORT).show()
+                    } else {
+                        Toast.makeText(this, result.message, Toast.LENGTH_LONG).show()
+                    }
+                }
+            }
+        }
+    }
+
+    private fun extractAudioFromVideoPrompt(file: File) {
+        val defaultName = "${file.nameWithoutExtension.ifBlank { file.name }}.m4a"
+        showTextInputDialog("提取音频", "输出文件名", defaultName) { input ->
+            val target = uniqueDestination(activeTab().currentDir, if (input.endsWith(".m4a", true)) input else "$input.m4a")
+            showLoading("FFmpeg 正在提取音频...")
+            worker.execute {
+                val result = MediaToolbox.extractAudioFromVideo(file, target)
+                mainHandler.post {
+                    hideOperationProgress()
+                    if (result.success) {
+                        renderDirectoryState(forceReload = true)
+                        Toast.makeText(this, result.message, Toast.LENGTH_SHORT).show()
+                    } else {
+                        Toast.makeText(this, result.message, Toast.LENGTH_LONG).show()
+                    }
+                }
+            }
+        }
     }
 
     private fun showItemMenu(anchor: View, entry: FileEntry) {
@@ -1630,6 +1936,13 @@ class FloatingFileManagerService : Service() {
             menu.add(0, 9, 7, "压缩为 ZIP")
             if (!entry.isDirectory && isArchiveFile(file)) {
                 menu.add(0, 8, 8, "解压到当前目录")
+            }
+            if (!entry.isDirectory && isAudioFile(file)) {
+                menu.add(0, 10, 9, "转为 MP3")
+                menu.add(0, 12, 10, "媒体信息")
+            } else if (!entry.isDirectory && isVideoFile(file)) {
+                menu.add(0, 11, 9, "提取音频")
+                menu.add(0, 12, 10, "媒体信息")
             }
             setOnMenuItemClickListener { item ->
                 when (item.itemId) {
@@ -1681,6 +1994,18 @@ class FloatingFileManagerService : Service() {
                     }
                     9 -> {
                         compressFilesPrompt(listOf(file))
+                        true
+                    }
+                    10 -> {
+                        convertAudioToMp3Prompt(file)
+                        true
+                    }
+                    11 -> {
+                        extractAudioFromVideoPrompt(file)
+                        true
+                    }
+                    12 -> {
+                        showMediaInfoDialog(file)
                         true
                     }
                     else -> false
@@ -1809,6 +2134,14 @@ class FloatingFileManagerService : Service() {
 
     private fun isTextFile(file: File): Boolean {
         return file.extension.lowercase(Locale.ROOT) in textExtensions
+    }
+
+    private fun isAudioFile(file: File): Boolean {
+        return file.extension.lowercase(Locale.ROOT) in audioExtensions
+    }
+
+    private fun isVideoFile(file: File): Boolean {
+        return file.extension.lowercase(Locale.ROOT) in videoExtensions
     }
 
     private fun rounded(color: Int, radius: Int, strokeWidth: Int, strokeColor: Int): GradientDrawable {
@@ -2276,6 +2609,129 @@ class FloatingFileManagerService : Service() {
         onStep(1, normalizedName)
     }
 
+    private inner class CodeEditorEditText(context: Context) : EditText(context) {
+        private val gutterBackgroundPaint = Paint().apply {
+            color = 0xFF0F131A.toInt()
+        }
+        private val gutterDividerPaint = Paint().apply {
+            color = 0xFF2F3A4A.toInt()
+            strokeWidth = dp(1).toFloat()
+        }
+        private val lineNumberPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = 0xFF7F8DA3.toInt()
+            textAlign = Paint.Align.RIGHT
+            textSize = sp(10f)
+            typeface = Typeface.MONOSPACE
+        }
+        private var applyingHighlight = false
+        private val highlightRunnable = Runnable {
+            applySyntaxHighlighting()
+            invalidate()
+        }
+
+        init {
+            setTextColor(Color.WHITE)
+            setHintTextColor(0xFF888888.toInt())
+            setBackgroundColor(Color.BLACK)
+            textSize = 12f
+            typeface = Typeface.MONOSPACE
+            gravity = Gravity.TOP or Gravity.START
+            inputType = InputType.TYPE_CLASS_TEXT or
+                InputType.TYPE_TEXT_FLAG_MULTI_LINE or
+                InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+            isHorizontallyScrolling = true
+            setPadding(gutterWidth() + dp(12), dp(12), dp(18), dp(12))
+            addTextChangedListener(object : TextWatcher {
+                override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+
+                override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                    setPadding(gutterWidth() + dp(12), dp(12), dp(18), dp(12))
+                    removeCallbacks(highlightRunnable)
+                    postDelayed(highlightRunnable, 70L)
+                }
+
+                override fun afterTextChanged(s: Editable?) = Unit
+            })
+        }
+
+        override fun onDraw(canvas: Canvas) {
+            val gutterRight = totalPaddingLeft - dp(10)
+            canvas.drawRect(
+                0f,
+                scrollY.toFloat(),
+                gutterRight.toFloat(),
+                (scrollY + height).toFloat(),
+                gutterBackgroundPaint,
+            )
+            canvas.drawLine(
+                gutterRight.toFloat(),
+                scrollY.toFloat(),
+                gutterRight.toFloat(),
+                (scrollY + height).toFloat(),
+                gutterDividerPaint,
+            )
+            layout?.let { textLayout ->
+                val firstLine = textLayout.getLineForVertical(scrollY)
+                val lastLine = textLayout.getLineForVertical(scrollY + height)
+                val currentLine = textLayout.getLineForOffset(selectionStart.coerceAtLeast(0))
+                for (line in firstLine..lastLine) {
+                    val baseline = textLayout.getLineBaseline(line) + totalPaddingTop
+                    lineNumberPaint.color =
+                        if (line == currentLine) 0xFF9FC3FF.toInt() else 0xFF7F8DA3.toInt()
+                    canvas.drawText(
+                        (line + 1).toString(),
+                        (gutterRight - dp(6)).toFloat(),
+                        baseline.toFloat(),
+                        lineNumberPaint,
+                    )
+                }
+            }
+            super.onDraw(canvas)
+        }
+
+        private fun gutterWidth(): Int {
+            val digits = max(2, lineCount.coerceAtLeast(1).toString().length)
+            val sampleWidth = lineNumberPaint.measureText("9".repeat(digits)).roundToInt()
+            return max(dp(42), sampleWidth + dp(18))
+        }
+
+        private fun applySyntaxHighlighting() {
+            if (applyingHighlight) {
+                return
+            }
+            val editable = text ?: return
+            if (editable.length > MAX_HIGHLIGHT_LENGTH) {
+                editable.getSpans(0, editable.length, SyntaxColorSpan::class.java).forEach(editable::removeSpan)
+                return
+            }
+            applyingHighlight = true
+            editable.getSpans(0, editable.length, SyntaxColorSpan::class.java).forEach(editable::removeSpan)
+            val content = editable.toString()
+            applyPattern(editable, content, COMMENT_BLOCK_PATTERN, 0xFF6A9955.toInt())
+            applyPattern(editable, content, COMMENT_LINE_PATTERN, 0xFF6A9955.toInt())
+            applyPattern(editable, content, STRING_PATTERN, 0xFFCE9178.toInt())
+            applyPattern(editable, content, NUMBER_PATTERN, 0xFFB5CEA8.toInt())
+            applyPattern(editable, content, KEYWORD_PATTERN, 0xFF569CD6.toInt())
+            applyPattern(editable, content, ANNOTATION_PATTERN, 0xFFDCDCAA.toInt())
+            applyingHighlight = false
+        }
+
+        private fun applyPattern(editable: Editable, source: String, regex: Regex, color: Int) {
+            regex.findAll(source).forEach { match ->
+                editable.setSpan(
+                    SyntaxColorSpan(color),
+                    match.range.first,
+                    match.range.last + 1,
+                    android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+                )
+            }
+        }
+    }
+
+    private class SyntaxColorSpan(color: Int) : ForegroundColorSpan(color)
+
+    private fun sp(value: Float): Float = value * resources.displayMetrics.scaledDensity
+
     private inner class FileListAdapter : RecyclerView.Adapter<FileViewHolder>() {
         private var entries: List<FileEntry> = emptyList()
         private var mode: ViewMode = ViewMode.LIST
@@ -2358,9 +2814,19 @@ class FloatingFileManagerService : Service() {
         private const val NOTIFICATION_ID = 7071
         private const val MAX_TABS = 6
         private const val MAX_RECENT_DIRS = 12
+        private const val MAX_HIGHLIGHT_LENGTH = 220_000
         private const val PREFS_NAME = "floating_file_manager"
         private const val KEY_FAVORITES = "favorite_dirs"
         private const val KEY_RECENTS = "recent_dirs"
+
+        private val KEYWORD_PATTERN = Regex(
+            "\\b(?:class|fun|val|var|if|else|for|while|return|import|package|public|private|protected|static|final|void|int|long|double|float|boolean|true|false|null|def|from|as|const|let|function|async|await|switch|case|break|continue|try|catch|finally|new|this|super|extends|implements|interface|enum|typedef|sealed|when|object|override|struct|namespace|using|throw|throws|yield|lambda)\\b",
+        )
+        private val STRING_PATTERN = Regex("\"(?:\\\\.|[^\"\\\\])*\"|'(?:\\\\.|[^'\\\\])*'")
+        private val NUMBER_PATTERN = Regex("\\b\\d+(?:\\.\\d+)?\\b")
+        private val ANNOTATION_PATTERN = Regex("@[A-Za-z_][A-Za-z0-9_]*")
+        private val COMMENT_LINE_PATTERN = Regex("//.*?$|#.*?$", setOf(RegexOption.MULTILINE))
+        private val COMMENT_BLOCK_PATTERN = Regex("/\\*.*?\\*/", setOf(RegexOption.DOT_MATCHES_ALL))
 
         @Volatile
         var running: Boolean = false

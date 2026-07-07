@@ -34,7 +34,7 @@ def hasKeystore = keystoreProperties.containsKey('storeFile') &&
     file(keystoreProperties['storeFile']).exists()
 
 android {
-    namespace = "com.openclaw.cyx"
+    namespace = "com.agent.cyx"
     compileSdk = 36
     ndkVersion = "28.2.13676358"
 
@@ -48,7 +48,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.openclaw.cyx"
+        applicationId = "com.agent.cyx"
         minSdk = 29
         targetSdk = 36
         versionCode = flutterVersionCode.toInteger()
@@ -88,6 +88,7 @@ dependencies {
     implementation 'androidx.recyclerview:recyclerview:1.4.0'
     implementation 'androidx.media3:media3-exoplayer:1.4.1'
     implementation 'androidx.media3:media3-ui:1.4.1'
+    implementation 'com.arthenica:ffmpeg-kit-full:6.0-2'
     implementation 'org.apache.commons:commons-compress:1.26.0'
     implementation 'org.tukaani:xz:1.9'
     implementation 'com.github.luben:zstd-jni:1.5.6-4@aar'

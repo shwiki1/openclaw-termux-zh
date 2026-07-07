@@ -1,4 +1,4 @@
-package com.openclaw.cyx
+package com.agent.cyx
 
 import android.app.Notification
 import android.app.NotificationChannel
@@ -37,9 +37,9 @@ import io.flutter.plugin.common.MethodChannel
 import java.io.File
 
 class MainActivity : FlutterActivity() {
-    private val CHANNEL = "com.openclaw.cyx/native"
-    private val EVENT_CHANNEL = "com.openclaw.cyx/gateway_logs"
-    private val SETUP_LOG_EVENT_CHANNEL = "com.openclaw.cyx/setup_logs"
+    private val CHANNEL = "com.agent.cyx/native"
+    private val EVENT_CHANNEL = "com.agent.cyx/gateway_logs"
+    private val SETUP_LOG_EVENT_CHANNEL = "com.agent.cyx/setup_logs"
 
     private lateinit var bootstrapManager: BootstrapManager
     private lateinit var processManager: ProcessManager
@@ -67,7 +67,7 @@ class MainActivity : FlutterActivity() {
             .platformViewsController
             .registry
             .registerViewFactory(
-                "com.openclaw.cyx/native_terminal",
+                "com.agent.cyx/native_terminal",
                 OpenClawNativeTerminalViewFactory(flutterEngine.dartExecutor.binaryMessenger),
             )
 

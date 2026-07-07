@@ -55,11 +55,11 @@ class NativeTerminalViewState extends State<NativeTerminalView> {
       return _FallbackSelectableTerminal(text: _snapshotText());
     }
     return AndroidView(
-      viewType: 'com.openclaw.cyx/native_terminal',
+      viewType: 'com.agent.cyx/native_terminal',
       creationParams: {'viewId': _viewId},
       creationParamsCodec: const StandardMessageCodec(),
       onPlatformViewCreated: (_) {
-        _channel = MethodChannel('com.openclaw.cyx/native_terminal/$_viewId');
+        _channel = MethodChannel('com.agent.cyx/native_terminal/$_viewId');
         _syncText(force: true);
       },
     );

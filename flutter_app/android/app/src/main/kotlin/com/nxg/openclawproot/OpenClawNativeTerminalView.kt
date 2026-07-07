@@ -1,4 +1,4 @@
-package com.openclaw.cyx
+package com.agent.cyx
 
 import android.content.Context
 import android.graphics.Color
@@ -33,7 +33,7 @@ class OpenClawNativeTerminalView(
     private val textView = TextView(context)
     private val channel = MethodChannel(
         messenger,
-        "com.openclaw.cyx/native_terminal/$channelId",
+        "com.agent.cyx/native_terminal/$channelId",
     )
 
     init {
