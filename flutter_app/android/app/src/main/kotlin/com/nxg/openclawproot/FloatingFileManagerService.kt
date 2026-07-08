@@ -27,6 +27,7 @@ import android.os.IBinder
 import android.os.Looper
 import android.text.Editable
 import android.text.InputType
+import android.text.TextUtils
 import android.text.TextWatcher
 import android.text.style.ForegroundColorSpan
 import android.util.LruCache
@@ -106,17 +107,18 @@ class FloatingFileManagerService : Service() {
     private var viewMode = ViewMode.LIST
     private var sortMode = SortMode.NAME
     private var showHidden = false
+    private var controlBarExpanded = false
     private var selectionMode = false
     private val selectedPaths = LinkedHashSet<String>()
     private var clipboard: ClipboardState? = null
 
     private var titleView: TextView? = null
-    private var backButton: TextView? = null
-    private var saveButton: TextView? = null
-    private var openButton: TextView? = null
-    private var shareButton: TextView? = null
-    private var extractButton: TextView? = null
-    private var minimizeButton: TextView? = null
+    private var backButton: ImageButton? = null
+    private var saveButton: ImageButton? = null
+    private var openButton: ImageButton? = null
+    private var shareButton: ImageButton? = null
+    private var extractButton: ImageButton? = null
+    private var minimizeButton: ImageButton? = null
     private var tabsScroll: HorizontalScrollView? = null
     private var tabsRow: LinearLayout? = null
     private var quickRootsScroll: HorizontalScrollView? = null
@@ -412,10 +414,12 @@ class FloatingFileManagerService : Service() {
 
         val controlsScroll = HorizontalScrollView(this).apply {
             isHorizontalScrollBarEnabled = false
+            setPadding(dp(2), 0, dp(2), dp(8))
+            background = rounded(0xFF121A22.toInt(), 18, 1, 0xFF2F3C4B.toInt())
             val row = LinearLayout(context).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
-                setPadding(0, 0, 0, dp(8))
+                setPadding(dp(8), dp(8), dp(8), dp(8))
             }
             controlBarRow = row
             addView(row)
@@ -500,7 +504,8 @@ class FloatingFileManagerService : Service() {
         val toolbar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(2), dp(2), dp(2), dp(8))
+            setPadding(dp(8), dp(8), dp(8), dp(10))
+            background = rounded(0xFF121A22.toInt(), 20, 1, 0xFF2E3948.toInt())
         }
         attachDrag(toolbar)
 
@@ -509,6 +514,7 @@ class FloatingFileManagerService : Service() {
             textSize = 15f
             typeface = Typeface.DEFAULT_BOLD
             maxLines = 1
+            ellipsize = TextUtils.TruncateAt.END
         }
         titleView = title
         toolbar.addView(
@@ -520,18 +526,26 @@ class FloatingFileManagerService : Service() {
             ),
         )
 
-        val back = tinyButton("上级") {
+        val actionRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+
+        val back = toolbarActionButton(toolbarBackIcon(), "上级") {
             if (previewing) {
                 closePreview()
             } else {
                 goParent()
             }
         }
-        val save = tinyButton("保存") { saveCurrentTextFile() }
-        val open = tinyButton("打开") { currentPreviewFile?.let { openExternal(it) } }
-        val share = tinyButton("分享") { currentPreviewFile?.let { shareFile(it) } }
-        val extract = tinyButton("解压") { currentPreviewFile?.let { extractArchiveToCurrentDir(it) } }
-        val minimize = tinyButton("最小") { showMinimizedBubble() }
+        val save = toolbarActionButton(android.R.drawable.ic_menu_save, "保存") { saveCurrentTextFile() }
+        val open = toolbarActionButton(android.R.drawable.ic_menu_view, "打开") { currentPreviewFile?.let { openExternal(it) } }
+        val share = toolbarActionButton(android.R.drawable.ic_menu_share, "分享") { currentPreviewFile?.let { shareFile(it) } }
+        val extract = toolbarActionButton(android.R.drawable.stat_sys_download_done, "解压") {
+            currentPreviewFile?.let { extractArchiveToCurrentDir(it) }
+        }
+        val minimize = toolbarActionButton(android.R.drawable.arrow_down_float, "最小化") { showMinimizedBubble() }
+        val close = toolbarActionButton(android.R.drawable.ic_menu_close_clear_cancel, "关闭") { stopSelf() }
         backButton = back
         saveButton = save
         openButton = open
@@ -539,13 +553,23 @@ class FloatingFileManagerService : Service() {
         extractButton = extract
         minimizeButton = minimize
 
-        toolbar.addView(back)
-        toolbar.addView(save)
-        toolbar.addView(open)
-        toolbar.addView(share)
-        toolbar.addView(extract)
-        toolbar.addView(minimize)
-        toolbar.addView(iconButton(android.R.drawable.ic_menu_close_clear_cancel) { stopSelf() })
+        actionRow.addView(back)
+        actionRow.addView(save)
+        actionRow.addView(open)
+        actionRow.addView(share)
+        actionRow.addView(extract)
+        actionRow.addView(minimize)
+        actionRow.addView(close)
+        toolbar.addView(
+            HorizontalScrollView(this).apply {
+                isHorizontalScrollBarEnabled = false
+                addView(actionRow)
+            },
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            ),
+        )
         return toolbar
     }
 
@@ -557,7 +581,8 @@ class FloatingFileManagerService : Service() {
             "${tab.title} · ${tab.currentDir.absolutePath}"
         }
 
-        backButton?.text = if (previewing) "返回" else "上级"
+        backButton?.setImageResource(toolbarBackIcon())
+        backButton?.contentDescription = if (previewing) "返回" else "上级"
         saveButton?.visibility = if (previewing && currentPreviewFile?.let(::isTextFile) == true) View.VISIBLE else View.GONE
         openButton?.visibility = if (previewing) View.VISIBLE else View.GONE
         shareButton?.visibility = if (previewing) View.VISIBLE else View.GONE
@@ -804,35 +829,46 @@ class FloatingFileManagerService : Service() {
     private fun rebuildControlBar() {
         val row = controlBarRow ?: return
         row.removeAllViews()
+        row.addView(
+            controlActionButton(
+                icon = if (controlBarExpanded) android.R.drawable.arrow_up_float else android.R.drawable.arrow_down_float,
+                label = if (controlBarExpanded) "收起" else "选项",
+                selected = controlBarExpanded,
+                expanded = true,
+            ) {
+                controlBarExpanded = !controlBarExpanded
+                rebuildControlBar()
+            },
+        )
         if (selectionMode) {
-            row.addView(chip("已选 ${selectedPaths.size}", true) {})
-            row.addView(chip("全选", false) { selectAllVisible() })
+            row.addView(controlActionButton(android.R.drawable.ic_menu_info_details, "已选 ${selectedPaths.size}", true, controlBarExpanded) {})
+            row.addView(controlActionButton(android.R.drawable.ic_menu_set_as, "全选", false, controlBarExpanded) { selectAllVisible() })
             if (selectedPaths.size == 1) {
-                row.addView(chip("重命名", false) { renameSelected() })
+                row.addView(controlActionButton(android.R.drawable.ic_menu_edit, "重命名", false, controlBarExpanded) { renameSelected() })
             }
-            row.addView(chip("压缩", false) { compressFilesPrompt(selectedFiles()) })
-            row.addView(chip("复制", false) { captureClipboard(move = false) })
-            row.addView(chip("移动", false) { captureClipboard(move = true) })
-            row.addView(chip("删除", false) { deleteSelected() })
-            row.addView(chip("取消", false) { clearSelection() })
+            row.addView(controlActionButton(android.R.drawable.ic_menu_save, "压缩", false, controlBarExpanded) { compressFilesPrompt(selectedFiles()) })
+            row.addView(controlActionButton(android.R.drawable.ic_menu_share, "复制", false, controlBarExpanded) { captureClipboard(move = false) })
+            row.addView(controlActionButton(android.R.drawable.ic_menu_set_as, "移动", false, controlBarExpanded) { captureClipboard(move = true) })
+            row.addView(controlActionButton(android.R.drawable.ic_menu_delete, "删除", false, controlBarExpanded) { deleteSelected() })
+            row.addView(controlActionButton(android.R.drawable.ic_menu_close_clear_cancel, "取消", false, controlBarExpanded) { clearSelection() })
             return
         }
 
         clipboard?.let {
-            row.addView(chip(if (it.move) "粘贴移动" else "粘贴复制", true) {
-                pasteClipboard()
-            })
+            row.addView(
+                controlActionButton(
+                    android.R.drawable.ic_menu_set_as,
+                    if (it.move) "粘贴移动" else "粘贴复制",
+                    true,
+                    controlBarExpanded,
+                ) { pasteClipboard() },
+            )
         }
         val currentDir = activeTab().currentDir
-        row.addView(
-            chip(
-                if (isFavoriteDir(currentDir)) "取消收藏" else "收藏当前",
-                isFavoriteDir(currentDir),
-            ) {
-                toggleFavoriteDir(currentDir)
-            },
-        )
-        val favoritesChip = chip("收藏夹", favoriteDirs.isNotEmpty()) {}
+        row.addView(controlActionButton(android.R.drawable.btn_star_big_on, if (isFavoriteDir(currentDir)) "取消收藏" else "收藏当前", isFavoriteDir(currentDir), controlBarExpanded) {
+            toggleFavoriteDir(currentDir)
+        })
+        val favoritesChip = controlActionButton(android.R.drawable.btn_star_big_off, "收藏夹", favoriteDirs.isNotEmpty(), controlBarExpanded) {}
         favoritesChip.setOnClickListener {
             showDirectoryCollectionMenu(
                 anchor = favoritesChip,
@@ -841,7 +877,7 @@ class FloatingFileManagerService : Service() {
             )
         }
         row.addView(favoritesChip)
-        val recentChip = chip("最近", recentDirs.isNotEmpty()) {}
+        val recentChip = controlActionButton(android.R.drawable.ic_menu_recent_history, "最近", recentDirs.isNotEmpty(), controlBarExpanded) {}
         recentChip.setOnClickListener {
             showDirectoryCollectionMenu(
                 anchor = recentChip,
@@ -851,26 +887,26 @@ class FloatingFileManagerService : Service() {
             )
         }
         row.addView(recentChip)
-        row.addView(chip("新建", false) { createFolderPrompt() })
-        row.addView(chip("多选", false) {
+        row.addView(controlActionButton(android.R.drawable.ic_menu_add, "新建", false, controlBarExpanded) { createFolderPrompt() })
+        row.addView(controlActionButton(android.R.drawable.ic_menu_agenda, "多选", false, controlBarExpanded) {
             selectionMode = true
             bindPanelScaffold()
             fileAdapter?.notifyDataSetChanged()
         })
-        row.addView(chip(if (viewMode == ViewMode.LIST) "列表" else "网格", true) {
+        row.addView(controlActionButton(android.R.drawable.ic_menu_sort_by_size, if (viewMode == ViewMode.LIST) "列表" else "网格", true, controlBarExpanded) {
             viewMode = if (viewMode == ViewMode.LIST) ViewMode.GRID else ViewMode.LIST
             fileAdapter?.setViewMode(viewMode)
             updateLayoutManager()
         })
-        row.addView(chip(sortMode.label, false) {
+        row.addView(controlActionButton(android.R.drawable.ic_menu_sort_by_size, sortMode.label, false, controlBarExpanded) {
             sortMode = sortMode.next()
             renderDirectoryState(forceReload = true)
         })
-        row.addView(chip(if (showHidden) "隐藏:开" else "隐藏:关", showHidden) {
+        row.addView(controlActionButton(android.R.drawable.ic_menu_view, if (showHidden) "隐藏:开" else "隐藏:关", showHidden, controlBarExpanded) {
             showHidden = !showHidden
             renderDirectoryState(forceReload = true)
         })
-        row.addView(chip("刷新", false) { renderDirectoryState(forceReload = true) })
+        row.addView(controlActionButton(android.R.drawable.ic_popup_sync, "刷新", false, controlBarExpanded) { renderDirectoryState(forceReload = true) })
     }
 
     private fun updateLayoutManager() {
@@ -2719,6 +2755,60 @@ class FloatingFileManagerService : Service() {
         }
     }
 
+    private fun controlActionButton(
+        icon: Int,
+        label: String,
+        selected: Boolean,
+        expanded: Boolean,
+        action: () -> Unit,
+    ): LinearLayout {
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(
+                if (expanded) dp(10) else dp(9),
+                dp(8),
+                if (expanded) dp(12) else dp(9),
+                dp(8),
+            )
+            background = rounded(
+                if (selected) 0xFF1E4774.toInt() else 0xFF18222D.toInt(),
+                18,
+                1,
+                if (selected) 0xFF73B0FF.toInt() else 0xFF324456.toInt(),
+            )
+            isClickable = true
+            isFocusable = true
+            contentDescription = label
+            setOnClickListener { action() }
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            ).apply {
+                setMargins(0, 0, dp(8), 0)
+            }
+
+            addView(
+                ImageView(context).apply {
+                    setImageResource(icon)
+                    setColorFilter(Color.WHITE)
+                    layoutParams = LinearLayout.LayoutParams(dp(18), dp(18))
+                },
+            )
+            if (expanded) {
+                addView(
+                    TextView(context).apply {
+                        text = label
+                        setTextColor(Color.WHITE)
+                        textSize = 12f
+                        maxLines = 1
+                        setPadding(dp(8), 0, 0, 0)
+                    },
+                )
+            }
+        }
+    }
+
     private fun tinyButton(label: String, action: () -> Unit): TextView {
         return TextView(this).apply {
             text = label
@@ -2733,6 +2823,29 @@ class FloatingFileManagerService : Service() {
                 LinearLayout.LayoutParams.WRAP_CONTENT,
             ).apply {
                 setMargins(dp(5), 0, 0, 0)
+            }
+        }
+    }
+
+    private fun toolbarBackIcon(): Int {
+        return if (previewing) {
+            android.R.drawable.ic_media_previous
+        } else {
+            android.R.drawable.arrow_up_float
+        }
+    }
+
+    private fun toolbarActionButton(icon: Int, description: String, action: () -> Unit): ImageButton {
+        return ImageButton(this).apply {
+            setImageResource(icon)
+            setColorFilter(Color.WHITE)
+            contentDescription = description
+            scaleType = ImageView.ScaleType.CENTER_INSIDE
+            background = rounded(0xFF192330.toInt(), 16, 1, 0xFF35506B.toInt())
+            setPadding(dp(8), dp(8), dp(8), dp(8))
+            setOnClickListener { action() }
+            layoutParams = LinearLayout.LayoutParams(dp(36), dp(36)).apply {
+                setMargins(dp(6), 0, 0, 0)
             }
         }
     }
