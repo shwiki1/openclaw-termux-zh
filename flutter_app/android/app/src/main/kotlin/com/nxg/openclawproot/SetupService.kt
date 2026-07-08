@@ -18,8 +18,12 @@ class SetupService : Service() {
         var isRunning = false
             private set
         private var instance: SetupService? = null
+        private var retainCount = 0
 
         fun start(context: Context) {
+            synchronized(this) {
+                retainCount += 1
+            }
             val intent = Intent(context, SetupService::class.java)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 context.startForegroundService(intent)
@@ -29,12 +33,26 @@ class SetupService : Service() {
         }
 
         fun stop(context: Context) {
+            val shouldStop = synchronized(this) {
+                if (retainCount > 0) {
+                    retainCount -= 1
+                }
+                retainCount <= 0
+            }
+            if (!shouldStop) {
+                return
+            }
             val intent = Intent(context, SetupService::class.java)
             context.stopService(intent)
         }
 
         fun updateNotification(text: String, progress: Int = -1) {
             instance?.updateNotificationWith(text, progress)
+        }
+
+        fun retain(context: Context, text: String, progress: Int = -1) {
+            start(context)
+            updateNotification(text, progress)
         }
     }
 
@@ -61,6 +79,9 @@ class SetupService : Service() {
     override fun onDestroy() {
         isRunning = false
         instance = null
+        synchronized(Companion) {
+            retainCount = 0
+        }
         releaseWakeLock()
         super.onDestroy()
     }
@@ -136,4 +157,3 @@ class SetupService : Service() {
         } catch (_: Exception) {}
     }
 }
-

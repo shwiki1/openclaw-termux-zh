@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../l10n/app_localizations.dart';
 import '../services/message_platform_config_service.dart';
@@ -19,6 +20,8 @@ class _WeixinInstallerScreenState extends State<WeixinInstallerScreen> {
   bool _finished = false;
   int? _exitCode;
   var _generation = 0;
+  String? _detectedUrl;
+  StringBuffer _outputBuffer = StringBuffer();
 
   @override
   void initState() {
@@ -44,11 +47,43 @@ class _WeixinInstallerScreenState extends State<WeixinInstallerScreen> {
       '${MessagePlatformConfigService.buildWeixinInstallerTerminalCommand()}; '
       'echo "" && echo "Weixin installer finished. You can return now."';
 
+  void _consumeOutput(String chunk) {
+    if (chunk.isEmpty) {
+      return;
+    }
+    _outputBuffer.write(chunk);
+    final matches = RegExp(
+      r'''https?://[^\s"'<>]+''',
+    ).allMatches(_outputBuffer.toString()).toList();
+    final match = matches.isEmpty ? null : matches.last;
+    final url = match?.group(0);
+    if (url == null || url == _detectedUrl) {
+      return;
+    }
+    setState(() {
+      _detectedUrl = url;
+    });
+  }
+
+  Future<void> _openDetectedUrl() async {
+    final url = _detectedUrl;
+    if (url == null || url.isEmpty) {
+      return;
+    }
+    final uri = Uri.tryParse(url);
+    if (uri == null) {
+      return;
+    }
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
+
   void _restart() {
     setState(() {
       _finished = false;
       _exitCode = null;
       _generation++;
+      _detectedUrl = null;
+      _outputBuffer = StringBuffer();
     });
   }
 
@@ -78,11 +113,46 @@ class _WeixinInstallerScreenState extends State<WeixinInstallerScreen> {
       ),
       body: Column(
         children: [
+          if (_detectedUrl != null)
+            Container(
+              width: double.infinity,
+              color: const Color(0xFF111111),
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Detected login link',
+                    style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
+                        ),
+                  ),
+                  const SizedBox(height: 6),
+                  SelectableText(
+                    _detectedUrl!,
+                    style: const TextStyle(color: Colors.white70),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      FilledButton.tonal(
+                        onPressed: _openDetectedUrl,
+                        child: const Text('打开链接'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
           Expanded(
             child: NativeProotTerminal(
               key: ValueKey('weixin-installer-$_generation'),
               sessionId: 'weixin-installer-$_generation',
               command: _command,
+              keepAlive: true,
+              emitOutput: true,
+              onOutput: _consumeOutput,
               onSessionFinished: (exitCode) {
                 if (mounted) {
                   setState(() {

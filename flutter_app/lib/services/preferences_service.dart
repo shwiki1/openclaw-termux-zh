@@ -21,6 +21,10 @@ class PreferencesService {
   static const _keyLastAppVersion = 'last_app_version';
   static const _keyQqbotAppId = 'qqbot_app_id';
   static const _keyQqbotAppSecret = 'qqbot_app_secret';
+  static const _keyQqbotPluginInstalled = 'qqbot_plugin_installed';
+  static const _keyQqbotPluginCheckedAt = 'qqbot_plugin_checked_at';
+  static const _keyWeixinPluginInstalled = 'weixin_plugin_installed';
+  static const _keyWeixinPluginCheckedAt = 'weixin_plugin_checked_at';
   static const _keyLocalModelMaxCpuCores = 'local_model_max_cpu_cores';
   static const _keyLocalModelMemoryLimitMiB = 'local_model_memory_limit_mib';
   static const _keyLocalModelPerformanceMode = 'local_model_performance_mode';
@@ -151,6 +155,48 @@ class PreferencesService {
       _prefs.setString(_keyQqbotAppSecret, value);
     } else {
       _prefs.remove(_keyQqbotAppSecret);
+    }
+  }
+
+  bool? get qqbotPluginInstalled =>
+      _prefs.containsKey(_keyQqbotPluginInstalled)
+          ? _prefs.getBool(_keyQqbotPluginInstalled)
+          : null;
+  set qqbotPluginInstalled(bool? value) {
+    if (value == null) {
+      _prefs.remove(_keyQqbotPluginInstalled);
+    } else {
+      _prefs.setBool(_keyQqbotPluginInstalled, value);
+    }
+  }
+
+  int? get qqbotPluginCheckedAt => _prefs.getInt(_keyQqbotPluginCheckedAt);
+  set qqbotPluginCheckedAt(int? value) {
+    if (value == null) {
+      _prefs.remove(_keyQqbotPluginCheckedAt);
+    } else {
+      _prefs.setInt(_keyQqbotPluginCheckedAt, value);
+    }
+  }
+
+  bool? get weixinPluginInstalled =>
+      _prefs.containsKey(_keyWeixinPluginInstalled)
+          ? _prefs.getBool(_keyWeixinPluginInstalled)
+          : null;
+  set weixinPluginInstalled(bool? value) {
+    if (value == null) {
+      _prefs.remove(_keyWeixinPluginInstalled);
+    } else {
+      _prefs.setBool(_keyWeixinPluginInstalled, value);
+    }
+  }
+
+  int? get weixinPluginCheckedAt => _prefs.getInt(_keyWeixinPluginCheckedAt);
+  set weixinPluginCheckedAt(int? value) {
+    if (value == null) {
+      _prefs.remove(_keyWeixinPluginCheckedAt);
+    } else {
+      _prefs.setInt(_keyWeixinPluginCheckedAt, value);
     }
   }
 

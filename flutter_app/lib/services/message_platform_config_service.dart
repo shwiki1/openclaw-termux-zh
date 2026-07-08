@@ -6,6 +6,7 @@ import 'preferences_service.dart';
 
 /// Reads and writes messaging platform configuration in openclaw.json.
 class MessagePlatformConfigService {
+  static const _pluginStatusCacheTtl = Duration(minutes: 10);
   static const _configPath = '/root/.openclaw/openclaw.json';
   static const _feishuChannelId = 'feishu';
   static const _qqbotChannelId = 'qqbot';
@@ -74,33 +75,73 @@ $command
   static Future<String> _runOpenclawCommand(
     String command, {
     int timeout = 120,
+    String notificationText = 'Running OpenClaw task...',
   }) async {
-    try {
-      await NativeBridge.setupDirs();
-    } catch (_) {}
-    try {
-      await NativeBridge.writeResolv();
-    } catch (_) {}
+    return _runWithSetupForeground(() async {
+      try {
+        await NativeBridge.setupDirs();
+      } catch (_) {}
+      try {
+        await NativeBridge.writeResolv();
+      } catch (_) {}
 
-    return NativeBridge.runInProot(
-      _wrapOpenclawCommand(command),
-      timeout: timeout,
-    );
+      return NativeBridge.runInProot(
+        _wrapOpenclawCommand(command),
+        timeout: timeout,
+      );
+    }, notificationText: notificationText);
   }
 
   static Future<String> _runOpenclawCommandWithRetries(
     List<String> commands, {
     int timeout = 120,
+    String notificationText = 'Running OpenClaw task...',
   }) async {
     Object? lastError;
     for (final command in commands) {
       try {
-        return await _runOpenclawCommand(command, timeout: timeout);
+        return await _runOpenclawCommand(
+          command,
+          timeout: timeout,
+          notificationText: notificationText,
+        );
       } catch (error) {
         lastError = error;
       }
     }
     throw Exception('Command failed after retries: $lastError');
+  }
+
+  static int _setupForegroundDepth = 0;
+
+  static Future<T> _runWithSetupForeground<T>(
+    Future<T> Function() action, {
+    required String notificationText,
+  }) async {
+    final shouldStart = _setupForegroundDepth == 0;
+    _setupForegroundDepth += 1;
+    if (shouldStart) {
+      try {
+        await NativeBridge.startSetupService();
+        await NativeBridge.updateSetupNotification(notificationText);
+      } catch (_) {}
+    } else {
+      try {
+        await NativeBridge.updateSetupNotification(notificationText);
+      } catch (_) {}
+    }
+
+    try {
+      return await action();
+    } finally {
+      _setupForegroundDepth =
+          (_setupForegroundDepth - 1).clamp(0, 1 << 20).toInt();
+      if (_setupForegroundDepth == 0) {
+        try {
+          await NativeBridge.stopSetupService();
+        } catch (_) {}
+      }
+    }
   }
 
   static bool _isNonEmptyString(dynamic value) =>
@@ -110,6 +151,64 @@ $command
     final prefs = PreferencesService();
     await prefs.init();
     return prefs;
+  }
+
+  static bool _isPluginCacheFresh(int? timestampMs) {
+    if (timestampMs == null || timestampMs <= 0) {
+      return false;
+    }
+    final age = DateTime.now().millisecondsSinceEpoch - timestampMs;
+    return age >= 0 && age <= _pluginStatusCacheTtl.inMilliseconds;
+  }
+
+  static Future<bool?> _readCachedPluginInstalled(String pluginKey) async {
+    final prefs = await _loadPrefs();
+    switch (pluginKey) {
+      case _qqbotPluginId:
+        if (!_isPluginCacheFresh(prefs.qqbotPluginCheckedAt)) {
+          return null;
+        }
+        return prefs.qqbotPluginInstalled;
+      case _weixinPluginId:
+        if (!_isPluginCacheFresh(prefs.weixinPluginCheckedAt)) {
+          return null;
+        }
+        return prefs.weixinPluginInstalled;
+      default:
+        return null;
+    }
+  }
+
+  static Future<void> _writeCachedPluginInstalled(
+    String pluginKey,
+    bool installed,
+  ) async {
+    final prefs = await _loadPrefs();
+    final now = DateTime.now().millisecondsSinceEpoch;
+    switch (pluginKey) {
+      case _qqbotPluginId:
+        prefs.qqbotPluginInstalled = installed;
+        prefs.qqbotPluginCheckedAt = now;
+        break;
+      case _weixinPluginId:
+        prefs.weixinPluginInstalled = installed;
+        prefs.weixinPluginCheckedAt = now;
+        break;
+    }
+  }
+
+  static Future<void> invalidatePluginStatusCache(String pluginKey) async {
+    final prefs = await _loadPrefs();
+    switch (pluginKey) {
+      case _qqbotPluginId:
+        prefs.qqbotPluginInstalled = null;
+        prefs.qqbotPluginCheckedAt = null;
+        break;
+      case _weixinPluginId:
+        prefs.weixinPluginInstalled = null;
+        prefs.weixinPluginCheckedAt = null;
+        break;
+    }
   }
 
   static Map<String, dynamic>? _extractFeishuUiConfig(dynamic raw) {
@@ -617,55 +716,37 @@ fs.writeFileSync(p, JSON.stringify(c, null, 2));
   }
 
   static Future<bool> isQqbotPluginInstalled() async {
+    final cached = await _readCachedPluginInstalled(_qqbotPluginId);
+    if (cached != null) {
+      return cached;
+    }
+
     final fastInstalled = await _isPluginInstalledFast(
       pluginId: _qqbotPluginId,
       aliases: _qqbotLegacyPluginIds,
       packagePaths: _qqbotPluginPackagePaths,
     );
-    if (fastInstalled) {
-      return true;
-    }
-
-    try {
-      final output = await _runOpenclawCommand(
-        'openclaw plugins list',
-        timeout: 12,
-      );
-      final lower = output.toLowerCase();
-      return lower.contains('@tencent-connect/openclaw-qqbot') ||
-          lower.contains(_qqbotPluginId) ||
-          lower.contains('qqbot');
-    } catch (_) {
-      return false;
-    }
+    await _writeCachedPluginInstalled(_qqbotPluginId, fastInstalled);
+    return fastInstalled;
   }
 
   static Future<bool> isWeixinPluginInstalled() async {
+    final cached = await _readCachedPluginInstalled(_weixinPluginId);
+    if (cached != null) {
+      return cached;
+    }
+
     final fastInstalled = await _isPluginInstalledFast(
       pluginId: _weixinPluginId,
       aliases: _weixinLegacyPluginIds,
       packagePaths: _weixinPluginPackagePaths,
     );
-    if (fastInstalled) {
-      return true;
-    }
-
-    try {
-      final output = await _runOpenclawCommand(
-        'openclaw plugins list',
-        timeout: 12,
-      );
-      final lower = output.toLowerCase();
-      return lower.contains('@tencent-weixin/openclaw-weixin') ||
-          lower.contains('@tencent/openclaw-weixin') ||
-          lower.contains(_weixinPluginId) ||
-          lower.contains(_weixinChannelId);
-    } catch (_) {
-      return false;
-    }
+    await _writeCachedPluginInstalled(_weixinPluginId, fastInstalled);
+    return fastInstalled;
   }
 
   static Future<void> ensureQqbotPluginInstalled() async {
+    await invalidatePluginStatusCache(_qqbotPluginId);
     final installed = await isQqbotPluginInstalled();
     if (installed) {
       await _setPluginEntryEnabled(
@@ -673,6 +754,7 @@ fs.writeFileSync(p, JSON.stringify(c, null, 2));
         enabled: true,
         cleanupAliases: <String>[_qqbotPluginId, ..._qqbotLegacyPluginIds],
       );
+      await _writeCachedPluginInstalled(_qqbotPluginId, true);
       return;
     }
 
@@ -680,6 +762,7 @@ fs.writeFileSync(p, JSON.stringify(c, null, 2));
       'openclaw plugins uninstall qqbot || true; '
       'openclaw plugins uninstall openclaw-qqbot || true',
       timeout: 90,
+      notificationText: 'Preparing QQ plugin...',
     );
     await _runOpenclawCommandWithRetries(
       <String>[
@@ -687,15 +770,18 @@ fs.writeFileSync(p, JSON.stringify(c, null, 2));
         'openclaw plugins install @tencent-connect/openclaw-qqbot',
       ],
       timeout: 1800,
+      notificationText: 'Installing QQ plugin...',
     );
     await _setPluginEntryEnabled(
       _qqbotPluginId,
       enabled: true,
       cleanupAliases: <String>[_qqbotPluginId, ..._qqbotLegacyPluginIds],
     );
+    await _writeCachedPluginInstalled(_qqbotPluginId, true);
   }
 
   static Future<void> ensureWeixinPluginInstalled() async {
+    await invalidatePluginStatusCache(_weixinPluginId);
     final installed = await isWeixinPluginInstalled();
     if (installed) {
       await _setPluginEntryEnabled(
@@ -703,6 +789,7 @@ fs.writeFileSync(p, JSON.stringify(c, null, 2));
         enabled: true,
         cleanupAliases: <String>[_weixinPluginId, ..._weixinLegacyPluginIds],
       );
+      await _writeCachedPluginInstalled(_weixinPluginId, true);
       return;
     }
 
@@ -710,6 +797,7 @@ fs.writeFileSync(p, JSON.stringify(c, null, 2));
       'openclaw plugins uninstall openclaw-weixin || true; '
       'openclaw plugins uninstall weixin || true',
       timeout: 90,
+      notificationText: 'Preparing Weixin plugin...',
     );
     await _runOpenclawCommandWithRetries(
       <String>[
@@ -717,12 +805,14 @@ fs.writeFileSync(p, JSON.stringify(c, null, 2));
         'openclaw plugins install @tencent-weixin/openclaw-weixin',
       ],
       timeout: 1800,
+      notificationText: 'Installing Weixin plugin...',
     );
     await _setPluginEntryEnabled(
       _weixinPluginId,
       enabled: true,
       cleanupAliases: <String>[_weixinPluginId, ..._weixinLegacyPluginIds],
     );
+    await _writeCachedPluginInstalled(_weixinPluginId, true);
   }
 
   static String buildWeixinInstallerTerminalCommand() {

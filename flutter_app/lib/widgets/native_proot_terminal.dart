@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../services/native_bridge.dart';
 import '../services/terminal_service.dart';
 import 'native_terminal_view.dart';
 import 'responsive_layout.dart';
@@ -41,17 +42,33 @@ class NativeProotTerminalState extends State<NativeProotTerminal> {
   @override
   void initState() {
     super.initState();
+    if (widget.keepAlive) {
+      NativeBridge.startTerminalService().catchError((_) => false);
+    }
     _configFuture = _loadConfig();
   }
 
   @override
   void didUpdateWidget(covariant NativeProotTerminal oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (!oldWidget.keepAlive && widget.keepAlive) {
+      NativeBridge.startTerminalService().catchError((_) => false);
+    } else if (oldWidget.keepAlive && !widget.keepAlive) {
+      NativeBridge.stopTerminalService().catchError((_) => false);
+    }
     if (oldWidget.command != widget.command ||
         oldWidget.mode != widget.mode ||
         oldWidget.restart != widget.restart) {
       _configFuture = _loadConfig();
     }
+  }
+
+  @override
+  void dispose() {
+    if (widget.keepAlive) {
+      NativeBridge.stopTerminalService().catchError((_) => false);
+    }
+    super.dispose();
   }
 
   Future<void> writeBytes(List<int> bytes) async {

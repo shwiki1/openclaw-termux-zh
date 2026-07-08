@@ -233,6 +233,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   key: ValueKey('onboarding-$_generation'),
                   sessionId: 'onboarding-$_generation',
                   command: snapshot.data!,
+                  keepAlive: true,
                   emitOutput: true,
                   onOutput: _handleOutput,
                   onSessionFinished: (_) {

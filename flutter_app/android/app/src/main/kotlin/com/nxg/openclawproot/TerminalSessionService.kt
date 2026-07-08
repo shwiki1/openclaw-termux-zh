@@ -16,8 +16,12 @@ class TerminalSessionService : Service() {
         const val NOTIFICATION_ID = 2
         var isRunning = false
             private set
+        private var retainCount = 0
 
         fun start(context: Context) {
+            synchronized(this) {
+                retainCount += 1
+            }
             val intent = Intent(context, TerminalSessionService::class.java)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 context.startForegroundService(intent)
@@ -27,6 +31,15 @@ class TerminalSessionService : Service() {
         }
 
         fun stop(context: Context) {
+            val shouldStop = synchronized(this) {
+                if (retainCount > 0) {
+                    retainCount -= 1
+                }
+                retainCount <= 0
+            }
+            if (!shouldStop) {
+                return
+            }
             val intent = Intent(context, TerminalSessionService::class.java)
             context.stopService(intent)
         }
@@ -53,6 +66,9 @@ class TerminalSessionService : Service() {
 
     override fun onDestroy() {
         isRunning = false
+        synchronized(Companion) {
+            retainCount = 0
+        }
         releaseWakeLock()
         super.onDestroy()
     }
@@ -115,4 +131,3 @@ class TerminalSessionService : Service() {
         }
     }
 }
-

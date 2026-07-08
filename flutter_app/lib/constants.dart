@@ -1,6 +1,6 @@
 class AppConstants {
   static const String appName = '次元虾';
-  static const String version = '2.0.35';
+  static const String version = '2.0.37';
   static const String packageName = 'com.agent.cyx';
 
   /// Matches ANSI escape sequences (e.g. color codes in terminal output).
@@ -30,9 +30,9 @@ class AppConstants {
   static const String gatewayUrl = 'http://$gatewayHost:$gatewayPort';
 
   static const String ubuntuBaseMirrorUrl =
-      'https://mirrors.tuna.tsinghua.edu.cn/ubuntu-cdimage/ubuntu-base/releases/24.04/release/ubuntu-base-24.04.3-base-';
-  static const String ubuntuBaseMirrorFallbackUstcUrl =
       'https://mirrors.ustc.edu.cn/ubuntu-cdimage/ubuntu-base/releases/24.04/release/ubuntu-base-24.04.3-base-';
+  static const String ubuntuBaseMirrorFallbackUstcUrl =
+      'https://mirrors.tuna.tsinghua.edu.cn/ubuntu-cdimage/ubuntu-base/releases/24.04/release/ubuntu-base-24.04.3-base-';
   static const String ubuntuBaseMirrorFallbackAliyunUrl =
       'https://mirrors.aliyun.com/ubuntu-cdimage/ubuntu-base/releases/24.04/release/ubuntu-base-24.04.3-base-';
   static const String ubuntuBaseOfficialUrl =
@@ -152,14 +152,14 @@ class AppConstants {
     final isPorts = isUbuntuPortsArch(arch);
     final paths = isPorts
         ? <String>[
-            'http://mirrors.tuna.tsinghua.edu.cn/ubuntu-ports',
             'http://mirrors.ustc.edu.cn/ubuntu-ports',
+            'http://mirrors.tuna.tsinghua.edu.cn/ubuntu-ports',
             'http://mirrors.aliyun.com/ubuntu-ports',
             'http://ports.ubuntu.com/ubuntu-ports',
           ]
         : <String>[
-            'http://mirrors.tuna.tsinghua.edu.cn/ubuntu',
             'http://mirrors.ustc.edu.cn/ubuntu',
+            'http://mirrors.tuna.tsinghua.edu.cn/ubuntu',
             'http://mirrors.aliyun.com/ubuntu',
             'http://archive.ubuntu.com/ubuntu',
           ];

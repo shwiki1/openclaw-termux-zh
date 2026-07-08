@@ -139,15 +139,24 @@ class MainActivity : FlutterActivity() {
                 "runInProot" -> {
                     val command = call.argument<String>("command")
                     val timeout = call.argument<Int>("timeout")?.toLong() ?: 900L
+                    val keepForeground = call.argument<Boolean>("keepForeground") ?: false
+                    val foregroundText = call.argument<String>("foregroundText") ?: "Running OpenClaw task..."
                     if (command != null) {
                         Thread {
                             try {
+                                if (keepForeground) {
+                                    SetupService.retain(applicationContext, foregroundText, -1)
+                                }
                                 bootstrapManager.setupDirectories()
                                 bootstrapManager.writeResolvConf()
                                 val output = processManager.runInProotSync(command, timeout)
                                 runOnUiThread { result.success(output) }
                             } catch (e: Exception) {
                                 runOnUiThread { result.error("PROOT_ERROR", e.message, null) }
+                            } finally {
+                                if (keepForeground) {
+                                    SetupService.stop(applicationContext)
+                                }
                             }
                         }.start()
                     } else {

@@ -88,6 +88,7 @@ class _PackageInstallScreenState extends State<PackageInstallScreen> {
               key: ValueKey('package-${widget.package.id}-$_generation'),
               sessionId: 'package-${widget.package.id}-$_generation',
               command: _command,
+              keepAlive: true,
               emitOutput: true,
               onOutput: (text) {
                 if (!_finished && text.contains(_sentinel) && mounted) {

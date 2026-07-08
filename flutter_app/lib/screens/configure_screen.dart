@@ -172,6 +172,7 @@ class _ConfigureScreenState extends State<ConfigureScreen> {
                   sessionId: 'configure-$_generation',
                   command: snapshot.data!,
                   mode: TerminalProotMode.compatibility,
+                  keepAlive: true,
                   onSessionFinished: (_) {
                     if (mounted) {
                       setState(() => _finished = true);

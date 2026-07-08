@@ -268,6 +268,9 @@ class BootstrapService {
 
   Future<String> _selectUbuntuMirror(String arch) async {
     final candidates = AppConstants.ubuntuMirrorCandidates(arch);
+    if (AppConstants.isUbuntuPortsArch(arch)) {
+      return candidates.first;
+    }
     const releasePath = '/dists/${AppConstants.ubuntuCodename}/Release';
     final checks = candidates.map((baseUrl) async {
       final stopwatch = Stopwatch()..start();

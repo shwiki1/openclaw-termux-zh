@@ -284,6 +284,15 @@ class OpenClawVersionService {
         .join(' ');
     final commandSegments = <String>[
       if (envPrefix.isNotEmpty) envPrefix,
+      'npm_config_registry=${AppConstants.npmRegistryUrl}',
+      'NPM_CONFIG_REGISTRY=${AppConstants.npmRegistryUrl}',
+      'npm_config_disturl=${AppConstants.npmNodeDistUrl}',
+      'npm_config_fetch_retries=5',
+      'npm_config_fetch_retry_mintimeout=2000',
+      'npm_config_fetch_retry_maxtimeout=20000',
+      'npm_config_prefer_offline=true',
+      'npm_config_prefer_online=false',
+      'npm_config_cache=/tmp/npm-cache',
       'node',
       _nodeWrapper,
       _npmCli,
@@ -639,6 +648,8 @@ class OpenClawVersionService {
         task: () => NativeBridge.runInProot(
           installCommand,
           timeout: 1800,
+          keepForeground: true,
+          foregroundText: 'Installing OpenClaw...',
         ),
       );
 
