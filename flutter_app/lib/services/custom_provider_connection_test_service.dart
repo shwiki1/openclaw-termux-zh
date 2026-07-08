@@ -12,6 +12,7 @@ class CustomProviderConnectionTestResult {
     required this.endpoint,
     this.statusCode,
     this.detail,
+    this.modelCount,
     this.autoDetected = false,
   });
 
@@ -20,6 +21,21 @@ class CustomProviderConnectionTestResult {
   final Uri endpoint;
   final int? statusCode;
   final String? detail;
+  final int? modelCount;
+  final bool autoDetected;
+}
+
+class CustomProviderModelFetchResult {
+  const CustomProviderModelFetchResult({
+    required this.compatibility,
+    required this.endpoint,
+    required this.models,
+    this.autoDetected = false,
+  });
+
+  final CustomProviderCompatibility compatibility;
+  final Uri endpoint;
+  final List<String> models;
   final bool autoDetected;
 }
 
@@ -46,18 +62,38 @@ class CustomProviderConnectionTestService {
     required CustomProviderCompatibility compatibility,
     required String baseUrl,
     required String apiKey,
-    required String modelId,
+  }) async {
+    try {
+      final result = await fetchModels(
+        compatibility: compatibility,
+        baseUrl: baseUrl,
+        apiKey: apiKey,
+      );
+      return CustomProviderConnectionTestResult(
+        success: true,
+        compatibility: result.compatibility,
+        endpoint: result.endpoint,
+        modelCount: result.models.length,
+        autoDetected: result.autoDetected,
+      );
+    } on _ModelFetchFailure catch (failure) {
+      return failure.result;
+    }
+  }
+
+  Future<CustomProviderModelFetchResult> fetchModels({
+    required CustomProviderCompatibility compatibility,
+    required String baseUrl,
+    required String apiKey,
   }) async {
     final normalizedBaseUrl = baseUrl.trim();
     final normalizedApiKey = apiKey.trim();
-    final normalizedModelId = modelId.trim();
 
     if (compatibility != CustomProviderCompatibility.autoDetect) {
-      return _runProbe(
+      return _runModelListProbe(
         compatibility,
         baseUrl: normalizedBaseUrl,
         apiKey: normalizedApiKey,
-        modelId: normalizedModelId,
       );
     }
 
@@ -68,163 +104,147 @@ class CustomProviderConnectionTestService {
     final failures = <CustomProviderConnectionTestResult>[];
 
     for (final candidate in attempts) {
-      final result = await _runProbe(
-        candidate,
-        baseUrl: normalizedBaseUrl,
-        apiKey: normalizedApiKey,
-        modelId: normalizedModelId,
-        autoDetected: true,
-      );
-      if (result.success) {
-        return result;
+      try {
+        return await _runModelListProbe(
+          candidate,
+          baseUrl: normalizedBaseUrl,
+          apiKey: normalizedApiKey,
+          autoDetected: true,
+        );
+      } on _ModelFetchFailure catch (failure) {
+        failures.add(failure.result);
       }
-      failures.add(result);
     }
 
-    return _pickBestFailure(failures);
+    throw _ModelFetchFailure(_pickBestFailure(failures));
   }
 
-  Future<CustomProviderConnectionTestResult> _runProbe(
+  Future<CustomProviderModelFetchResult> _runModelListProbe(
     CustomProviderCompatibility compatibility, {
     required String baseUrl,
     required String apiKey,
-    required String modelId,
     bool autoDetected = false,
   }) async {
-    final request = _buildRequest(
+    final request = _buildModelListRequest(
       compatibility,
       baseUrl: baseUrl,
       apiKey: apiKey,
-      modelId: modelId,
     );
 
     try {
-      final response = await _dio.postUri(
+      final response = await _dio.getUri(
         request.endpoint,
-        data: request.body,
         options: Options(headers: request.headers),
       );
-      final detail = _extractErrorDetail(response.data);
       final success = response.statusCode != null &&
           response.statusCode! >= 200 &&
           response.statusCode! < 300;
+      final detail = _extractErrorDetail(response.data);
 
-      return CustomProviderConnectionTestResult(
-        success: success,
+      if (!success) {
+        throw _ModelFetchFailure(
+          CustomProviderConnectionTestResult(
+            success: false,
+            compatibility: compatibility,
+            endpoint: request.endpoint,
+            statusCode: response.statusCode,
+            detail: detail,
+            autoDetected: autoDetected,
+          ),
+        );
+      }
+
+      final models = _extractModelIds(response.data).toSet().toList()..sort();
+      if (models.isEmpty) {
+        throw _ModelFetchFailure(
+          CustomProviderConnectionTestResult(
+            success: false,
+            compatibility: compatibility,
+            endpoint: request.endpoint,
+            statusCode: response.statusCode,
+            detail: 'Model list is empty or unsupported',
+            autoDetected: autoDetected,
+          ),
+        );
+      }
+
+      return CustomProviderModelFetchResult(
         compatibility: compatibility,
         endpoint: request.endpoint,
-        statusCode: response.statusCode,
-        detail: success ? null : detail,
+        models: models,
         autoDetected: autoDetected,
       );
     } on DioException catch (error) {
-      return CustomProviderConnectionTestResult(
-        success: false,
-        compatibility: compatibility,
-        endpoint: request.endpoint,
-        statusCode: error.response?.statusCode,
-        detail: _extractDioErrorDetail(error),
-        autoDetected: autoDetected,
+      throw _ModelFetchFailure(
+        CustomProviderConnectionTestResult(
+          success: false,
+          compatibility: compatibility,
+          endpoint: request.endpoint,
+          statusCode: error.response?.statusCode,
+          detail: _extractDioErrorDetail(error),
+          autoDetected: autoDetected,
+        ),
       );
     } on TimeoutException {
-      return CustomProviderConnectionTestResult(
-        success: false,
-        compatibility: compatibility,
-        endpoint: request.endpoint,
-        detail: 'Request timed out',
-        autoDetected: autoDetected,
+      throw _ModelFetchFailure(
+        CustomProviderConnectionTestResult(
+          success: false,
+          compatibility: compatibility,
+          endpoint: request.endpoint,
+          detail: 'Request timed out',
+          autoDetected: autoDetected,
+        ),
       );
     } catch (error) {
-      return CustomProviderConnectionTestResult(
-        success: false,
-        compatibility: compatibility,
-        endpoint: request.endpoint,
-        detail: '$error',
-        autoDetected: autoDetected,
+      if (error is _ModelFetchFailure) {
+        rethrow;
+      }
+      throw _ModelFetchFailure(
+        CustomProviderConnectionTestResult(
+          success: false,
+          compatibility: compatibility,
+          endpoint: request.endpoint,
+          detail: '$error',
+          autoDetected: autoDetected,
+        ),
       );
     }
   }
 
-  _ProbeRequest _buildRequest(
+  _ProbeRequest _buildModelListRequest(
     CustomProviderCompatibility compatibility, {
     required String baseUrl,
     required String apiKey,
-    required String modelId,
   }) {
     switch (compatibility) {
       case CustomProviderCompatibility.autoDetect:
         throw StateError('autoDetect is resolved before building a request');
       case CustomProviderCompatibility.openaiChatCompletions:
       case CustomProviderCompatibility.zhipuChatCompletions:
-        return _ProbeRequest(
-          endpoint: _appendPath(baseUrl, 'chat/completions'),
-          headers: _bearerHeaders(apiKey),
-          body: {
-            'model': modelId,
-            'messages': const [
-              {
-                'role': 'user',
-                'content': 'ping',
-              },
-            ],
-            'max_tokens': 1,
-            'temperature': 0,
-          },
-        );
       case CustomProviderCompatibility.openaiResponses:
         return _ProbeRequest(
-          endpoint: _appendPath(baseUrl, 'responses'),
+          endpoint: _appendPath(baseUrl, 'models'),
           headers: _bearerHeaders(apiKey),
-          body: {
-            'model': modelId,
-            'input': 'ping',
-            'max_output_tokens': 1,
-          },
         );
       case CustomProviderCompatibility.anthropicMessages:
         return _ProbeRequest(
-          endpoint: _appendPath(baseUrl, 'messages'),
+          endpoint: _appendPath(baseUrl, 'models'),
           headers: {
             if (apiKey.isNotEmpty) 'x-api-key': apiKey,
+            if (apiKey.isNotEmpty) 'Authorization': 'Bearer $apiKey',
             'anthropic-version': '2023-06-01',
-          },
-          body: {
-            'model': modelId,
-            'max_tokens': 1,
-            'messages': const [
-              {
-                'role': 'user',
-                'content': 'ping',
-              },
-            ],
           },
         );
       case CustomProviderCompatibility.googleGenerativeAi:
         return _ProbeRequest(
           endpoint: _appendPath(
             baseUrl,
-            'models/$modelId:generateContent',
+            'models',
             queryParameters: {
               if (apiKey.isNotEmpty) 'key': apiKey,
             },
           ),
           headers: const <String, String>{},
-          body: {
-            'contents': const [
-              {
-                'role': 'user',
-                'parts': [
-                  {
-                    'text': 'ping',
-                  },
-                ],
-              },
-            ],
-            'generationConfig': const {
-              'maxOutputTokens': 1,
-              'temperature': 0,
-            },
-          },
         );
     }
   }
@@ -296,6 +316,83 @@ class CustomProviderConnectionTestService {
       return const <String, String>{};
     }
     return {'Authorization': 'Bearer $apiKey'};
+  }
+
+  List<String> _extractModelIds(dynamic data) {
+    if (data is Map) {
+      if (data['models'] is List) {
+        final models = <String>[];
+        for (final item in data['models'] as List) {
+          final supportedMethods = _stringList(item is Map ? item['supportedGenerationMethods'] : null);
+          if (supportedMethods.isNotEmpty &&
+              !supportedMethods.contains('generateContent')) {
+            continue;
+          }
+          final name = _extractModelName(item);
+          if (name != null) {
+            models.add(name);
+          }
+        }
+        return models;
+      }
+
+      if (data['data'] is List) {
+        final models = <String>[];
+        for (final item in data['data'] as List) {
+          final name = _extractModelName(item);
+          if (name != null) {
+            models.add(name);
+          }
+        }
+        return models;
+      }
+    }
+
+    if (data is List) {
+      final models = <String>[];
+      for (final item in data) {
+        final name = _extractModelName(item);
+        if (name != null) {
+          models.add(name);
+        }
+      }
+      return models;
+    }
+
+    return const <String>[];
+  }
+
+  String? _extractModelName(dynamic item) {
+    if (item is String) {
+      final normalized = item.trim();
+      if (normalized.isEmpty) {
+        return null;
+      }
+      return normalized.replaceFirst(RegExp(r'^models/'), '');
+    }
+
+    if (item is! Map) {
+      return null;
+    }
+
+    for (final key in const ['id', 'name', 'model', 'model_id']) {
+      final value = item[key];
+      if (value is String && value.trim().isNotEmpty) {
+        return value.trim().replaceFirst(RegExp(r'^models/'), '');
+      }
+    }
+    return null;
+  }
+
+  List<String> _stringList(dynamic value) {
+    if (value is! List) {
+      return const <String>[];
+    }
+    return value
+        .whereType<String>()
+        .map((item) => item.trim())
+        .where((item) => item.isNotEmpty)
+        .toList();
   }
 
   Uri _appendPath(
@@ -384,10 +481,26 @@ class _ProbeRequest {
   const _ProbeRequest({
     required this.endpoint,
     required this.headers,
-    required this.body,
   });
 
   final Uri endpoint;
   final Map<String, String> headers;
-  final Map<String, dynamic> body;
+}
+
+class _ModelFetchFailure implements Exception {
+  const _ModelFetchFailure(this.result);
+
+  final CustomProviderConnectionTestResult result;
+
+  @override
+  String toString() {
+    final detail = result.detail?.trim();
+    if (detail != null && detail.isNotEmpty) {
+      return detail;
+    }
+    if (result.statusCode != null) {
+      return 'HTTP ${result.statusCode}';
+    }
+    return 'Model fetch failed';
+  }
 }

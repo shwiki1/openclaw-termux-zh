@@ -155,7 +155,8 @@ class GatewayService {
     // Dart dart:io fallback if native calls failed (#40).
     try {
       final filesDir = await NativeBridge.getFilesDir();
-      const resolvContent = 'nameserver 8.8.8.8\nnameserver 8.8.4.4\n';
+      const resolvContent =
+          'nameserver 223.5.5.5\nnameserver 119.29.29.29\nnameserver 8.8.8.8\n';
       final resolvFile = File('$filesDir/config/resolv.conf');
       if (!resolvFile.existsSync()) {
         Directory('$filesDir/config').createSync(recursive: true);
@@ -170,6 +171,7 @@ class GatewayService {
     } catch (_) {}
 
     await ProviderConfigService.migrateCustomProviderConfigIfNeeded();
+    await MessagePlatformConfigService.repairMessagingPluginConfigIfNeeded();
 
     final alreadyRunning = await NativeBridge.isGatewayRunning();
     if (alreadyRunning) {
@@ -616,7 +618,8 @@ fs.writeFileSync(p, JSON.stringify(c, null, 2));
       // Dart dart:io fallback if native calls failed (#40).
       try {
         final filesDir = await NativeBridge.getFilesDir();
-        const resolvContent = 'nameserver 8.8.8.8\nnameserver 8.8.4.4\n';
+        const resolvContent =
+            'nameserver 223.5.5.5\nnameserver 119.29.29.29\nnameserver 8.8.8.8\n';
         final resolvFile = File('$filesDir/config/resolv.conf');
         if (!resolvFile.existsSync()) {
           Directory('$filesDir/config').createSync(recursive: true);
@@ -632,6 +635,7 @@ fs.writeFileSync(p, JSON.stringify(c, null, 2));
       await ProviderConfigService.migrateCustomProviderConfigIfNeeded();
       await ProviderConfigService.ensureGatewayDefaults();
       await MessagePlatformConfigService.migrateFeishuConfigIfNeeded();
+      await MessagePlatformConfigService.repairMessagingPluginConfigIfNeeded();
       await _writeNodeAllowConfig();
       final refreshedDashboardUrl = await _readConfiguredDashboardUrl();
       if (refreshedDashboardUrl != null) {
@@ -790,6 +794,7 @@ fs.writeFileSync(p, JSON.stringify(c, null, 2));
   Future<void> applyConfigChanges({String source = 'configuration'}) async {
     await ProviderConfigService.migrateCustomProviderConfigIfNeeded();
     await ProviderConfigService.ensureGatewayDefaults();
+    await MessagePlatformConfigService.repairMessagingPluginConfigIfNeeded();
 
     final isGatewayActive = _state.status == GatewayStatus.running ||
         _state.status == GatewayStatus.starting;

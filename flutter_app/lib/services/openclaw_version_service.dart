@@ -87,9 +87,8 @@ class OpenClawReleaseInfo {
 class OpenClawVersionService {
   static const _packageJsonPath =
       'usr/local/lib/node_modules/openclaw/package.json';
-  static const _packageRegistryEndpoint = 'https://registry.npmjs.org/openclaw';
-  static const _latestReleaseEndpoint =
-      'https://registry.npmjs.org/openclaw/latest';
+  static const _packageRegistryEndpoint = '/openclaw';
+  static const _latestReleaseEndpoint = '/openclaw/latest';
   static const defaultAvailableReleaseLimit = 10;
   static const _nodePathMarker = '__OPENCLAW_NODE_PATH__';
   static const _nodeWrapper = '/root/.openclaw/node-wrapper.js';
@@ -365,14 +364,10 @@ class OpenClawVersionService {
   }
 
   Future<OpenClawReleaseInfo> fetchLatestRelease() async {
-    final response = await http.get(
-      Uri.parse(_latestReleaseEndpoint),
-      headers: const {'Accept': 'application/json'},
-    ).timeout(const Duration(seconds: 12));
-
-    if (response.statusCode != 200) {
-      throw Exception('npm registry returned ${response.statusCode}');
-    }
+    final response = await _getRegistryJson(
+      _latestReleaseEndpoint,
+      timeout: const Duration(seconds: 12),
+    );
 
     final decoded = jsonDecode(response.body);
     if (decoded is! Map<String, dynamic>) {
@@ -398,15 +393,10 @@ class OpenClawVersionService {
       throw Exception('Version cannot be empty');
     }
 
-    final response = await http.get(
-      Uri.parse('$_packageRegistryEndpoint/$normalizedVersion'),
-      headers: const {'Accept': 'application/json'},
-    ).timeout(const Duration(seconds: 12));
-
-    if (response.statusCode != 200) {
-      throw Exception('npm registry returned ${response.statusCode}');
-    }
-
+    final response = await _getRegistryJson(
+      '$_packageRegistryEndpoint/$normalizedVersion',
+      timeout: const Duration(seconds: 12),
+    );
     final decoded = jsonDecode(response.body);
     if (decoded is! Map<String, dynamic>) {
       throw Exception('Invalid npm registry response');
@@ -420,15 +410,10 @@ class OpenClawVersionService {
   }
 
   Future<List<OpenClawReleaseInfo>> fetchAvailableReleases({int? limit}) async {
-    final response = await http.get(
-      Uri.parse(_packageRegistryEndpoint),
-      headers: const {'Accept': 'application/json'},
-    ).timeout(const Duration(seconds: 15));
-
-    if (response.statusCode != 200) {
-      throw Exception('npm registry returned ${response.statusCode}');
-    }
-
+    final response = await _getRegistryJson(
+      _packageRegistryEndpoint,
+      timeout: const Duration(seconds: 15),
+    );
     final decoded = jsonDecode(response.body);
     if (decoded is! Map<String, dynamic>) {
       throw Exception('Invalid npm registry response');
@@ -467,6 +452,32 @@ class OpenClawVersionService {
     }
 
     return releases;
+  }
+
+  Future<http.Response> _getRegistryJson(
+    String path, {
+    required Duration timeout,
+  }) async {
+    Object? lastError;
+    for (final baseUrl in <String>[
+      AppConstants.npmRegistryUrl,
+      AppConstants.npmRegistryFallbackUrl,
+    ]) {
+      final uri = Uri.parse('$baseUrl$path');
+      try {
+        final response = await http.get(
+          uri,
+          headers: const {'Accept': 'application/json'},
+        ).timeout(timeout);
+        if (response.statusCode == 200) {
+          return response;
+        }
+        lastError = Exception('npm registry returned ${response.statusCode}');
+      } catch (error) {
+        lastError = error;
+      }
+    }
+    throw Exception('Failed to load npm registry metadata: $lastError');
   }
 
   Future<String?> fetchReleaseNotes(String version) async {

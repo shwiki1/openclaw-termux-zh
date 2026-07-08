@@ -377,40 +377,70 @@ class FloatingFileManagerService : Service() {
 
         val tabScroll = HorizontalScrollView(this).apply {
             isHorizontalScrollBarEnabled = false
+            setPadding(dp(6), dp(6), dp(6), dp(6))
+            background = rounded(0xFF121A24.toInt(), 18, 1, 0xFF334557.toInt())
             val row = LinearLayout(context).apply {
                 orientation = LinearLayout.HORIZONTAL
-                setPadding(0, 0, 0, dp(8))
+                setPadding(0, 0, 0, 0)
             }
             tabsRow = row
             addView(row)
         }
         tabsScroll = tabScroll
-        panel.addView(tabScroll)
+        panel.addView(
+            tabScroll,
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            ).apply {
+                topMargin = dp(8)
+            },
+        )
 
         val rootsScroll = HorizontalScrollView(this).apply {
             isHorizontalScrollBarEnabled = false
+            setPadding(dp(6), dp(4), dp(6), dp(6))
+            background = rounded(0xFF101821.toInt(), 18, 1, 0xFF2B4155.toInt())
             val row = LinearLayout(context).apply {
                 orientation = LinearLayout.HORIZONTAL
-                setPadding(0, 0, 0, dp(8))
+                setPadding(0, 0, 0, 0)
             }
             quickRootsRow = row
             addView(row)
         }
         quickRootsScroll = rootsScroll
-        panel.addView(rootsScroll)
+        panel.addView(
+            rootsScroll,
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            ).apply {
+                topMargin = dp(8)
+            },
+        )
 
         val crumbScroll = HorizontalScrollView(this).apply {
             isHorizontalScrollBarEnabled = false
+            setPadding(dp(6), dp(4), dp(6), dp(6))
+            background = rounded(0xFF10161D.toInt(), 18, 1, 0xFF31485D.toInt())
             val row = LinearLayout(context).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
-                setPadding(0, 0, 0, dp(8))
+                setPadding(0, 0, 0, 0)
             }
             breadcrumbRow = row
             addView(row)
         }
         breadcrumbScroll = crumbScroll
-        panel.addView(crumbScroll)
+        panel.addView(
+            crumbScroll,
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            ).apply {
+                topMargin = dp(8)
+            },
+        )
 
         val controlsScroll = HorizontalScrollView(this).apply {
             isHorizontalScrollBarEnabled = false
@@ -425,7 +455,15 @@ class FloatingFileManagerService : Service() {
             addView(row)
         }
         controlBarScroll = controlsScroll
-        panel.addView(controlsScroll)
+        panel.addView(
+            controlsScroll,
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            ).apply {
+                topMargin = dp(8)
+            },
+        )
 
         val content = FrameLayout(this).apply {
             background = rounded(Color.BLACK, 14, 1, 0xFF2F2F2F.toInt())
@@ -437,7 +475,9 @@ class FloatingFileManagerService : Service() {
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 0,
                 1f,
-            ),
+            ).apply {
+                topMargin = dp(8)
+            },
         )
 
         val operationBox = LinearLayout(this).apply {
@@ -538,14 +578,14 @@ class FloatingFileManagerService : Service() {
                 goParent()
             }
         }
-        val save = toolbarActionButton(android.R.drawable.ic_menu_save, "保存") { saveCurrentTextFile() }
-        val open = toolbarActionButton(android.R.drawable.ic_menu_view, "打开") { currentPreviewFile?.let { openExternal(it) } }
-        val share = toolbarActionButton(android.R.drawable.ic_menu_share, "分享") { currentPreviewFile?.let { shareFile(it) } }
-        val extract = toolbarActionButton(android.R.drawable.stat_sys_download_done, "解压") {
+        val save = toolbarActionButton(R.drawable.lucide_save, "保存") { saveCurrentTextFile() }
+        val open = toolbarActionButton(R.drawable.lucide_eye, "打开") { currentPreviewFile?.let { openExternal(it) } }
+        val share = toolbarActionButton(R.drawable.lucide_share_2, "分享") { currentPreviewFile?.let { shareFile(it) } }
+        val extract = toolbarActionButton(R.drawable.lucide_archive, "解压") {
             currentPreviewFile?.let { extractArchiveToCurrentDir(it) }
         }
-        val minimize = toolbarActionButton(android.R.drawable.arrow_down_float, "最小化") { showMinimizedBubble() }
-        val close = toolbarActionButton(android.R.drawable.ic_menu_close_clear_cancel, "关闭") { stopSelf() }
+        val minimize = toolbarActionButton(R.drawable.lucide_minus, "最小化") { showMinimizedBubble() }
+        val close = toolbarActionButton(R.drawable.lucide_x, "关闭") { stopSelf() }
         backButton = back
         saveButton = save
         openButton = open
@@ -667,10 +707,11 @@ class FloatingFileManagerService : Service() {
             maxLines = 1
         })
         if (!tab.pinned && tabs.size > 1) {
-            box.addView(TextView(this).apply {
-                text = " ×"
-                setTextColor(0xFFD6E7FF.toInt())
-                textSize = 12f
+            box.addView(ImageView(this).apply {
+                setImageResource(R.drawable.lucide_x)
+                setColorFilter(0xFFD6E7FF.toInt())
+                setPadding(dp(6), 0, 0, 0)
+                layoutParams = LinearLayout.LayoutParams(dp(16), dp(16))
                 setOnClickListener { closeTab(tab.id) }
             })
         }
@@ -831,7 +872,7 @@ class FloatingFileManagerService : Service() {
         row.removeAllViews()
         row.addView(
             controlActionButton(
-                icon = if (controlBarExpanded) android.R.drawable.arrow_up_float else android.R.drawable.arrow_down_float,
+                icon = if (controlBarExpanded) R.drawable.lucide_panel_top_close else R.drawable.lucide_panel_top_open,
                 label = if (controlBarExpanded) "收起" else "选项",
                 selected = controlBarExpanded,
                 expanded = true,
@@ -841,23 +882,23 @@ class FloatingFileManagerService : Service() {
             },
         )
         if (selectionMode) {
-            row.addView(controlActionButton(android.R.drawable.ic_menu_info_details, "已选 ${selectedPaths.size}", true, controlBarExpanded) {})
-            row.addView(controlActionButton(android.R.drawable.ic_menu_set_as, "全选", false, controlBarExpanded) { selectAllVisible() })
+            row.addView(controlActionButton(R.drawable.lucide_info, "已选 ${selectedPaths.size}", true, controlBarExpanded) {})
+            row.addView(controlActionButton(R.drawable.lucide_square_check, "全选", false, controlBarExpanded) { selectAllVisible() })
             if (selectedPaths.size == 1) {
-                row.addView(controlActionButton(android.R.drawable.ic_menu_edit, "重命名", false, controlBarExpanded) { renameSelected() })
+                row.addView(controlActionButton(R.drawable.lucide_square_pen, "重命名", false, controlBarExpanded) { renameSelected() })
             }
-            row.addView(controlActionButton(android.R.drawable.ic_menu_save, "压缩", false, controlBarExpanded) { compressFilesPrompt(selectedFiles()) })
-            row.addView(controlActionButton(android.R.drawable.ic_menu_share, "复制", false, controlBarExpanded) { captureClipboard(move = false) })
-            row.addView(controlActionButton(android.R.drawable.ic_menu_set_as, "移动", false, controlBarExpanded) { captureClipboard(move = true) })
-            row.addView(controlActionButton(android.R.drawable.ic_menu_delete, "删除", false, controlBarExpanded) { deleteSelected() })
-            row.addView(controlActionButton(android.R.drawable.ic_menu_close_clear_cancel, "取消", false, controlBarExpanded) { clearSelection() })
+            row.addView(controlActionButton(R.drawable.lucide_archive, "压缩", false, controlBarExpanded) { compressFilesPrompt(selectedFiles()) })
+            row.addView(controlActionButton(R.drawable.lucide_copy, "复制", false, controlBarExpanded) { captureClipboard(move = false) })
+            row.addView(controlActionButton(R.drawable.lucide_move, "移动", false, controlBarExpanded) { captureClipboard(move = true) })
+            row.addView(controlActionButton(R.drawable.lucide_trash_2, "删除", false, controlBarExpanded) { deleteSelected() })
+            row.addView(controlActionButton(R.drawable.lucide_x, "取消", false, controlBarExpanded) { clearSelection() })
             return
         }
 
         clipboard?.let {
             row.addView(
                 controlActionButton(
-                    android.R.drawable.ic_menu_set_as,
+                    R.drawable.lucide_clipboard_paste,
                     if (it.move) "粘贴移动" else "粘贴复制",
                     true,
                     controlBarExpanded,
@@ -865,10 +906,10 @@ class FloatingFileManagerService : Service() {
             )
         }
         val currentDir = activeTab().currentDir
-        row.addView(controlActionButton(android.R.drawable.btn_star_big_on, if (isFavoriteDir(currentDir)) "取消收藏" else "收藏当前", isFavoriteDir(currentDir), controlBarExpanded) {
+        row.addView(controlActionButton(if (isFavoriteDir(currentDir)) R.drawable.lucide_star else R.drawable.lucide_star_off, if (isFavoriteDir(currentDir)) "取消收藏" else "收藏当前", isFavoriteDir(currentDir), controlBarExpanded) {
             toggleFavoriteDir(currentDir)
         })
-        val favoritesChip = controlActionButton(android.R.drawable.btn_star_big_off, "收藏夹", favoriteDirs.isNotEmpty(), controlBarExpanded) {}
+        val favoritesChip = controlActionButton(R.drawable.lucide_star, "收藏夹", favoriteDirs.isNotEmpty(), controlBarExpanded) {}
         favoritesChip.setOnClickListener {
             showDirectoryCollectionMenu(
                 anchor = favoritesChip,
@@ -877,7 +918,7 @@ class FloatingFileManagerService : Service() {
             )
         }
         row.addView(favoritesChip)
-        val recentChip = controlActionButton(android.R.drawable.ic_menu_recent_history, "最近", recentDirs.isNotEmpty(), controlBarExpanded) {}
+        val recentChip = controlActionButton(R.drawable.lucide_history, "最近", recentDirs.isNotEmpty(), controlBarExpanded) {}
         recentChip.setOnClickListener {
             showDirectoryCollectionMenu(
                 anchor = recentChip,
@@ -887,26 +928,26 @@ class FloatingFileManagerService : Service() {
             )
         }
         row.addView(recentChip)
-        row.addView(controlActionButton(android.R.drawable.ic_menu_add, "新建", false, controlBarExpanded) { createFolderPrompt() })
-        row.addView(controlActionButton(android.R.drawable.ic_menu_agenda, "多选", false, controlBarExpanded) {
+        row.addView(controlActionButton(R.drawable.lucide_folder_plus, "新建", false, controlBarExpanded) { createFolderPrompt() })
+        row.addView(controlActionButton(R.drawable.lucide_list_checks, "多选", false, controlBarExpanded) {
             selectionMode = true
             bindPanelScaffold()
             fileAdapter?.notifyDataSetChanged()
         })
-        row.addView(controlActionButton(android.R.drawable.ic_menu_sort_by_size, if (viewMode == ViewMode.LIST) "列表" else "网格", true, controlBarExpanded) {
+        row.addView(controlActionButton(if (viewMode == ViewMode.LIST) R.drawable.lucide_layout_list else R.drawable.lucide_grid_2x2, if (viewMode == ViewMode.LIST) "列表" else "网格", true, controlBarExpanded) {
             viewMode = if (viewMode == ViewMode.LIST) ViewMode.GRID else ViewMode.LIST
             fileAdapter?.setViewMode(viewMode)
             updateLayoutManager()
         })
-        row.addView(controlActionButton(android.R.drawable.ic_menu_sort_by_size, sortMode.label, false, controlBarExpanded) {
+        row.addView(controlActionButton(R.drawable.lucide_arrow_down_up, sortMode.label, false, controlBarExpanded) {
             sortMode = sortMode.next()
             renderDirectoryState(forceReload = true)
         })
-        row.addView(controlActionButton(android.R.drawable.ic_menu_view, if (showHidden) "隐藏:开" else "隐藏:关", showHidden, controlBarExpanded) {
+        row.addView(controlActionButton(if (showHidden) R.drawable.lucide_eye else R.drawable.lucide_eye_off, if (showHidden) "隐藏:开" else "隐藏:关", showHidden, controlBarExpanded) {
             showHidden = !showHidden
             renderDirectoryState(forceReload = true)
         })
-        row.addView(controlActionButton(android.R.drawable.ic_popup_sync, "刷新", false, controlBarExpanded) { renderDirectoryState(forceReload = true) })
+        row.addView(controlActionButton(R.drawable.lucide_refresh_cw, "刷新", false, controlBarExpanded) { renderDirectoryState(forceReload = true) })
     }
 
     private fun updateLayoutManager() {
@@ -1508,13 +1549,11 @@ class FloatingFileManagerService : Service() {
                 LinearLayout(this).apply {
                     orientation = LinearLayout.VERTICAL
                     gravity = Gravity.CENTER
-                    addView(TextView(context).apply {
-                        text = "♪"
-                        gravity = Gravity.CENTER
-                        setTextColor(0xFFDCEAFF.toInt())
-                        textSize = 44f
-                        typeface = Typeface.DEFAULT_BOLD
-                    })
+                    addView(ImageView(context).apply {
+                        setImageResource(R.drawable.lucide_audio_waveform)
+                        setColorFilter(0xFFDCEAFF.toInt())
+                        scaleType = ImageView.ScaleType.FIT_CENTER
+                    }, LinearLayout.LayoutParams(dp(52), dp(52)))
                     addView(TextView(context).apply {
                         text = file.extension.uppercase(Locale.ROOT).ifBlank { "AUDIO" }
                         gravity = Gravity.CENTER
@@ -1677,6 +1716,9 @@ class FloatingFileManagerService : Service() {
         if (file.extension.lowercase(Locale.ROOT) != "mp3") {
             actionRow.addView(chip("转 MP3", false) { convertAudioToMp3Prompt(file) })
         }
+        if (file.extension.lowercase(Locale.ROOT) != "m4a") {
+            actionRow.addView(chip("转 M4A", false) { convertAudioToM4aPrompt(file) })
+        }
         actionRow.addView(chip("外部打开", false) { openExternal(file) })
         actionRow.addView(chip("分享", false) { shareFile(file) })
         container.addView(HorizontalScrollView(this).apply {
@@ -1785,11 +1827,18 @@ class FloatingFileManagerService : Service() {
         )
         if (isVideo) {
             container.addView(
-                LinearLayout(this).apply {
-                    orientation = LinearLayout.HORIZONTAL
-                    setPadding(dp(12), dp(10), dp(12), dp(12))
-                    addView(chip("媒体信息", false) { showMediaInfoDialog(file) })
-                    addView(chip("提取音频", false) { extractAudioFromVideoPrompt(file) })
+                HorizontalScrollView(this).apply {
+                    isHorizontalScrollBarEnabled = false
+                    addView(
+                        LinearLayout(context).apply {
+                            orientation = LinearLayout.HORIZONTAL
+                            setPadding(dp(12), dp(10), dp(12), dp(12))
+                            addView(chip("媒体信息", false) { showMediaInfoDialog(file) })
+                            addView(chip("提取音频", false) { extractAudioFromVideoPrompt(file) })
+                            addView(chip("转 MP4", false) { convertVideoToMp4Prompt(file) })
+                            addView(chip("截取封面", false) { extractVideoFramePrompt(file) })
+                        },
+                    )
                 },
                 LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.MATCH_PARENT,
@@ -2389,6 +2438,26 @@ class FloatingFileManagerService : Service() {
         }
     }
 
+    private fun convertAudioToM4aPrompt(file: File) {
+        val defaultName = "${file.nameWithoutExtension.ifBlank { file.name }}.m4a"
+        showTextInputDialog("转为 M4A", "输出文件名", defaultName) { input ->
+            val target = uniqueDestination(activeTab().currentDir, if (input.endsWith(".m4a", true)) input else "$input.m4a")
+            showLoading("FFmpeg 正在转码音频...")
+            worker.execute {
+                val result = MediaToolbox.convertAudioToM4a(file, target)
+                mainHandler.post {
+                    hideOperationProgress()
+                    if (result.success) {
+                        renderDirectoryState(forceReload = true)
+                        Toast.makeText(this, result.message, Toast.LENGTH_SHORT).show()
+                    } else {
+                        Toast.makeText(this, result.message, Toast.LENGTH_LONG).show()
+                    }
+                }
+            }
+        }
+    }
+
     private fun extractAudioFromVideoPrompt(file: File) {
         val defaultName = "${file.nameWithoutExtension.ifBlank { file.name }}.m4a"
         showTextInputDialog("提取音频", "输出文件名", defaultName) { input ->
@@ -2396,6 +2465,46 @@ class FloatingFileManagerService : Service() {
             showLoading("FFmpeg 正在提取音频...")
             worker.execute {
                 val result = MediaToolbox.extractAudioFromVideo(file, target)
+                mainHandler.post {
+                    hideOperationProgress()
+                    if (result.success) {
+                        renderDirectoryState(forceReload = true)
+                        Toast.makeText(this, result.message, Toast.LENGTH_SHORT).show()
+                    } else {
+                        Toast.makeText(this, result.message, Toast.LENGTH_LONG).show()
+                    }
+                }
+            }
+        }
+    }
+
+    private fun convertVideoToMp4Prompt(file: File) {
+        val defaultName = "${file.nameWithoutExtension.ifBlank { file.name }}.mp4"
+        showTextInputDialog("转为 MP4", "输出文件名", defaultName) { input ->
+            val target = uniqueDestination(activeTab().currentDir, if (input.endsWith(".mp4", true)) input else "$input.mp4")
+            showLoading("FFmpeg 正在转码视频...")
+            worker.execute {
+                val result = MediaToolbox.convertVideoToMp4(file, target)
+                mainHandler.post {
+                    hideOperationProgress()
+                    if (result.success) {
+                        renderDirectoryState(forceReload = true)
+                        Toast.makeText(this, result.message, Toast.LENGTH_SHORT).show()
+                    } else {
+                        Toast.makeText(this, result.message, Toast.LENGTH_LONG).show()
+                    }
+                }
+            }
+        }
+    }
+
+    private fun extractVideoFramePrompt(file: File) {
+        val defaultName = "${file.nameWithoutExtension.ifBlank { file.name }}-cover.png"
+        showTextInputDialog("导出封面帧", "输出文件名", defaultName) { input ->
+            val target = uniqueDestination(activeTab().currentDir, if (input.endsWith(".png", true)) input else "$input.png")
+            showLoading("FFmpeg 正在导出封面帧...")
+            worker.execute {
+                val result = MediaToolbox.extractVideoFrame(file, target)
                 mainHandler.post {
                     hideOperationProgress()
                     if (result.success) {
@@ -2467,10 +2576,19 @@ class FloatingFileManagerService : Service() {
             actions += ActionSheetItem("转为 MP3", "调用 FFmpeg 转换为 MP3") {
                 convertAudioToMp3Prompt(file)
             }
+            actions += ActionSheetItem("转为 M4A", "调用 FFmpeg 转换为 M4A") {
+                convertAudioToM4aPrompt(file)
+            }
             actions += ActionSheetItem("媒体信息", "查看音频元数据") { showMediaInfoDialog(file) }
         } else if (!entry.isDirectory && isVideoFile(file)) {
             actions += ActionSheetItem("提取音频", "从视频中提取音轨") {
                 extractAudioFromVideoPrompt(file)
+            }
+            actions += ActionSheetItem("转为 MP4", "统一转码为 MP4 容器") {
+                convertVideoToMp4Prompt(file)
+            }
+            actions += ActionSheetItem("导出封面帧", "从视频里抓取一张封面图") {
+                extractVideoFramePrompt(file)
             }
             actions += ActionSheetItem("媒体信息", "查看视频元数据") { showMediaInfoDialog(file) }
         }
@@ -2797,7 +2915,7 @@ class FloatingFileManagerService : Service() {
             addView(
                 ImageView(context).apply {
                     setImageResource(icon)
-                    setColorFilter(Color.WHITE)
+                    setColorFilter(if (selected) Color.WHITE else TEXT_SECONDARY_COLOR)
                     layoutParams = LinearLayout.LayoutParams(dp(18), dp(18))
                 },
             )
@@ -2835,16 +2953,16 @@ class FloatingFileManagerService : Service() {
 
     private fun toolbarBackIcon(): Int {
         return if (previewing) {
-            android.R.drawable.ic_media_previous
+            R.drawable.lucide_chevron_left
         } else {
-            android.R.drawable.arrow_up_float
+            R.drawable.lucide_arrow_up_from_line
         }
     }
 
     private fun toolbarActionButton(icon: Int, description: String, action: () -> Unit): ImageButton {
         return ImageButton(this).apply {
             setImageResource(icon)
-            setColorFilter(Color.WHITE)
+            setColorFilter(0xFFE2EEFF.toInt())
             contentDescription = description
             scaleType = ImageView.ScaleType.CENTER_INSIDE
             background = rounded(0xFF192330.toInt(), 16, 1, 0xFF35506B.toInt())
@@ -3018,7 +3136,7 @@ class FloatingFileManagerService : Service() {
         if (entry.isDirectory || entry.isParent) {
             renderFolderIcon(icon, if (entry.isParent) "UP" else "DIR")
         } else {
-            renderFileIcon(icon, fileBadgeLabel(file))
+            renderFileIcon(icon, file, fileBadgeLabel(file))
         }
     }
 
@@ -3061,64 +3179,111 @@ class FloatingFileManagerService : Service() {
     }
 
     private fun renderFolderIcon(container: FrameLayout, label: String) {
-        container.addView(View(this).apply {
-            background = rounded(0xFFF2B84B.toInt(), 12, 0, 0)
-        }, FrameLayout.LayoutParams(
-            FrameLayout.LayoutParams.MATCH_PARENT,
-            dp(28),
-            Gravity.BOTTOM,
-        ))
-        container.addView(View(this).apply {
-            background = rounded(0xFFF9D17F.toInt(), 8, 0, 0)
-        }, FrameLayout.LayoutParams(
-            dp(22),
-            dp(10),
-            Gravity.TOP or Gravity.START,
-        ).apply {
-            leftMargin = dp(3)
-            topMargin = dp(4)
-        })
-        container.addView(TextView(this).apply {
-            text = label
-            setTextColor(0xFF4C3412.toInt())
-            textSize = 8f
-            typeface = Typeface.DEFAULT_BOLD
-            gravity = Gravity.CENTER
-        }, FrameLayout.LayoutParams(
-            FrameLayout.LayoutParams.MATCH_PARENT,
-            dp(28),
-            Gravity.BOTTOM,
-        ))
+        val iconRes = if (label == "UP") R.drawable.lucide_folder_open else R.drawable.lucide_folder
+        renderSymbolCard(
+            container = container,
+            iconRes = iconRes,
+            surfaceColor = 0x1FF9D17F,
+            borderColor = 0xFFE0B14F.toInt(),
+            iconTint = 0xFFF6C251.toInt(),
+            badge = label,
+            badgeColor = 0xFF5A3D10.toInt(),
+        )
     }
 
-    private fun renderFileIcon(container: FrameLayout, badge: String) {
+    private fun renderFileIcon(container: FrameLayout, file: File?, badge: String) {
+        val spec = resolveFileIconSpec(file)
+        renderSymbolCard(
+            container = container,
+            iconRes = spec.resId,
+            surfaceColor = spec.surfaceColor,
+            borderColor = spec.borderColor,
+            iconTint = spec.iconTint,
+            badge = badge,
+            badgeColor = spec.badgeColor,
+        )
+    }
+
+    private fun renderSymbolCard(
+        container: FrameLayout,
+        iconRes: Int,
+        surfaceColor: Int,
+        borderColor: Int,
+        iconTint: Int,
+        badge: String,
+        badgeColor: Int,
+    ) {
         container.addView(View(this).apply {
-            background = rounded(0xFF263445.toInt(), 12, 1, 0xFF42576F.toInt())
+            background = rounded(surfaceColor, 12, 1, borderColor)
         }, FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT,
             FrameLayout.LayoutParams.MATCH_PARENT,
         ))
-        container.addView(View(this).apply {
-            background = rounded(0xFF3A5068.toInt(), 4, 0, 0)
+        container.addView(ImageView(this).apply {
+            setImageResource(iconRes)
+            setColorFilter(iconTint)
+            scaleType = ImageView.ScaleType.FIT_CENTER
         }, FrameLayout.LayoutParams(
-            dp(10),
-            dp(10),
-            Gravity.TOP or Gravity.END,
-        ).apply {
-            rightMargin = dp(3)
-            topMargin = dp(3)
-        })
-        container.addView(TextView(this).apply {
-            text = badge
-            setTextColor(0xFFDDEBFF.toInt())
-            textSize = 8f
-            typeface = Typeface.DEFAULT_BOLD
-            gravity = Gravity.CENTER
-        }, FrameLayout.LayoutParams(
-            FrameLayout.LayoutParams.MATCH_PARENT,
-            FrameLayout.LayoutParams.MATCH_PARENT,
+            dp(24),
+            dp(24),
             Gravity.CENTER,
         ))
+        container.addView(iconBadge(badge, badgeColor), FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.WRAP_CONTENT,
+            FrameLayout.LayoutParams.WRAP_CONTENT,
+            Gravity.BOTTOM or Gravity.END,
+        ).apply {
+            rightMargin = dp(2)
+            bottomMargin = dp(2)
+        })
+    }
+
+    private fun resolveFileIconSpec(file: File?): FileIconSpec {
+        val ext = file?.extension?.lowercase(Locale.ROOT).orEmpty()
+        return when {
+            ext in textExtensions -> FileIconSpec(
+                R.drawable.lucide_file_text,
+                0xFF13202B.toInt(),
+                0xFF345064.toInt(),
+                0xFF6DB7FF.toInt(),
+                0xFF1C3E61.toInt(),
+            )
+            ext in imageExtensions -> FileIconSpec(
+                R.drawable.lucide_file_image,
+                0xFF1A2115.toInt(),
+                0xFF4A5D2B.toInt(),
+                0xFFA8E16F.toInt(),
+                0xFF35571C.toInt(),
+            )
+            ext in audioExtensions -> FileIconSpec(
+                R.drawable.lucide_file_music,
+                0xFF1F1627.toInt(),
+                0xFF59406E.toInt(),
+                0xFFE3A4FF.toInt(),
+                0xFF5E2A76.toInt(),
+            )
+            ext in videoExtensions -> FileIconSpec(
+                R.drawable.lucide_file_video_camera,
+                0xFF181B27.toInt(),
+                0xFF394F7D.toInt(),
+                0xFF97B7FF.toInt(),
+                0xFF28406B.toInt(),
+            )
+            ext in archiveExtensions -> FileIconSpec(
+                R.drawable.lucide_file_archive,
+                0xFF231B14.toInt(),
+                0xFF6F4D2F.toInt(),
+                0xFFF0BF7A.toInt(),
+                0xFF6B4318.toInt(),
+            )
+            else -> FileIconSpec(
+                R.drawable.lucide_file,
+                0xFF1A2029.toInt(),
+                0xFF3B4A5C.toInt(),
+                0xFFD7E6F9.toInt(),
+                0xFF2A4761.toInt(),
+            )
+        }
     }
 
     private fun iconBadge(label: String, backgroundColor: Int): TextView {
@@ -3650,6 +3815,14 @@ class FloatingFileManagerService : Service() {
         val width: Int,
         val height: Int,
         val mimeType: String?,
+    )
+
+    private data class FileIconSpec(
+        val resId: Int,
+        val surfaceColor: Int,
+        val borderColor: Int,
+        val iconTint: Int,
+        val badgeColor: Int,
     )
 
     private enum class ActionTone {

@@ -1,22 +1,16 @@
 import 'dart:convert';
 import 'dart:typed_data';
-import 'package:flutter/material.dart';
-import 'package:flutter_pty/flutter_pty.dart';
-import '../app.dart';
 
-/// Termux-style extra keys toolbar for terminal screens.
-/// Provides ESC, CTRL, ALT, TAB, arrows, and common special characters.
-///
-/// CTRL and ALT state is exposed via [ValueNotifier]s so the parent
-/// screen can intercept keyboard input and apply modifiers.
+import 'package:flutter/material.dart';
+
 class TerminalToolbar extends StatefulWidget {
-  final Pty? pty;
+  final ValueChanged<Uint8List> onWrite;
   final ValueNotifier<bool> ctrlNotifier;
   final ValueNotifier<bool> altNotifier;
 
   const TerminalToolbar({
     super.key,
-    required this.pty,
+    required this.onWrite,
     required this.ctrlNotifier,
     required this.altNotifier,
   });
@@ -48,74 +42,75 @@ class _TerminalToolbarState extends State<TerminalToolbar> {
   }
 
   void _send(String data) {
-    final pty = widget.pty;
-    if (pty == null) return;
-
     if (_ctrlActive) {
       widget.ctrlNotifier.value = false;
 
-      // Ctrl+a-z → bytes 1-26
       if (data.length == 1) {
         final code = data.toLowerCase().codeUnitAt(0);
         if (code >= 97 && code <= 122) {
-          pty.write(Uint8List.fromList([code - 96]));
+          widget.onWrite(Uint8List.fromList([code - 96]));
           return;
         }
       }
 
-      // Ctrl+escape sequences (arrows, Home, End, PgUp, PgDn)
       const ctrlSeqMap = <String, String>{
-        '\x1b[A': '\x1b[1;5A', // Up
-        '\x1b[B': '\x1b[1;5B', // Down
-        '\x1b[D': '\x1b[1;5D', // Left
-        '\x1b[C': '\x1b[1;5C', // Right
-        '\x1b[H': '\x1b[1;5H', // Home
-        '\x1b[F': '\x1b[1;5F', // End
-        '\x1b[5~': '\x1b[5;5~', // PgUp
-        '\x1b[6~': '\x1b[6;5~', // PgDn
+        '\x1b[A': '\x1b[1;5A',
+        '\x1b[B': '\x1b[1;5B',
+        '\x1b[D': '\x1b[1;5D',
+        '\x1b[C': '\x1b[1;5C',
+        '\x1b[H': '\x1b[1;5H',
+        '\x1b[F': '\x1b[1;5F',
+        '\x1b[5~': '\x1b[5;5~',
+        '\x1b[6~': '\x1b[6;5~',
       };
 
       final ctrlVariant = ctrlSeqMap[data];
       if (ctrlVariant != null) {
-        pty.write(utf8.encode(ctrlVariant));
+        widget.onWrite(Uint8List.fromList(utf8.encode(ctrlVariant)));
         return;
       }
 
-      // Unhandled combo: send raw data (TAB, ESC, symbols, etc.)
-      pty.write(utf8.encode(data));
+      widget.onWrite(Uint8List.fromList(utf8.encode(data)));
       return;
     }
 
     if (_altActive) {
-      // ALT+key: send ESC + key
       widget.altNotifier.value = false;
-      pty.write(utf8.encode('\x1b$data'));
+      widget.onWrite(Uint8List.fromList(utf8.encode('\x1b$data')));
       return;
     }
 
-    pty.write(utf8.encode(data));
+    widget.onWrite(Uint8List.fromList(utf8.encode(data)));
   }
 
   void _toggleCtrl() {
     widget.ctrlNotifier.value = !_ctrlActive;
-    if (_ctrlActive) widget.altNotifier.value = false;
+    if (_ctrlActive) {
+      widget.altNotifier.value = false;
+    }
   }
 
   void _toggleAlt() {
     widget.altNotifier.value = !_altActive;
-    if (_altActive) widget.ctrlNotifier.value = false;
+    if (_altActive) {
+      widget.ctrlNotifier.value = false;
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-    final bgColor = isDark ? AppColors.darkBg : const Color(0xFFE0E0E0);
-    final btnColor = isDark ? AppColors.darkSurfaceAlt : const Color(0xFFEEEEEE);
-    const activeColor = AppColors.accent;
-    final textColor = isDark ? Colors.white70 : Colors.black87;
+    const bgColor = Colors.black;
+    const btnColor = Color(0xFF161616);
+    const activeColor = Color(0xFF00C853);
+    const textColor = Colors.white;
 
-    Widget keyButton(String label, {VoidCallback? onTap, String? sendData, bool active = false, double? width}) {
+    Widget keyButton(
+      String label, {
+      VoidCallback? onTap,
+      String? sendData,
+      bool active = false,
+      double? width,
+    }) {
       return Padding(
         padding: const EdgeInsets.symmetric(horizontal: 1.5),
         child: Material(

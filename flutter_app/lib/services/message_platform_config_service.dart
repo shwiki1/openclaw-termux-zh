@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import '../constants.dart';
 import 'native_bridge.dart';
 import 'preferences_service.dart';
 
@@ -12,10 +13,41 @@ class MessagePlatformConfigService {
   static const _legacyLarkChannelId = 'lark';
   static const _defaultFeishuAccountId = 'default';
   static const qqbotPluginPackage = '@tencent-connect/openclaw-qqbot@latest';
+  static const _qqbotPluginId = 'openclaw-qqbot';
+  static const _qqbotLegacyPluginIds = <String>[
+    'qqbot',
+    '@tencent-connect/openclaw-qqbot',
+  ];
+  static const _qqbotPluginPackagePaths = <String>[
+    '/usr/local/lib/node_modules/@tencent-connect/openclaw-qqbot/package.json',
+    '/usr/lib/node_modules/@tencent-connect/openclaw-qqbot/package.json',
+    '/root/.openclaw/node_modules/@tencent-connect/openclaw-qqbot/package.json',
+  ];
   static const qqbotConnectUrl = 'https://q.qq.com/qqbot/openclaw/login.html';
-  static const weixinPluginPackage = '@tencent/openclaw-weixin';
+  static const weixinPluginPackage = '@tencent-weixin/openclaw-weixin@latest';
+  static const _weixinPluginId = 'openclaw-weixin';
+  static const _weixinLegacyPluginIds = <String>[
+    'weixin',
+    '@tencent/openclaw-weixin',
+    '@tencent-weixin/openclaw-weixin',
+  ];
+  static const _weixinPluginPackagePaths = <String>[
+    '/usr/local/lib/node_modules/@tencent-weixin/openclaw-weixin/package.json',
+    '/usr/local/lib/node_modules/@tencent/openclaw-weixin/package.json',
+    '/usr/lib/node_modules/@tencent-weixin/openclaw-weixin/package.json',
+    '/usr/lib/node_modules/@tencent/openclaw-weixin/package.json',
+    '/root/.openclaw/node_modules/@tencent-weixin/openclaw-weixin/package.json',
+    '/root/.openclaw/node_modules/@tencent/openclaw-weixin/package.json',
+  ];
+  static const _weixinInstallerPackage =
+      '@tencent-weixin/openclaw-weixin-cli@latest';
   static const weixinInstallerCommand =
-      'npx -y @tencent-weixin/openclaw-weixin-cli install';
+      'export npm_config_registry=${AppConstants.npmRegistryUrl}; '
+      'export NPM_CONFIG_REGISTRY=${AppConstants.npmRegistryUrl}; '
+      'openclaw plugins install "$weixinPluginPackage" || '
+      'openclaw plugins install @tencent-weixin/openclaw-weixin; '
+      'openclaw config set plugins.entries.$_weixinPluginId.enabled true; '
+      'npx -y $_weixinInstallerPackage install';
 
   static String _shellEscape(String s) {
     return "'${s.replaceAll("'", "'\\''")}'";
@@ -24,11 +56,17 @@ class MessagePlatformConfigService {
   static String _wrapOpenclawCommand(String command) {
     return '''
 if [ -f /root/.openclaw/bionic-bypass.js ]; then
-  export NODE_OPTIONS="--require /root/.openclaw/bionic-bypass.js"
+export NODE_OPTIONS="--require /root/.openclaw/bionic-bypass.js"
 fi
 export CHOKIDAR_USEPOLLING=true
 export NODE_EXTRA_CA_CERTS=/etc/ssl/certs/ca-certificates.crt
 export UV_USE_IO_URING=0
+export npm_config_registry=${AppConstants.npmRegistryUrl}
+export NPM_CONFIG_REGISTRY=${AppConstants.npmRegistryUrl}
+export npm_config_fetch_retries=5
+export npm_config_fetch_retry_mintimeout=2000
+export npm_config_fetch_retry_maxtimeout=20000
+export npm_config_prefer_online=true
 $command
 ''';
   }
@@ -48,6 +86,21 @@ $command
       _wrapOpenclawCommand(command),
       timeout: timeout,
     );
+  }
+
+  static Future<String> _runOpenclawCommandWithRetries(
+    List<String> commands, {
+    int timeout = 120,
+  }) async {
+    Object? lastError;
+    for (final command in commands) {
+      try {
+        return await _runOpenclawCommand(command, timeout: timeout);
+      } catch (error) {
+        lastError = error;
+      }
+    }
+    throw Exception('Command failed after retries: $lastError');
   }
 
   static bool _isNonEmptyString(dynamic value) =>
@@ -176,6 +229,182 @@ $command
     final prefs = await _loadPrefs();
     prefs.qqbotAppId = null;
     prefs.qqbotAppSecret = null;
+  }
+
+  static bool _pluginEntryEnabled(
+    Map<String, dynamic> config,
+    List<String> aliases,
+  ) {
+    final plugins = _normalizeMutableConfig(config['plugins']);
+    final entries = _normalizeMutableConfig(plugins['entries']);
+    for (final alias in aliases) {
+      final entry = _normalizeMutableConfig(entries[alias]);
+      if (entry['enabled'] == true) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  static Future<bool> _rootfsFileExists(String path) async {
+    try {
+      final content = await NativeBridge.readRootfsFile(path);
+      return content != null && content.trim().isNotEmpty;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  static Future<bool> _anyRootfsFileExists(List<String> paths) async {
+    for (final path in paths) {
+      if (await _rootfsFileExists(path)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  static Future<bool> _isPluginInstalledFast({
+    required String pluginId,
+    required List<String> aliases,
+    required List<String> packagePaths,
+  }) async {
+    final config = await _readMutableConfig();
+    final enabled = _pluginEntryEnabled(config, <String>[pluginId, ...aliases]);
+    final packageExists = await _anyRootfsFileExists(packagePaths);
+    if (enabled && packageExists) {
+      return true;
+    }
+    return packageExists;
+  }
+
+  static Map<String, dynamic> _normalizeMutableConfig(dynamic value) {
+    if (value is Map<String, dynamic>) {
+      return Map<String, dynamic>.from(value);
+    }
+    if (value is Map) {
+      return value.map((key, item) => MapEntry(key.toString(), item));
+    }
+    return <String, dynamic>{};
+  }
+
+  static bool _hasNonEmptyMap(dynamic value) {
+    if (value is! Map) {
+      return false;
+    }
+    return value.isNotEmpty;
+  }
+
+  static bool _hasQqbotChannelConfig(Map<String, dynamic> channels) {
+    final channel = _normalizeMutableConfig(channels[_qqbotChannelId]);
+    if (_isNonEmptyString(channel['appId']) &&
+        _isNonEmptyString(channel['clientSecret'])) {
+      return true;
+    }
+    if (_isNonEmptyString(channel['appId']) &&
+        _isNonEmptyString(channel['appSecret'])) {
+      return true;
+    }
+    return _hasNonEmptyMap(channel['accounts']);
+  }
+
+  static Future<Map<String, dynamic>> _readMutableConfig() async {
+    try {
+      final content = await NativeBridge.readRootfsFile(_configPath);
+      if (content == null || content.trim().isEmpty) {
+        return <String, dynamic>{};
+      }
+      final decoded = jsonDecode(content);
+      if (decoded is Map<String, dynamic>) {
+        return Map<String, dynamic>.from(decoded);
+      }
+      if (decoded is Map) {
+        return decoded.map((key, value) => MapEntry(key.toString(), value));
+      }
+    } catch (_) {}
+    return <String, dynamic>{};
+  }
+
+  static Future<void> _writeMutableConfig(Map<String, dynamic> config) async {
+    await NativeBridge.writeRootfsFile(
+      _configPath,
+      const JsonEncoder.withIndent('  ').convert(config),
+    );
+  }
+
+  static Future<void> _setPluginEntryEnabled(
+    String pluginId, {
+    required bool enabled,
+    required List<String> cleanupAliases,
+  }) async {
+    final config = await _readMutableConfig();
+    final plugins = _normalizeMutableConfig(config['plugins']);
+    final entries = _normalizeMutableConfig(plugins['entries']);
+
+    for (final alias in cleanupAliases) {
+      if (alias != pluginId) {
+        entries.remove(alias);
+      }
+    }
+
+    if (enabled) {
+      final entry = _normalizeMutableConfig(entries[pluginId]);
+      entry['enabled'] = true;
+      entries[pluginId] = entry;
+    } else {
+      entries.remove(pluginId);
+    }
+
+    if (entries.isEmpty) {
+      plugins.remove('entries');
+    } else {
+      plugins['entries'] = entries;
+    }
+
+    if (plugins.isEmpty) {
+      config.remove('plugins');
+    } else {
+      config['plugins'] = plugins;
+    }
+
+    await _writeMutableConfig(config);
+  }
+
+  static Future<void> _normalizeQqbotChannelConfig({
+    required String appId,
+    required String appSecret,
+  }) async {
+    final config = await _readMutableConfig();
+    final channels = _normalizeMutableConfig(config['channels']);
+    final existing = _normalizeMutableConfig(channels[_qqbotChannelId]);
+
+    existing['enabled'] = true;
+    existing['appId'] = appId;
+    existing['clientSecret'] = appSecret;
+    existing.remove('appSecret');
+    channels[_qqbotChannelId] = existing;
+    config['channels'] = channels;
+
+    await _writeMutableConfig(config);
+  }
+
+  static Future<void> repairMessagingPluginConfigIfNeeded() async {
+    final config = await _readMutableConfig();
+    final channels = _normalizeMutableConfig(config['channels']);
+    final hasQqbotLocal = await _readQqbotLocalConfig() != null;
+    final enableQqbot = _hasQqbotChannelConfig(channels) || hasQqbotLocal;
+    final enableWeixin = _hasNonEmptyMap(channels[_weixinChannelId]);
+
+    await _setPluginEntryEnabled(
+      _qqbotPluginId,
+      enabled: enableQqbot,
+      cleanupAliases: <String>[_qqbotPluginId, ..._qqbotLegacyPluginIds],
+    );
+    await _setPluginEntryEnabled(
+      _weixinPluginId,
+      enabled: enableWeixin,
+      cleanupAliases: <String>[_weixinPluginId, ..._weixinLegacyPluginIds],
+    );
   }
 
   static Future<Map<String, dynamic>> readConfig() async {
@@ -388,13 +617,23 @@ fs.writeFileSync(p, JSON.stringify(c, null, 2));
   }
 
   static Future<bool> isQqbotPluginInstalled() async {
+    final fastInstalled = await _isPluginInstalledFast(
+      pluginId: _qqbotPluginId,
+      aliases: _qqbotLegacyPluginIds,
+      packagePaths: _qqbotPluginPackagePaths,
+    );
+    if (fastInstalled) {
+      return true;
+    }
+
     try {
       final output = await _runOpenclawCommand(
         'openclaw plugins list',
-        timeout: 45,
+        timeout: 12,
       );
       final lower = output.toLowerCase();
       return lower.contains('@tencent-connect/openclaw-qqbot') ||
+          lower.contains(_qqbotPluginId) ||
           lower.contains('qqbot');
     } catch (_) {
       return false;
@@ -402,14 +641,24 @@ fs.writeFileSync(p, JSON.stringify(c, null, 2));
   }
 
   static Future<bool> isWeixinPluginInstalled() async {
+    final fastInstalled = await _isPluginInstalledFast(
+      pluginId: _weixinPluginId,
+      aliases: _weixinLegacyPluginIds,
+      packagePaths: _weixinPluginPackagePaths,
+    );
+    if (fastInstalled) {
+      return true;
+    }
+
     try {
       final output = await _runOpenclawCommand(
         'openclaw plugins list',
-        timeout: 45,
+        timeout: 12,
       );
       final lower = output.toLowerCase();
-      return lower.contains('@tencent/openclaw-weixin') ||
-          lower.contains('openclaw-weixin') ||
+      return lower.contains('@tencent-weixin/openclaw-weixin') ||
+          lower.contains('@tencent/openclaw-weixin') ||
+          lower.contains(_weixinPluginId) ||
           lower.contains(_weixinChannelId);
     } catch (_) {
       return false;
@@ -419,13 +668,78 @@ fs.writeFileSync(p, JSON.stringify(c, null, 2));
   static Future<void> ensureQqbotPluginInstalled() async {
     final installed = await isQqbotPluginInstalled();
     if (installed) {
+      await _setPluginEntryEnabled(
+        _qqbotPluginId,
+        enabled: true,
+        cleanupAliases: <String>[_qqbotPluginId, ..._qqbotLegacyPluginIds],
+      );
       return;
     }
 
     await _runOpenclawCommand(
-      'openclaw plugins install $qqbotPluginPackage',
-      timeout: 600,
+      'openclaw plugins uninstall qqbot || true; '
+      'openclaw plugins uninstall openclaw-qqbot || true',
+      timeout: 90,
     );
+    await _runOpenclawCommandWithRetries(
+      <String>[
+        'openclaw plugins install "$qqbotPluginPackage"',
+        'openclaw plugins install @tencent-connect/openclaw-qqbot',
+      ],
+      timeout: 1800,
+    );
+    await _setPluginEntryEnabled(
+      _qqbotPluginId,
+      enabled: true,
+      cleanupAliases: <String>[_qqbotPluginId, ..._qqbotLegacyPluginIds],
+    );
+  }
+
+  static Future<void> ensureWeixinPluginInstalled() async {
+    final installed = await isWeixinPluginInstalled();
+    if (installed) {
+      await _setPluginEntryEnabled(
+        _weixinPluginId,
+        enabled: true,
+        cleanupAliases: <String>[_weixinPluginId, ..._weixinLegacyPluginIds],
+      );
+      return;
+    }
+
+    await _runOpenclawCommand(
+      'openclaw plugins uninstall openclaw-weixin || true; '
+      'openclaw plugins uninstall weixin || true',
+      timeout: 90,
+    );
+    await _runOpenclawCommandWithRetries(
+      <String>[
+        'openclaw plugins install "$weixinPluginPackage"',
+        'openclaw plugins install @tencent-weixin/openclaw-weixin',
+      ],
+      timeout: 1800,
+    );
+    await _setPluginEntryEnabled(
+      _weixinPluginId,
+      enabled: true,
+      cleanupAliases: <String>[_weixinPluginId, ..._weixinLegacyPluginIds],
+    );
+  }
+
+  static String buildWeixinInstallerTerminalCommand() {
+    return '''
+export npm_config_registry=${AppConstants.npmRegistryUrl}
+export NPM_CONFIG_REGISTRY=${AppConstants.npmRegistryUrl}
+export npm_config_fetch_retries=5
+export npm_config_fetch_retry_mintimeout=2000
+export npm_config_fetch_retry_maxtimeout=20000
+export CHOKIDAR_USEPOLLING=true
+export UV_USE_IO_URING=0
+openclaw plugins uninstall openclaw-weixin >/dev/null 2>&1 || true
+openclaw plugins uninstall weixin >/dev/null 2>&1 || true
+openclaw plugins install "$weixinPluginPackage" || openclaw plugins install @tencent-weixin/openclaw-weixin
+openclaw config set plugins.entries.$_weixinPluginId.enabled true || true
+npx -y $_weixinInstallerPackage install
+''';
   }
 
   static Future<void> configureQqbot({
@@ -437,9 +751,21 @@ fs.writeFileSync(p, JSON.stringify(c, null, 2));
     final token = '$normalizedAppId:$normalizedAppSecret';
 
     await ensureQqbotPluginInstalled();
-    await _runOpenclawCommand(
-      'openclaw channels add --channel qqbot --token ${_shellEscape(token)}',
-      timeout: 120,
+    await _runOpenclawCommandWithRetries(
+      <String>[
+        'openclaw channels add --channel qqbot --token ${_shellEscape(token)}',
+        'openclaw channels add --channel qqbot --token ${_shellEscape(token)} --force',
+      ],
+      timeout: 240,
+    );
+    await _normalizeQqbotChannelConfig(
+      appId: normalizedAppId,
+      appSecret: normalizedAppSecret,
+    );
+    await _setPluginEntryEnabled(
+      _qqbotPluginId,
+      enabled: true,
+      cleanupAliases: <String>[_qqbotPluginId, ..._qqbotLegacyPluginIds],
     );
     await _saveQqbotLocalConfig(
       appId: normalizedAppId,

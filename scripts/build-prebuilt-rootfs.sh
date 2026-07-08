@@ -74,17 +74,17 @@ case "$ARCH" in
   arm64)
     ROOTFS_ARCH="arm64"
     QEMU_BIN="qemu-aarch64-static"
-    DEFAULT_MIRROR="http://ports.ubuntu.com/ubuntu-ports"
+    DEFAULT_MIRROR="http://mirrors.tuna.tsinghua.edu.cn/ubuntu-ports"
     ;;
   armhf)
     ROOTFS_ARCH="armhf"
     QEMU_BIN="qemu-arm-static"
-    DEFAULT_MIRROR="http://ports.ubuntu.com/ubuntu-ports"
+    DEFAULT_MIRROR="http://mirrors.tuna.tsinghua.edu.cn/ubuntu-ports"
     ;;
   amd64)
     ROOTFS_ARCH="amd64"
     QEMU_BIN="qemu-x86_64-static"
-    DEFAULT_MIRROR="http://archive.ubuntu.com/ubuntu"
+    DEFAULT_MIRROR="http://mirrors.tuna.tsinghua.edu.cn/ubuntu"
     ;;
   *)
     echo "Unsupported arch: $ARCH" >&2
@@ -94,7 +94,12 @@ esac
 
 MIRROR="${MIRROR:-$DEFAULT_MIRROR}"
 BASE_NAME="ubuntu-base-${UBUNTU_VERSION}-base-${ROOTFS_ARCH}.tar.gz"
-BASE_URL="https://cdimage.ubuntu.com/ubuntu-base/releases/24.04/release/$BASE_NAME"
+BASE_URLS=(
+  "https://mirrors.tuna.tsinghua.edu.cn/ubuntu-cdimage/ubuntu-base/releases/24.04/release/$BASE_NAME"
+  "https://mirrors.ustc.edu.cn/ubuntu-cdimage/ubuntu-base/releases/24.04/release/$BASE_NAME"
+  "https://mirrors.aliyun.com/ubuntu-cdimage/ubuntu-base/releases/24.04/release/$BASE_NAME"
+  "https://cdimage.ubuntu.com/ubuntu-base/releases/24.04/release/$BASE_NAME"
+)
 OUTPUT_NAME="openclaw-rootfs-${CODENAME}-${ROOTFS_ARCH}.tar.gz"
 WORK_DIR="$WORK_BASE/$ROOTFS_ARCH"
 ROOTFS_DIR="$WORK_DIR/rootfs"
@@ -210,14 +215,25 @@ chroot_run() {
 }
 
 echo "==> Building prebuilt rootfs: $OUTPUT_NAME"
-echo "    Ubuntu base: $BASE_URL"
+echo "    Ubuntu base: ${BASE_URLS[0]}"
 echo "    Mirror:      $MIRROR"
 
 mkdir -p "$CACHE_DIR" "$ASSET_DIR" "$WORK_DIR"
 if [[ ! -s "$BASE_TARBALL" ]]; then
   echo "==> Downloading Ubuntu base rootfs"
-  curl -fL --retry 3 --connect-timeout 20 -o "$BASE_TARBALL.tmp" "$BASE_URL"
-  mv "$BASE_TARBALL.tmp" "$BASE_TARBALL"
+  downloaded=0
+  for base_url in "${BASE_URLS[@]}"; do
+    if curl -fL --retry 3 --connect-timeout 20 -o "$BASE_TARBALL.tmp" "$base_url"; then
+      mv "$BASE_TARBALL.tmp" "$BASE_TARBALL"
+      downloaded=1
+      break
+    fi
+  done
+  if [[ "$downloaded" != "1" ]]; then
+    rm -f "$BASE_TARBALL.tmp"
+    echo "Failed to download Ubuntu base rootfs from all mirrors" >&2
+    exit 1
+  fi
 else
   echo "==> Reusing cached Ubuntu base rootfs"
 fi

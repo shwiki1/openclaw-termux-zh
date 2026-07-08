@@ -71,12 +71,39 @@ object MediaToolbox {
         )
     }
 
+    fun convertAudioToM4a(source: File, target: File): CommandResult {
+        return runCommand(
+            source = source,
+            target = target,
+            command = "-y -i ${quoted(source)} -vn -codec:a aac -b:a 192k ${quoted(target)}",
+            successMessage = "已转换为 M4A",
+        )
+    }
+
     fun extractAudioFromVideo(source: File, target: File): CommandResult {
         return runCommand(
             source = source,
             target = target,
             command = "-y -i ${quoted(source)} -vn -codec:a aac -b:a 192k ${quoted(target)}",
             successMessage = "已提取音频",
+        )
+    }
+
+    fun convertVideoToMp4(source: File, target: File): CommandResult {
+        return runCommand(
+            source = source,
+            target = target,
+            command = "-y -i ${quoted(source)} -map 0:v:0 -map 0:a? -c:v libx264 -preset medium -crf 23 -c:a aac -b:a 192k -movflags +faststart ${quoted(target)}",
+            successMessage = "已转换为 MP4",
+        )
+    }
+
+    fun extractVideoFrame(source: File, target: File): CommandResult {
+        return runCommand(
+            source = source,
+            target = target,
+            command = "-y -i ${quoted(source)} -vf thumbnail -frames:v 1 ${quoted(target)}",
+            successMessage = "已导出封面帧",
         )
     }
 

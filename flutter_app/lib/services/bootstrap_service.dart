@@ -195,6 +195,41 @@ class BootstrapService {
     );
   }
 
+  Future<void> _downloadStepArchiveWithFallbacks({
+    required List<String> urls,
+    required String destinationPath,
+    required void Function(SetupState) onProgress,
+    required SetupStep step,
+    required double startProgress,
+    required double endProgress,
+    required String idleMessage,
+  }) async {
+    Object? lastError;
+    for (final url in urls) {
+      try {
+        _deleteArchiveIfExists(destinationPath);
+        final host = Uri.tryParse(url)?.host;
+        final sourceLabel =
+            host == null || host.isEmpty ? '' : ' | source: $host';
+        await _downloadStepArchive(
+          url: url,
+          destinationPath: destinationPath,
+          onProgress: onProgress,
+          step: step,
+          startProgress: startProgress,
+          endProgress: endProgress,
+          idleMessage: idleMessage,
+          detailBuilder: (currentMb, totalMb, details) =>
+              '$currentMb MB / $totalMb MB$sourceLabel | $details',
+        );
+        return;
+      } catch (error) {
+        lastError = error;
+      }
+    }
+    throw StateError('Failed to download archive: $lastError');
+  }
+
   Future<void> _downloadNodeArchive({
     required String arch,
     required String version,
@@ -448,7 +483,8 @@ class BootstrapService {
 
       // Step 1: Download rootfs
       final arch = await NativeBridge.getArch();
-      final rootfsUrl = AppConstants.getRootfsUrl(arch);
+      final rootfsUrls = AppConstants.getRootfsUrlCandidates(arch);
+      final rootfsUrl = rootfsUrls.first;
       final filesDir = await NativeBridge.getFilesDir();
 
       // Direct Dart fallback: ensure config dir + resolv.conf exist (#40).
@@ -672,16 +708,14 @@ class BootstrapService {
                   'Using downloaded Ubuntu rootfs package... 30.0%',
             );
           } else {
-            await _downloadStepArchive(
-              url: rootfsUrl,
+            await _downloadStepArchiveWithFallbacks(
+              urls: rootfsUrls,
               destinationPath: tarPath,
               onProgress: onProgress,
               step: SetupStep.downloadingRootfs,
               startProgress: 0.0,
               endProgress: 1.0,
               idleMessage: 'Downloading Ubuntu rootfs...',
-              detailBuilder: (currentMb, totalMb, details) =>
-                  '$currentMb MB / $totalMb MB | $details',
             );
           }
 
@@ -697,16 +731,14 @@ class BootstrapService {
             try {
               File(tarPath).deleteSync();
             } catch (_) {}
-            await _downloadStepArchive(
-              url: rootfsUrl,
+            await _downloadStepArchiveWithFallbacks(
+              urls: rootfsUrls,
               destinationPath: tarPath,
               onProgress: onProgress,
               step: SetupStep.downloadingRootfs,
               startProgress: 0.0,
               endProgress: 1.0,
               idleMessage: 'Local rootfs cache failed, downloading online...',
-              detailBuilder: (currentMb, totalMb, details) =>
-                  '$currentMb MB / $totalMb MB | $details',
             );
             await _extractRootfsWithProgress(
               onProgress: onProgress,

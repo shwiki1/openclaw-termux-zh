@@ -163,6 +163,93 @@ class _CliApiConfigDialogState extends State<CliApiConfigDialog> {
     }
   }
 
+  Future<void> _selectModelFromList() async {
+    if (_availableModels.isEmpty) {
+      setState(() {
+        _error = '请先获取模型列表。';
+      });
+      return;
+    }
+
+    final selected = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      builder: (ctx) {
+        final theme = Theme.of(ctx);
+        final currentModel = _modelController.text.trim();
+        return SafeArea(
+          child: FractionallySizedBox(
+            heightFactor: 0.82,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          '选择模型',
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        onPressed: () => Navigator.of(ctx).pop(),
+                        icon: const Icon(Icons.close),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '已获取 ${_availableModels.length} 个模型，列表可上下滑动。',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Expanded(
+                    child: ListView.separated(
+                      itemCount: _availableModels.length,
+                      separatorBuilder: (_, __) => const Divider(height: 1),
+                      itemBuilder: (_, index) {
+                        final model = _availableModels[index];
+                        final selected = model == currentModel;
+                        return ListTile(
+                          title: Text(
+                            model,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          trailing: selected
+                              ? Icon(
+                                  Icons.check_circle,
+                                  color: theme.colorScheme.primary,
+                                )
+                              : null,
+                          onTap: () => Navigator.of(ctx).pop(model),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+
+    if (!mounted || selected == null || selected.isEmpty) {
+      return;
+    }
+
+    setState(() {
+      _modelController.text = selected;
+    });
+  }
+
   Future<void> _save() async {
     setState(() {
       _saving = true;
@@ -336,28 +423,16 @@ class _CliApiConfigDialogState extends State<CliApiConfigDialog> {
                     ),
                     if (_availableModels.isNotEmpty) ...[
                       const SizedBox(height: 8),
-                      DropdownButtonFormField<String>(
-                        key: ValueKey('tool-model-${widget.tool.id}-${_modelController.text.trim()}-${_availableModels.length}'),
-                        initialValue:
-                            _availableModels.contains(_modelController.text.trim())
-                                ? _modelController.text.trim()
-                                : null,
-                        isExpanded: true,
-                        decoration: const InputDecoration(
-                          labelText: '选择模型',
-                          border: OutlineInputBorder(),
+                      OutlinedButton.icon(
+                        onPressed:
+                            _saving || _loadingModels ? null : _selectModelFromList,
+                        icon: const Icon(Icons.format_list_bulleted),
+                        label: Text(
+                          _modelController.text.trim().isEmpty
+                              ? '打开模型列表'
+                              : '已选：${_modelController.text.trim()}',
+                          overflow: TextOverflow.ellipsis,
                         ),
-                        items: [
-                          for (final model in _availableModels)
-                            DropdownMenuItem<String>(
-                              value: model,
-                              child: Text(model, overflow: TextOverflow.ellipsis),
-                            ),
-                        ],
-                        onChanged: (value) {
-                          if (value == null) return;
-                          setState(() => _modelController.text = value);
-                        },
                       ),
                     ],
                     const SizedBox(height: 12),

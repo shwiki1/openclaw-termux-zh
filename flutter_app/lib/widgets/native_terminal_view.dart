@@ -1,16 +1,38 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:xterm/xterm.dart';
 
 class NativeTerminalView extends StatefulWidget {
-  final Terminal terminal;
+  final String sessionId;
+  final String executable;
+  final String cwd;
+  final List<String> arguments;
+  final Map<String, String> environment;
+  final bool restart;
+  final bool keepAlive;
+  final bool emitOutput;
+  final int fontSize;
+  final ValueChanged<String>? onOutput;
+  final ValueChanged<int>? onSessionFinished;
+  final ValueChanged<String>? onTitleChanged;
 
   const NativeTerminalView({
     super.key,
-    required this.terminal,
+    required this.sessionId,
+    required this.executable,
+    required this.arguments,
+    required this.environment,
+    this.cwd = '/',
+    this.restart = false,
+    this.keepAlive = false,
+    this.emitOutput = false,
+    this.fontSize = 18,
+    this.onOutput,
+    this.onSessionFinished,
+    this.onTitleChanged,
   });
 
   @override
@@ -18,118 +40,95 @@ class NativeTerminalView extends StatefulWidget {
 }
 
 class NativeTerminalViewState extends State<NativeTerminalView> {
-  late final String _viewId;
   MethodChannel? _channel;
-  Timer? _timer;
-  String _lastText = '';
 
-  @override
-  void initState() {
-    super.initState();
-    _viewId = 'terminal_${identityHashCode(this)}';
-    _timer = Timer.periodic(
-      const Duration(milliseconds: 180),
-      (_) => _syncText(),
-    );
+  Future<void> writeBytes(List<int> bytes) async {
+    await _channel?.invokeMethod('writeBytes', Uint8List.fromList(bytes));
   }
 
-  @override
-  void didUpdateWidget(covariant NativeTerminalView oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.terminal != widget.terminal) {
-      _lastText = '';
-      _syncText();
-    }
+  Future<void> writeText(String text) async {
+    await _channel?.invokeMethod('writeText', {'text': text});
   }
 
-  @override
-  void dispose() {
-    _timer?.cancel();
-    _channel = null;
-    super.dispose();
+  Future<void> paste() async {
+    await _channel?.invokeMethod('paste');
+  }
+
+  Future<void> showKeyboard() async {
+    await _channel?.invokeMethod('showKeyboard');
+  }
+
+  Future<void> hideKeyboard() async {
+    await _channel?.invokeMethod('hideKeyboard');
+  }
+
+  Future<void> setFontSize(int fontSize) async {
+    await _channel?.invokeMethod('setFontSize', {'fontSize': fontSize});
+  }
+
+  Future<void> restart() async {
+    await _channel?.invokeMethod('restart');
+  }
+
+  Future<void> close() async {
+    await _channel?.invokeMethod('close');
   }
 
   @override
   Widget build(BuildContext context) {
     if (defaultTargetPlatform != TargetPlatform.android) {
-      return _FallbackSelectableTerminal(text: _snapshotText());
-    }
-    return AndroidView(
-      viewType: 'com.agent.cyx/native_terminal',
-      creationParams: {'viewId': _viewId},
-      creationParamsCodec: const StandardMessageCodec(),
-      onPlatformViewCreated: (_) {
-        _channel = MethodChannel('com.agent.cyx/native_terminal/$_viewId');
-        _syncText(force: true);
-      },
-    );
-  }
-
-  Future<void> _syncText({bool force = false}) async {
-    final channel = _channel;
-    if (channel == null) return;
-    final text = _snapshotText();
-    if (!force && text == _lastText) return;
-    final previous = _lastText;
-    _lastText = text;
-    try {
-      if (!force && previous.isNotEmpty && text.startsWith(previous)) {
-        await channel.invokeMethod('appendText', {
-          'text': text.substring(previous.length),
-        });
-      } else {
-        await channel.invokeMethod('setText', {'text': text});
-      }
-    } catch (_) {
-      // The Android view can be disposed while an async sync is in flight.
-    }
-  }
-
-  Future<String?> getSelectedText() async {
-    final channel = _channel;
-    if (channel == null) return null;
-    try {
-      final value = await channel.invokeMethod<String>('getSelectedText');
-      final text = value?.trim();
-      return text == null || text.isEmpty ? null : text;
-    } catch (_) {
-      return null;
-    }
-  }
-
-  String _snapshotText() {
-    final sb = StringBuffer();
-    for (int i = 0; i < widget.terminal.buffer.lines.length; i++) {
-      final line = widget.terminal.buffer.lines[i];
-      sb.writeln(line.getText().trimRight());
-    }
-    return sb.toString().trimRight();
-  }
-}
-
-class _FallbackSelectableTerminal extends StatelessWidget {
-  final String text;
-
-  const _FallbackSelectableTerminal({required this.text});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      color: const Color(0xFF060A12),
-      width: double.infinity,
-      height: double.infinity,
-      padding: const EdgeInsets.all(10),
-      child: SingleChildScrollView(
-        child: SelectableText(
-          text,
-          style: const TextStyle(
-            color: Color(0xFFE6EDF3),
-            fontFamily: 'monospace',
-            fontSize: 11,
-            height: 1.0,
+      return const ColoredBox(
+        color: Colors.black,
+        child: Center(
+          child: Text(
+            'Native terminal is only available on Android',
+            style: TextStyle(color: Colors.white),
           ),
         ),
-      ),
+      );
+    }
+
+    final androidView = AndroidView(
+      viewType: 'openclaw/native_terminal',
+      creationParamsCodec: const StandardMessageCodec(),
+      creationParams: {
+        'sessionId': widget.sessionId,
+        'executable': widget.executable,
+        'cwd': widget.cwd,
+        'arguments': widget.arguments,
+        'environment': widget.environment,
+        'restart': widget.restart,
+        'keepAlive': widget.keepAlive,
+        'emitOutput': widget.emitOutput,
+        'fontSize': widget.fontSize,
+        'transcriptRows': 3000,
+      },
+      onPlatformViewCreated: (id) {
+        final channel = MethodChannel('com.agent.cyx/native_terminal_$id');
+        channel.setMethodCallHandler(_handleMethodCall);
+        _channel = channel;
+        unawaited(showKeyboard());
+      },
     );
+
+    return ColoredBox(
+      color: Colors.black,
+      child: SizedBox.expand(child: androidView),
+    );
+  }
+
+  Future<dynamic> _handleMethodCall(MethodCall call) async {
+    switch (call.method) {
+      case 'onSessionFinished':
+        final exitStatus = (call.arguments as num?)?.toInt() ?? 0;
+        widget.onSessionFinished?.call(exitStatus);
+        return null;
+      case 'onTitleChanged':
+        widget.onTitleChanged?.call(call.arguments?.toString() ?? '');
+        return null;
+      case 'onOutput':
+        widget.onOutput?.call(call.arguments?.toString() ?? '');
+        return null;
+    }
   }
 }

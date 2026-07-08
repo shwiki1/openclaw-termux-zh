@@ -181,16 +181,27 @@ class _MessagePlatformDetailScreenState
     final result = await Navigator.of(context).push<bool>(
       MaterialPageRoute(builder: (_) => const WeixinInstallerScreen()),
     );
-    if (result == true) {
+    if (result != true) {
       await _refreshWeixinPluginStatus();
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            context.l10n.t('messagePlatformDetailWeixinTerminalCompleted'),
-          ),
+      return;
+    }
+
+    await _refreshWeixinPluginStatus();
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          context.l10n.t('messagePlatformDetailWeixinTerminalCompleted'),
         ),
-      );
+      ),
+    );
+
+    if (_weixinPluginStatus == _WeixinPluginStatus.installed) {
+      final provider = context.read<GatewayProvider>();
+      if (!provider.state.isStopped) {
+        await _restartGateway();
+      }
     }
   }
 

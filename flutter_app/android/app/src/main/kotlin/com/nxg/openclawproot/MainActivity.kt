@@ -67,8 +67,11 @@ class MainActivity : FlutterActivity() {
             .platformViewsController
             .registry
             .registerViewFactory(
-                "com.agent.cyx/native_terminal",
-                OpenClawNativeTerminalViewFactory(flutterEngine.dartExecutor.binaryMessenger),
+                "openclaw/native_terminal",
+                NativeTerminalViewFactory(
+                    flutterEngine.dartExecutor.binaryMessenger,
+                    applicationContext,
+                ),
             )
 
         val filesDir = applicationContext.filesDir.absolutePath

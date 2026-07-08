@@ -37,10 +37,12 @@ class _CustomProviderDetailScreenState
   bool _saving = false;
   bool _removing = false;
   bool _testingConnection = false;
+  bool _loadingModels = false;
   bool _obscureKey = true;
   bool _didChange = false;
   String? _lastTestFingerprint;
   CustomProviderConnectionTestResult? _lastConnectionTestResult;
+  List<String> _availableModels = const [];
   String? _thinkingLevel;
 
   CustomProviderPreset? get _selectedPreset {
@@ -76,16 +78,16 @@ class _CustomProviderDetailScreenState
     _modelIdController = TextEditingController();
     _providerIdController = TextEditingController();
     _aliasController = TextEditingController();
-    _baseUrlController.addListener(_handleConnectionFieldChanged);
-    _apiKeyController.addListener(_handleConnectionFieldChanged);
+    _baseUrlController.addListener(_handleEndpointFieldChanged);
+    _apiKeyController.addListener(_handleEndpointFieldChanged);
     _modelIdController.addListener(_handleConnectionFieldChanged);
     _loadPresets();
   }
 
   @override
   void dispose() {
-    _baseUrlController.removeListener(_handleConnectionFieldChanged);
-    _apiKeyController.removeListener(_handleConnectionFieldChanged);
+    _baseUrlController.removeListener(_handleEndpointFieldChanged);
+    _apiKeyController.removeListener(_handleEndpointFieldChanged);
     _modelIdController.removeListener(_handleConnectionFieldChanged);
     _baseUrlController.dispose();
     _apiKeyController.dispose();
@@ -107,9 +109,19 @@ class _CustomProviderDetailScreenState
     setState(() {});
   }
 
+  void _handleEndpointFieldChanged() {
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _clearConnectionTestState();
+    });
+  }
+
   void _clearConnectionTestState() {
     _lastTestFingerprint = null;
     _lastConnectionTestResult = null;
+    _availableModels = const [];
   }
 
   Future<void> _loadPresets({String? preferredProviderId}) async {
@@ -182,7 +194,7 @@ class _CustomProviderDetailScreenState
     return uri != null && uri.hasScheme && uri.hasAuthority;
   }
 
-  bool _validateConnectionInputs() {
+  bool _validateBaseUrlInput() {
     final l10n = context.l10n;
     final baseUrl = _baseUrlController.text.trim();
     if (!_isValidBaseUrl(baseUrl)) {
@@ -192,8 +204,20 @@ class _CustomProviderDetailScreenState
       return false;
     }
 
-    final modelId = _modelIdController.text.trim();
-    if (modelId.isEmpty) {
+    return true;
+  }
+
+  bool _validateConnectionInputs({bool requireModelId = false}) {
+    if (!_validateBaseUrlInput()) {
+      return false;
+    }
+
+    if (!requireModelId) {
+      return true;
+    }
+
+    final l10n = context.l10n;
+    if (_modelIdController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(l10n.t('customProviderModelIdEmpty'))),
       );
@@ -223,7 +247,6 @@ class _CustomProviderDetailScreenState
         compatibility: _compatibility,
         apiKey: _apiKeyController.text.trim(),
         baseUrl: _baseUrlController.text.trim(),
-        modelId: _modelIdController.text.trim(),
       );
       if (!mounted) {
         return result;
@@ -238,6 +261,155 @@ class _CustomProviderDetailScreenState
         setState(() => _testingConnection = false);
       }
     }
+  }
+
+  Future<void> _fetchModels() async {
+    if (!_validateBaseUrlInput()) {
+      return;
+    }
+
+    final l10n = context.l10n;
+    setState(() => _loadingModels = true);
+
+    try {
+      final result = await _connectionTestService.fetchModels(
+        compatibility: _compatibility,
+        apiKey: _apiKeyController.text.trim(),
+        baseUrl: _baseUrlController.text.trim(),
+      );
+      if (!mounted) {
+        return;
+      }
+
+      setState(() => _availableModels = result.models);
+      final selectedModel = await _selectModelFromList(
+        result.models,
+        autoDetected: result.autoDetected,
+        compatibility: result.compatibility,
+      );
+
+      if (!mounted || selectedModel == null || selectedModel.isEmpty) {
+        return;
+      }
+
+      setState(() {
+        _modelIdController.text = selectedModel;
+      });
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            l10n.t('customProviderFetchModelsFailed', {'error': '$error'}),
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _loadingModels = false);
+      }
+    }
+  }
+
+  Future<String?> _selectModelFromList(
+    List<String> models, {
+    required bool autoDetected,
+    required CustomProviderCompatibility compatibility,
+  }) {
+    final l10n = context.l10n;
+    return showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) {
+        final theme = Theme.of(ctx);
+        return DraggableScrollableSheet(
+          expand: false,
+          initialChildSize: 0.72,
+          minChildSize: 0.48,
+          maxChildSize: 0.92,
+          builder: (context, scrollController) {
+            return Padding(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 42,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.outlineVariant,
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    l10n.t('customProviderSelectModelTitle'),
+                    style: theme.textTheme.titleLarge,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    l10n.t('customProviderFetchedModelsHint', {
+                      'count': models.length,
+                    }),
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  if (autoDetected) ...[
+                    const SizedBox(height: 6),
+                    Text(
+                      l10n.t('customProviderTestAutoDetectedHint', {
+                        'compatibility':
+                            _compatibilityText(l10n, compatibility),
+                      }),
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 12),
+                  Expanded(
+                    child: ListView.separated(
+                      controller: scrollController,
+                      itemCount: models.length,
+                      separatorBuilder: (_, __) => const Divider(height: 1),
+                      itemBuilder: (_, index) {
+                        final model = models[index];
+                        final selected = _modelIdController.text.trim() == model;
+                        return ListTile(
+                          dense: true,
+                          title: Text(
+                            model,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          trailing: selected
+                              ? Icon(
+                                  Icons.check_circle,
+                                  color: theme.colorScheme.primary,
+                                )
+                              : null,
+                          onTap: () => Navigator.of(ctx).pop(model),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
   }
 
   Future<bool> _ensureConnectionCheckedBeforeSave() async {
@@ -338,6 +510,13 @@ class _CustomProviderDetailScreenState
     CustomProviderConnectionTestResult result,
   ) {
     final parts = <String>[];
+    if (result.modelCount != null) {
+      parts.add(
+        l10n.t('customProviderTestModelsFound', {
+          'count': result.modelCount,
+        }),
+      );
+    }
     if (result.statusCode != null) {
       parts.add(
         l10n.t('customProviderTestHttpStatus', {
@@ -460,7 +639,7 @@ class _CustomProviderDetailScreenState
   Future<void> _save() async {
     final l10n = context.l10n;
     final gatewayProvider = context.read<GatewayProvider>();
-    if (!_validateConnectionInputs()) {
+    if (!_validateConnectionInputs(requireModelId: true)) {
       return;
     }
 
@@ -754,6 +933,7 @@ class _CustomProviderDetailScreenState
                         return;
                       }
                       setState(() {
+                        _clearConnectionTestState();
                         _compatibility = value;
                         if (_selectedPreset == null) {
                           final currentBaseUrl = _baseUrlController.text.trim();
@@ -822,6 +1002,38 @@ class _CustomProviderDetailScreenState
                       hintText: _modelHintText(l10n),
                     ),
                   ),
+                  const SizedBox(height: 12),
+                  OutlinedButton.icon(
+                    onPressed: _loadingModels || _saving || _testingConnection
+                        ? null
+                        : _fetchModels,
+                    icon: _loadingModels
+                        ? SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: theme.colorScheme.onSurface,
+                            ),
+                          )
+                        : const Icon(Icons.playlist_add_check_circle_outlined),
+                    label: Text(
+                      _loadingModels
+                          ? l10n.t('customProviderFetchingModelsAction')
+                          : l10n.t('customProviderFetchModelsAction'),
+                    ),
+                  ),
+                  if (_availableModels.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      l10n.t('customProviderFetchedModelsHint', {
+                        'count': _availableModels.length,
+                      }),
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 24),
                   _fieldTitle(theme, l10n.t('customProviderThinking')),
                   const SizedBox(height: 8),

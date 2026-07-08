@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:xterm/xterm.dart';
-import 'package:url_launcher/url_launcher.dart';
-import '../services/persistent_terminal_session.dart';
-import '../services/screenshot_service.dart';
+
+import '../services/native_bridge.dart';
+import '../services/terminal_input_controller.dart';
+import '../services/terminal_service.dart';
+import '../widgets/native_terminal_view.dart';
 import '../widgets/responsive_layout.dart';
 import '../widgets/terminal_toolbar.dart';
 
@@ -26,342 +26,218 @@ class TerminalScreen extends StatefulWidget {
 }
 
 class _TerminalScreenState extends State<TerminalScreen> {
-  late final PersistentTerminalSession _session;
-  late final TerminalController _controller;
-  final _ctrlNotifier = ValueNotifier<bool>(false);
-  final _altNotifier = ValueNotifier<bool>(false);
-  final _screenshotKey = GlobalKey();
-  static final _anyUrlRegex = RegExp(r'https?://[^\s<>\[\]"' "'" r'\)]+');
+  static final Map<String, List<_TerminalSessionTab>> _savedSessions = {};
+  static final Map<String, int> _savedActiveIndexes = {};
 
-  /// Box-drawing and other TUI characters that break URLs when copied
-  static final _boxDrawing = RegExp(r'[│┤├┬┴┼╮╯╰╭─╌╴╶┌┐└┘◇◆]+');
+  var _terminalKey = GlobalKey<NativeTerminalViewState>();
+  late final TerminalInputController _terminalInput;
+  late Future<_NativeTerminalConfig> _configFuture;
+  late final List<_TerminalSessionTab> _sessions;
+  var _activeIndex = 0;
+  var _restartOnCreate = false;
+  var _closedAllSessions = false;
 
-  static const _fontFallback = [
-    'monospace',
-    'Noto Sans Mono',
-    'Noto Sans Mono CJK SC',
-    'Noto Sans Mono CJK TC',
-    'Noto Sans Mono CJK JP',
-    'Noto Color Emoji',
-    'Noto Sans Symbols',
-    'Noto Sans Symbols 2',
-    'sans-serif',
-  ];
+  _TerminalSessionTab get _activeSession => _sessions[_activeIndex];
 
   @override
   void initState() {
     super.initState();
-    _session = PersistentTerminalSessions.getOrCreate(
-      id: widget.sessionId,
-      title: widget.title,
-      initialCommand: widget.initialCommand,
+    NativeBridge.startTerminalService().catchError((_) => false);
+    if (widget.restartOnOpen) {
+      _savedSessions.remove(widget.sessionId);
+      _savedActiveIndexes.remove(widget.sessionId);
+    }
+    final saved = _savedSessions[widget.sessionId];
+    _sessions = saved != null && saved.isNotEmpty
+        ? List<_TerminalSessionTab>.of(saved)
+        : [_TerminalSessionTab(id: widget.sessionId, title: widget.title)];
+    final savedIndex = _savedActiveIndexes[widget.sessionId] ?? 0;
+    _activeIndex = savedIndex.clamp(0, _sessions.length - 1).toInt();
+    _restartOnCreate = widget.restartOnOpen;
+    _terminalInput = TerminalInputController(
+      onWrite: (bytes) {
+        _terminalKey.currentState?.writeBytes(bytes);
+      },
     );
-    _session.addListener(_onSessionChanged);
-    _controller = TerminalController();
-    _session.terminal.onOutput = _handleTerminalInput;
-    _session.terminal.onResize = (w, h, pw, ph) {
-      _session.resize(w, h);
-    };
-    // Defer PTY start until after the first frame so TerminalView has been
-    // laid out and _terminal.viewWidth/viewHeight reflect real screen
-    // dimensions instead of the 80×24 default.
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _startPty(restart: widget.restartOnOpen);
-    });
+    _configFuture = _loadConfig();
   }
 
-  void _onSessionChanged() {
-    if (mounted) {
-      setState(() {});
+  Future<_NativeTerminalConfig> _loadConfig() async {
+    final config = await TerminalService.getProotShellConfig();
+    var args = TerminalService.buildProotArgs(config);
+    final command = widget.initialCommand;
+    if (command != null && command.trim().isNotEmpty) {
+      args = TerminalService.replaceLoginShell(args, command);
     }
-  }
-
-  Future<void> _startPty({bool restart = false}) {
-    return _session.start(
-      columns: _session.terminal.viewWidth,
-      rows: _session.terminal.viewHeight,
-      restart: restart,
+    return _NativeTerminalConfig(
+      executable: config['executable']!,
+      arguments: args,
+      environment: TerminalService.buildHostEnv(config),
     );
-  }
-
-  void _handleTerminalInput(String data) {
-    // Intercept keyboard input when CTRL/ALT toolbar modifiers are active.
-    if (_ctrlNotifier.value && data.length == 1) {
-      final code = data.toLowerCase().codeUnitAt(0);
-      if (code >= 97 && code <= 122) {
-        _session.writeBytes([code - 96]);
-        _ctrlNotifier.value = false;
-        return;
-      }
-    }
-    if (_altNotifier.value && data.isNotEmpty) {
-      _session.writeInput('\x1b$data');
-      _altNotifier.value = false;
-      return;
-    }
-    _session.writeInput(data);
   }
 
   @override
   void dispose() {
-    _session.terminal.onOutput = _session.writeInput;
-    _session.removeListener(_onSessionChanged);
-    _ctrlNotifier.dispose();
-    _altNotifier.dispose();
-    _controller.dispose();
+    if (!_closedAllSessions) {
+      _persistSessionTabs();
+    }
+    _terminalInput.dispose();
     super.dispose();
   }
 
-  String? _getSelectedText() {
-    final selection = _controller.selection;
-    if (selection == null || selection.isCollapsed) return null;
-
-    final range = selection.normalized;
-    final sb = StringBuffer();
-    for (int y = range.begin.y; y <= range.end.y; y++) {
-      if (y >= _session.terminal.buffer.lines.length) break;
-      final line = _session.terminal.buffer.lines[y];
-      final from = (y == range.begin.y) ? range.begin.x : 0;
-      final to = (y == range.end.y) ? range.end.x : null;
-      sb.write(line.getText(from, to));
-      if (y < range.end.y) sb.writeln();
-    }
-    final text = sb.toString().trim();
-    return text.isEmpty ? null : text;
+  void _persistSessionTabs() {
+    _savedSessions[widget.sessionId] = List<_TerminalSessionTab>.of(_sessions);
+    _savedActiveIndexes[widget.sessionId] = _activeIndex;
   }
 
-  String _getAllText() {
-    final sb = StringBuffer();
-    for (int i = 0; i < _session.terminal.buffer.lines.length; i++) {
-      final line = _session.terminal.buffer.lines[i];
-      sb.writeln(line.getText().trimRight());
-    }
-    return sb.toString().trimRight();
+  void _restart() {
+    setState(() {
+      _restartOnCreate = true;
+      _terminalKey = GlobalKey<NativeTerminalViewState>();
+      _configFuture = _loadConfig();
+    });
   }
 
-  /// Extract a clean URL from selected text by stripping box-drawing
-  /// chars and rejoining lines, but splitting on `http` boundaries
-  /// so concatenated URLs don't merge into one.
-  String? _extractUrl(String text) {
-    final clean =
-        text.replaceAll(_boxDrawing, '').replaceAll(RegExp(r'\s+'), '');
-    // Split before each http(s):// so concatenated URLs become separate
-    final parts = clean.split(RegExp(r'(?=https?://)'));
-    // Return the longest URL match (token URLs are longest)
-    String? best;
-    for (final part in parts) {
-      final match = _anyUrlRegex.firstMatch(part);
-      if (match != null) {
-        final url = match.group(0)!;
-        if (best == null || url.length > best.length) {
-          best = url;
-        }
-      }
-    }
-    return best;
+  void _newSession() {
+    final nextNumber = _sessions.length + 1;
+    final nextSession = _TerminalSessionTab(
+      id: '${widget.sessionId}-${DateTime.now().millisecondsSinceEpoch}',
+      title: '${widget.title} $nextNumber',
+    );
+    setState(() {
+      _sessions.add(nextSession);
+      _activeIndex = _sessions.length - 1;
+      _restartOnCreate = false;
+      _terminalKey = GlobalKey<NativeTerminalViewState>();
+      _configFuture = _loadConfig();
+    });
+    _persistSessionTabs();
   }
 
-  void _copySelection() {
-    final text = _getSelectedText();
-    if (text == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('No terminal text selected'),
-          duration: Duration(seconds: 1),
-        ),
-      );
+  void _switchSession(int index) {
+    if (index == _activeIndex || index < 0 || index >= _sessions.length) {
       return;
     }
-
-    Clipboard.setData(ClipboardData(text: text));
-
-    // If the copied text contains a URL, offer "Open" action
-    final url = _extractUrl(text);
-    if (url != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('Copied to clipboard'),
-          duration: const Duration(seconds: 3),
-          action: SnackBarAction(
-            label: 'Open',
-            onPressed: () {
-              final uri = Uri.tryParse(url);
-              if (uri != null) {
-                launchUrl(uri, mode: LaunchMode.externalApplication);
-              }
-            },
-          ),
-        ),
-      );
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Copied to clipboard'),
-          duration: Duration(seconds: 1),
-        ),
-      );
-    }
-  }
-
-  void _copyAll() {
-    final text = _getAllText();
-    if (text.trim().isEmpty) return;
-    Clipboard.setData(ClipboardData(text: text));
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Terminal output copied'),
-        duration: Duration(seconds: 1),
-      ),
-    );
-  }
-
-  void _openSelection() {
-    final text = _getSelectedText();
-    if (text == null) return;
-
-    final url = _extractUrl(text);
-    if (url != null) {
-      final uri = Uri.tryParse(url);
-      if (uri != null) {
-        launchUrl(uri, mode: LaunchMode.externalApplication);
-        return;
-      }
-    }
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('No URL found in selection'),
-        duration: Duration(seconds: 1),
-      ),
-    );
-  }
-
-  /// Detect URLs near the tapped cell by joining adjacent wrapped lines.
-  void _handleTap(TapUpDetails details, CellOffset offset) {
-    final totalLines = _session.terminal.buffer.lines.length;
-    final startRow = (offset.y - 2).clamp(0, totalLines - 1);
-    final endRow = (offset.y + 2).clamp(0, totalLines - 1);
-
-    final sb = StringBuffer();
-    for (int row = startRow; row <= endRow; row++) {
-      sb.write(_getLineText(row).trimRight());
-    }
-    final url = _extractUrl(sb.toString());
-    if (url != null) {
-      _openUrl(url);
-    }
-  }
-
-  String _getLineText(int row) {
-    try {
-      final line = _session.terminal.buffer.lines[row];
-      final sb = StringBuffer();
-      for (int i = 0; i < line.length; i++) {
-        final char = line.getCodePoint(i);
-        if (char != 0) {
-          sb.writeCharCode(char);
-        }
-      }
-      return sb.toString();
-    } catch (_) {
-      return '';
-    }
-  }
-
-  Future<void> _openUrl(String url) async {
-    final uri = Uri.tryParse(url);
-    if (uri == null) return;
-
-    final shouldOpen = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Open Link'),
-        content: Text(url),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () {
-              Clipboard.setData(ClipboardData(text: url));
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Link copied'),
-                  duration: Duration(seconds: 1),
-                ),
-              );
-              Navigator.pop(ctx, false);
-            },
-            child: const Text('Copy'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Open'),
-          ),
-        ],
-      ),
-    );
-
-    if (shouldOpen == true) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    }
+    setState(() {
+      _activeIndex = index;
+      _restartOnCreate = false;
+      _terminalKey = GlobalKey<NativeTerminalViewState>();
+      _configFuture = _loadConfig();
+    });
+    _persistSessionTabs();
   }
 
   Future<void> _paste() async {
-    final data = await Clipboard.getData(Clipboard.kTextPlain);
-    if (data?.text != null && data!.text!.isNotEmpty) {
-      _session.writeInput(data.text!);
-    }
+    await _terminalKey.currentState?.paste();
   }
 
-  Future<void> _takeScreenshot() async {
-    final path = await ScreenshotService.capture(_screenshotKey);
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(path != null
-            ? 'Screenshot saved: ${path.split('/').last}'
-            : 'Failed to capture screenshot'),
-      ),
-    );
+  Future<void> _closeSession() async {
+    await _terminalKey.currentState?.close();
+    if (!context.mounted) {
+      return;
+    }
+    if (_sessions.length <= 1) {
+      _savedSessions.remove(widget.sessionId);
+      _savedActiveIndexes.remove(widget.sessionId);
+      _closedAllSessions = true;
+      Navigator.of(context).pop(true);
+      return;
+    }
+    setState(() {
+      _sessions.removeAt(_activeIndex);
+      if (_activeIndex >= _sessions.length) {
+        _activeIndex = _sessions.length - 1;
+      }
+      _restartOnCreate = false;
+      _terminalKey = GlobalKey<NativeTerminalViewState>();
+      _configFuture = _loadConfig();
+    });
+    _persistSessionTabs();
   }
 
   @override
   Widget build(BuildContext context) {
-    final compactActions = MediaQuery.sizeOf(context).width < 380;
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final compactActions = screenWidth < 420;
     return Scaffold(
       backgroundColor: Colors.black,
-      resizeToAvoidBottomInset: false,
       appBar: AppBar(
-        title: Text(widget.title),
-        actions: compactActions ? [_buildOverflowMenu()] : _buildToolbarActions(),
+        backgroundColor: Colors.black,
+        foregroundColor: Colors.white,
+        surfaceTintColor: Colors.black,
+        toolbarHeight: compactActions ? 54 : 60,
+        titleSpacing: compactActions ? 8 : 16,
+        title: _buildTitle(),
+        actions:
+            compactActions ? [_buildOverflowMenu()] : _buildToolbarActions(),
       ),
-      body: _buildBody(),
+      body: FutureBuilder<_NativeTerminalConfig>(
+        future: _configFuture,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState != ConnectionState.done) {
+            return ColoredBox(
+              color: Colors.black,
+              child: ResponsiveLayout.scrollableCenter(
+                child: const Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CircularProgressIndicator(),
+                    SizedBox(height: 16),
+                    Text(
+                      'Starting native terminal...',
+                      style: TextStyle(color: Colors.white),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }
+
+          final error = snapshot.error;
+          if (error != null || !snapshot.hasData) {
+            return ColoredBox(
+              color: Colors.black,
+              child: ResponsiveLayout.scrollableCenter(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      Icons.error_outline,
+                      size: 48,
+                      color: Colors.redAccent,
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      error?.toString() ?? 'Failed to start terminal',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(color: Colors.white),
+                    ),
+                    const SizedBox(height: 16),
+                    FilledButton.icon(
+                      onPressed: _restart,
+                      icon: const Icon(Icons.refresh),
+                      label: const Text('Retry'),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }
+
+          return _buildTerminal(snapshot.data!);
+        },
+      ),
     );
   }
 
   List<Widget> _buildToolbarActions() {
     return [
       IconButton(
-        icon: const Icon(Icons.camera_alt_outlined),
-        tooltip: 'Screenshot',
-        onPressed: _takeScreenshot,
+        icon: const Icon(Icons.add),
+        tooltip: 'New session',
+        onPressed: _newSession,
       ),
-      IconButton(
-        icon: const Icon(Icons.copy),
-        tooltip: 'Copy selection',
-        onPressed: _copySelection,
-      ),
-      IconButton(
-        icon: const Icon(Icons.select_all),
-        tooltip: 'Copy all',
-        onPressed: _copyAll,
-      ),
-      IconButton(
-        icon: const Icon(Icons.open_in_browser),
-        tooltip: 'Open URL',
-        onPressed: _openSelection,
-      ),
+      _buildSessionMenu(),
       IconButton(
         icon: const Icon(Icons.paste),
         tooltip: 'Paste',
@@ -370,9 +246,7 @@ class _TerminalScreenState extends State<TerminalScreen> {
       IconButton(
         icon: const Icon(Icons.refresh),
         tooltip: 'Restart',
-        onPressed: () {
-          _startPty(restart: true);
-        },
+        onPressed: _restart,
       ),
       IconButton(
         icon: const Icon(Icons.close),
@@ -384,120 +258,162 @@ class _TerminalScreenState extends State<TerminalScreen> {
 
   Widget _buildOverflowMenu() {
     return PopupMenuButton<String>(
+      tooltip: 'Actions',
       onSelected: (value) {
+        if (value.startsWith('session:')) {
+          _switchSession(int.parse(value.substring('session:'.length)));
+          return;
+        }
         switch (value) {
-          case 'screenshot':
-            _takeScreenshot();
-            break;
-          case 'copy':
-            _copySelection();
-            break;
-          case 'copyAll':
-            _copyAll();
-            break;
-          case 'open':
-            _openSelection();
+          case 'new':
+            _newSession();
             break;
           case 'paste':
             _paste();
             break;
           case 'restart':
-            _startPty(restart: true);
+            _restart();
             break;
           case 'close':
             _closeSession();
             break;
         }
       },
-      itemBuilder: (context) => const [
-        PopupMenuItem(value: 'screenshot', child: Text('Screenshot')),
-        PopupMenuItem(value: 'copy', child: Text('Copy selection')),
-        PopupMenuItem(value: 'copyAll', child: Text('Copy all')),
-        PopupMenuItem(value: 'open', child: Text('Open URL')),
-        PopupMenuItem(value: 'paste', child: Text('Paste')),
-        PopupMenuItem(value: 'restart', child: Text('Restart')),
-        PopupMenuItem(value: 'close', child: Text('Close session')),
+      itemBuilder: (context) => [
+        const PopupMenuItem(value: 'new', child: Text('New session')),
+        const PopupMenuDivider(),
+        for (var i = 0; i < _sessions.length; i++)
+          PopupMenuItem(
+            value: 'session:$i',
+            child: Row(
+              children: [
+                Icon(
+                  i == _activeIndex
+                      ? Icons.radio_button_checked
+                      : Icons.radio_button_unchecked,
+                  size: 18,
+                ),
+                const SizedBox(width: 8),
+                Expanded(child: Text(_sessions[i].title)),
+              ],
+            ),
+          ),
+        const PopupMenuDivider(),
+        const PopupMenuItem(value: 'paste', child: Text('Paste')),
+        const PopupMenuItem(value: 'restart', child: Text('Restart')),
+        const PopupMenuItem(value: 'close', child: Text('Close session')),
       ],
     );
   }
 
-  Future<void> _closeSession() async {
-    await _session.close();
-    if (context.mounted) {
-      Navigator.of(context).pop(true);
-    }
+  Widget _buildSessionMenu() {
+    return PopupMenuButton<int>(
+      tooltip: 'Sessions',
+      icon: const Icon(Icons.tab),
+      onSelected: _switchSession,
+      itemBuilder: (context) => [
+        for (var i = 0; i < _sessions.length; i++)
+          PopupMenuItem(
+            value: i,
+            child: Row(
+              children: [
+                Icon(
+                  i == _activeIndex
+                      ? Icons.radio_button_checked
+                      : Icons.radio_button_unchecked,
+                  size: 18,
+                ),
+                const SizedBox(width: 8),
+                Expanded(child: Text(_sessions[i].title)),
+              ],
+            ),
+          ),
+      ],
+    );
   }
 
-  Widget _buildBody() {
-    if (_session.loading) {
-      return ResponsiveLayout.scrollableCenter(
-        child: const Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            CircularProgressIndicator(),
-            SizedBox(height: 16),
-            Text('Starting terminal...'),
-          ],
-        ),
-      );
-    }
-
-    if (_session.error != null) {
-      return ResponsiveLayout.scrollableCenter(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.error_outline,
-              size: 48,
-              color: Theme.of(context).colorScheme.error,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              _session.error!,
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Theme.of(context).colorScheme.error),
-            ),
-            const SizedBox(height: 16),
-            FilledButton.icon(
-              onPressed: () {
-                _startPty(restart: true);
-              },
-              icon: const Icon(Icons.refresh),
-              label: const Text('Retry'),
-            ),
-          ],
-        ),
-      );
-    }
-
-    return Column(
+  Widget _buildTitle() {
+    final hasMultipleSessions = _sessions.length > 1;
+    return Row(
       children: [
         Expanded(
-          child: ColoredBox(
-            color: Colors.black,
-            child: RepaintBoundary(
-              key: _screenshotKey,
-              child: TerminalView(
-                _session.terminal,
-                controller: _controller,
-                textStyle: const TerminalStyle(
-                  fontSize: 11,
-                  height: 1.0,
-                  fontFamily: 'DejaVuSansMono',
-                  fontFamilyFallback: _fontFallback,
-                ),
-                onTapUp: _handleTap,
-              ),
+          child: Text(
+            _activeSession.title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
             ),
           ),
         ),
+        if (hasMultipleSessions) ...[
+          const SizedBox(width: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+            decoration: BoxDecoration(
+              color: Colors.white.withAlpha(22),
+              borderRadius: BorderRadius.circular(999),
+              border: Border.all(color: Colors.white24),
+            ),
+            child: Text(
+              '${_activeIndex + 1}/${_sessions.length}',
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildTerminal(_NativeTerminalConfig config) {
+    return Column(
+      children: [
+        Expanded(
+          child: NativeTerminalView(
+            key: _terminalKey,
+            sessionId: _activeSession.id,
+            executable: config.executable,
+            arguments: config.arguments,
+            environment: config.environment,
+            restart: _restartOnCreate,
+            keepAlive: true,
+            fontSize: 18,
+          ),
+        ),
         TerminalToolbar(
-          pty: _session.pty,
-          ctrlNotifier: _ctrlNotifier,
-          altNotifier: _altNotifier,
+          onWrite: _terminalInput.writeBytes,
+          ctrlNotifier: _terminalInput.ctrlNotifier,
+          altNotifier: _terminalInput.altNotifier,
         ),
       ],
     );
   }
+}
+
+class _NativeTerminalConfig {
+  final String executable;
+  final List<String> arguments;
+  final Map<String, String> environment;
+
+  const _NativeTerminalConfig({
+    required this.executable,
+    required this.arguments,
+    required this.environment,
+  });
+}
+
+class _TerminalSessionTab {
+  final String id;
+  final String title;
+
+  const _TerminalSessionTab({
+    required this.id,
+    required this.title,
+  });
 }

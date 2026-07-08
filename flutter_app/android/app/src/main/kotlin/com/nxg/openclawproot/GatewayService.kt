@@ -248,7 +248,8 @@ class GatewayService : Service() {
                 }
 
                 // Last-resort: verify resolv.conf exists, create inline if not
-                val resolvContent = "nameserver 8.8.8.8\nnameserver 8.8.4.4\n"
+                val resolvContent =
+                    "nameserver 223.5.5.5\nnameserver 119.29.29.29\nnameserver 8.8.8.8\n"
                 try {
                     val resolvFile = HostFilesystem.ensureFileTargetReady(
                         "$filesDir/config/resolv.conf",

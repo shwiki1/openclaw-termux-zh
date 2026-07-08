@@ -29,8 +29,15 @@ class AppConstants {
   static const int gatewayPort = 18789;
   static const String gatewayUrl = 'http://$gatewayHost:$gatewayPort';
 
-  static const String ubuntuRootfsUrl =
+  static const String ubuntuBaseMirrorUrl =
+      'https://mirrors.tuna.tsinghua.edu.cn/ubuntu-cdimage/ubuntu-base/releases/24.04/release/ubuntu-base-24.04.3-base-';
+  static const String ubuntuBaseMirrorFallbackUstcUrl =
+      'https://mirrors.ustc.edu.cn/ubuntu-cdimage/ubuntu-base/releases/24.04/release/ubuntu-base-24.04.3-base-';
+  static const String ubuntuBaseMirrorFallbackAliyunUrl =
+      'https://mirrors.aliyun.com/ubuntu-cdimage/ubuntu-base/releases/24.04/release/ubuntu-base-24.04.3-base-';
+  static const String ubuntuBaseOfficialUrl =
       'https://cdimage.ubuntu.com/ubuntu-base/releases/24.04/release/ubuntu-base-24.04.3-base-';
+  static const String ubuntuRootfsUrl = ubuntuBaseMirrorUrl;
   static const String ubuntuCodename = 'noble';
   static const String bundledBootstrapAssetDir = 'assets/bootstrap';
   static const String rootfsArm64 = '${ubuntuRootfsUrl}arm64.tar.gz';
@@ -51,6 +58,9 @@ class AppConstants {
     'https://mirrors.aliyun.com/nodejs-release',
     'https://nodejs.org/dist',
   ];
+  static const String npmRegistryUrl = 'https://registry.npmmirror.com';
+  static const String npmRegistryFallbackUrl = 'https://registry.npmjs.org';
+  static const String npmNodeDistUrl = nodePrimaryMirrorBaseUrl;
   static const String nodeBaseUrl =
       '$nodePrimaryMirrorBaseUrl/v$nodeVersion/node-v$nodeVersion-linux-';
   static const String basicResourceReleaseBaseUrl =
@@ -189,15 +199,30 @@ class AppConstants {
       'com.agent.cyx/setup_logs';
 
   static String getRootfsUrl(String arch) {
+    return getRootfsUrlCandidates(arch).first;
+  }
+
+  static List<String> getRootfsUrlCandidates(String arch) {
+    String suffix;
     switch (arch) {
       case 'aarch64':
-        return rootfsArm64;
+        suffix = 'arm64.tar.gz';
+        break;
       case 'arm':
-        return rootfsArmhf;
+        suffix = 'armhf.tar.gz';
+        break;
       case 'x86_64':
-        return rootfsAmd64;
+        suffix = 'amd64.tar.gz';
+        break;
       default:
-        return rootfsArm64;
+        suffix = 'arm64.tar.gz';
     }
+
+    return [
+      '$ubuntuBaseMirrorUrl$suffix',
+      '$ubuntuBaseMirrorFallbackUstcUrl$suffix',
+      '$ubuntuBaseMirrorFallbackAliyunUrl$suffix',
+      '$ubuntuBaseOfficialUrl$suffix',
+    ];
   }
 }

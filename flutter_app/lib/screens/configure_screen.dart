@@ -1,287 +1,84 @@
-import 'dart:async';
-import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:xterm/xterm.dart';
-import 'package:flutter_pty/flutter_pty.dart';
-import 'package:url_launcher/url_launcher.dart';
+
 import '../l10n/app_localizations.dart';
-import '../services/native_bridge.dart';
 import '../services/provider_config_service.dart';
-import '../services/screenshot_service.dart';
-import '../services/terminal_output_buffer.dart';
+import '../services/terminal_input_controller.dart';
 import '../services/terminal_service.dart';
+import '../widgets/native_proot_terminal.dart';
 import '../widgets/responsive_layout.dart';
-import '../widgets/native_terminal_view.dart';
 import '../widgets/terminal_toolbar.dart';
 
-/// Runs `openclaw configure` in a terminal so the user can manage
-/// gateway settings. Accessible from the dashboard.
 class ConfigureScreen extends StatefulWidget {
-  const ConfigureScreen({
-    super.key,
-  });
+  const ConfigureScreen({super.key});
 
   @override
   State<ConfigureScreen> createState() => _ConfigureScreenState();
 }
 
 class _ConfigureScreenState extends State<ConfigureScreen> {
-  late final Terminal _terminal;
-  late final TerminalController _controller;
-  late final TerminalOutputBuffer _outputBuffer;
-  Pty? _pty;
-  bool _loading = true;
+  final _terminalKey = GlobalKey<NativeProotTerminalState>();
+  late final TerminalInputController _terminalInput;
+  Future<String>? _commandFuture;
   bool _finished = false;
-  String? _error;
-  final _ctrlNotifier = ValueNotifier<bool>(false);
-  final _altNotifier = ValueNotifier<bool>(false);
-  final _nativeTerminalKey = GlobalKey<NativeTerminalViewState>();
-  final _screenshotKey = GlobalKey();
-  static final _anyUrlRegex = RegExp(r'https?://[^\s<>\[\]"' "'" r'\)]+');
-  static final _boxDrawing = RegExp(r'[│┤├┬┴┼╮╯╰╭─╌╴╶┌┐└┘◇◆]+');
+  var _generation = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _terminalInput = TerminalInputController(
+      onWrite: (bytes) {
+        _terminalKey.currentState?.writeBytes(bytes);
+      },
+    );
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _commandFuture ??= _buildConfigureCommand();
+  }
+
+  @override
+  void dispose() {
+    _terminalInput.dispose();
+    super.dispose();
+  }
 
   String _shellQuote(String value) {
     return "'${value.replaceAll("'", r"'\''")}'";
   }
 
   String _buildPrintLinesCommand(Iterable<String> lines) {
-    return lines
-        .map((line) => "printf '%s\\n' ${_shellQuote(line)}")
-        .join('; ');
+    return lines.map((line) => "printf '%s\\n' ${_shellQuote(line)}").join('; ');
   }
 
-  @override
-  void initState() {
-    super.initState();
-    _terminal = Terminal(maxLines: terminalScrollbackLines);
-    _outputBuffer = TerminalOutputBuffer(_terminal);
-    _controller = TerminalController();
-    NativeBridge.startTerminalService();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _startConfigure();
+  Future<String> _buildConfigureCommand() async {
+    final l10n = context.l10n;
+    final bonjourEnabled = await ProviderConfigService.readBonjourEnabled();
+    final commandParts = <String>[
+      if (!bonjourEnabled) 'export OPENCLAW_DISABLE_BONJOUR=1',
+      _buildPrintLinesCommand([
+        l10n.t('configureTerminalHeading'),
+        l10n.t('configureTerminalIntro'),
+        l10n.t('configureTerminalAndroidOptimization'),
+        l10n.t('configureTerminalAdvancedHint'),
+        '',
+      ]),
+      'openclaw configure',
+      _buildPrintLinesCommand([
+        '',
+        l10n.t('configureTerminalDone'),
+      ]),
+    ];
+    return commandParts.join('; ');
+  }
+
+  void _restart() {
+    setState(() {
+      _finished = false;
+      _generation++;
+      _commandFuture = _buildConfigureCommand();
     });
-  }
-
-  Future<void> _startConfigure() async {
-    _outputBuffer.flush();
-    _pty?.kill();
-    _pty = null;
-    try {
-      final l10n = context.l10n;
-      final config = await TerminalService.getProotShellConfig();
-      final args = TerminalService.buildProotArgs(
-        config,
-        columns: _terminal.viewWidth,
-        rows: _terminal.viewHeight,
-        mode: TerminalProotMode.compatibility,
-      );
-      final bonjourEnabled = await ProviderConfigService.readBonjourEnabled();
-      const configureCommand = 'openclaw configure';
-      final commandParts = <String>[
-        if (!bonjourEnabled) 'export OPENCLAW_DISABLE_BONJOUR=1',
-        _buildPrintLinesCommand([
-          l10n.t('configureTerminalHeading'),
-          l10n.t('configureTerminalIntro'),
-          l10n.t('configureTerminalAndroidOptimization'),
-          l10n.t('configureTerminalAdvancedHint'),
-          '',
-        ]),
-        configureCommand,
-        _buildPrintLinesCommand([
-          '',
-          l10n.t('configureTerminalDone'),
-        ]),
-      ];
-
-      final configureArgs = List<String>.from(args);
-      configureArgs.removeLast(); // remove '-l'
-      configureArgs.removeLast(); // remove '/bin/bash'
-      configureArgs.addAll([
-        '/bin/bash',
-        '-lc',
-        commandParts.join('; '),
-      ]);
-
-      _pty = Pty.start(
-        config['executable']!,
-        arguments: configureArgs,
-        environment: TerminalService.buildHostEnv(config),
-        columns: _terminal.viewWidth,
-        rows: _terminal.viewHeight,
-      );
-
-      _pty!.output.cast<List<int>>().listen((data) {
-        _outputBuffer.write(utf8.decode(data, allowMalformed: true));
-      });
-
-      _pty!.exitCode.then((code) {
-        _outputBuffer.write('\r\n[Configure exited with code $code]\r\n');
-        _outputBuffer.flush();
-        if (mounted) {
-          setState(() => _finished = true);
-        }
-      });
-
-      _terminal.onOutput = (data) {
-        if (_ctrlNotifier.value && data.length == 1) {
-          final code = data.toLowerCase().codeUnitAt(0);
-          if (code >= 97 && code <= 122) {
-            _pty?.write(Uint8List.fromList([code - 96]));
-            _ctrlNotifier.value = false;
-            return;
-          }
-        }
-        if (_altNotifier.value && data.isNotEmpty) {
-          _pty?.write(utf8.encode('\x1b$data'));
-          _altNotifier.value = false;
-          return;
-        }
-        _pty?.write(utf8.encode(data));
-      };
-
-      _terminal.onResize = (w, h, pw, ph) {
-        _pty?.resize(h, w);
-      };
-
-      if (!mounted) return;
-      setState(() => _loading = false);
-    } catch (e) {
-      if (!mounted) return;
-      final message = context.l10n.t('configureStartFailed', {'error': '$e'});
-      setState(() {
-        _loading = false;
-        _error = message;
-      });
-    }
-  }
-
-  @override
-  void dispose() {
-    _ctrlNotifier.dispose();
-    _altNotifier.dispose();
-    _controller.dispose();
-    _outputBuffer.dispose();
-    _pty?.kill();
-    NativeBridge.stopTerminalService();
-    super.dispose();
-  }
-
-  String? _getSelectedText() {
-    final selection = _controller.selection;
-    if (selection == null || selection.isCollapsed) return null;
-
-    final range = selection.normalized;
-    final sb = StringBuffer();
-    for (int y = range.begin.y; y <= range.end.y; y++) {
-      if (y >= _terminal.buffer.lines.length) break;
-      final line = _terminal.buffer.lines[y];
-      final from = (y == range.begin.y) ? range.begin.x : 0;
-      final to = (y == range.end.y) ? range.end.x : null;
-      sb.write(line.getText(from, to));
-      if (y < range.end.y) sb.writeln();
-    }
-    final text = sb.toString().trim();
-    return text.isEmpty ? null : text;
-  }
-
-  String? _extractUrl(String text) {
-    final clean =
-        text.replaceAll(_boxDrawing, '').replaceAll(RegExp(r'\s+'), '');
-    final parts = clean.split(RegExp(r'(?=https?://)'));
-    String? best;
-    for (final part in parts) {
-      final match = _anyUrlRegex.firstMatch(part);
-      if (match != null) {
-        final url = match.group(0)!;
-        if (best == null || url.length > best.length) {
-          best = url;
-        }
-      }
-    }
-    return best;
-  }
-
-  Future<String?> _getPreferredSelectedText() async {
-    return await _nativeTerminalKey.currentState?.getSelectedText() ??
-        _getSelectedText();
-  }
-
-  Future<void> _copySelection() async {
-    final text = await _getPreferredSelectedText();
-    if (!mounted) return;
-    if (text == null) return;
-
-    Clipboard.setData(ClipboardData(text: text));
-
-    final url = _extractUrl(text);
-    if (url != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(context.l10n.t('commonCopiedToClipboard')),
-          duration: const Duration(seconds: 3),
-          action: SnackBarAction(
-            label: context.l10n.t('commonOpen'),
-            onPressed: () {
-              final uri = Uri.tryParse(url);
-              if (uri != null) {
-                launchUrl(uri, mode: LaunchMode.externalApplication);
-              }
-            },
-          ),
-        ),
-      );
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(context.l10n.t('commonCopiedToClipboard')),
-          duration: const Duration(seconds: 1),
-        ),
-      );
-    }
-  }
-
-  Future<void> _openSelection() async {
-    final text = await _getPreferredSelectedText();
-    if (!mounted) return;
-    if (text == null) return;
-
-    final url = _extractUrl(text);
-    if (url != null) {
-      final uri = Uri.tryParse(url);
-      if (uri != null) {
-        launchUrl(uri, mode: LaunchMode.externalApplication);
-        return;
-      }
-    }
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(context.l10n.t('commonNoUrlFound')),
-        duration: const Duration(seconds: 1),
-      ),
-    );
-  }
-
-  Future<void> _paste() async {
-    final data = await Clipboard.getData(Clipboard.kTextPlain);
-    if (data?.text != null && data!.text!.isNotEmpty) {
-      _pty?.write(utf8.encode(data.text!));
-    }
-  }
-
-  Future<void> _takeScreenshot() async {
-    final path =
-        await ScreenshotService.capture(_screenshotKey, prefix: 'configure');
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(path != null
-            ? context.l10n.t('commonScreenshotSaved', {
-                'fileName': path.split('/').last,
-              })
-            : context.l10n.t('commonSaveFailed')),
-      ),
-    );
   }
 
   @override
@@ -289,7 +86,11 @@ class _ConfigureScreenState extends State<ConfigureScreen> {
     final l10n = context.l10n;
 
     return Scaffold(
+      backgroundColor: Colors.black,
       appBar: AppBar(
+        backgroundColor: Colors.black,
+        foregroundColor: Colors.white,
+        surfaceTintColor: Colors.black,
         title: Text(l10n.t('configureTitle')),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
@@ -298,106 +99,106 @@ class _ConfigureScreenState extends State<ConfigureScreen> {
         automaticallyImplyLeading: false,
         actions: [
           IconButton(
-            icon: const Icon(Icons.camera_alt_outlined),
-            tooltip: l10n.t('commonScreenshot'),
-            onPressed: _takeScreenshot,
-          ),
-          IconButton(
-            icon: const Icon(Icons.copy),
-            tooltip: l10n.t('commonCopy'),
-            onPressed: () => unawaited(_copySelection()),
-          ),
-          IconButton(
-            icon: const Icon(Icons.open_in_browser),
-            tooltip: l10n.t('commonOpen'),
-            onPressed: () => unawaited(_openSelection()),
-          ),
-          IconButton(
             icon: const Icon(Icons.paste),
             tooltip: l10n.t('commonPaste'),
-            onPressed: _paste,
+            onPressed: () => _terminalKey.currentState?.paste(),
+          ),
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            tooltip: l10n.t('commonRetry'),
+            onPressed: _restart,
           ),
         ],
       ),
-      body: Column(
-        children: [
-          if (_loading)
-            Expanded(
+      body: FutureBuilder<String>(
+        future: _commandFuture,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState != ConnectionState.done) {
+            return ColoredBox(
+              color: Colors.black,
               child: ResponsiveLayout.scrollableCenter(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     const CircularProgressIndicator(),
                     const SizedBox(height: 16),
-                    Text(l10n.t('configureStarting')),
+                    Text(
+                      l10n.t('configureStarting'),
+                      style: const TextStyle(color: Colors.white),
+                    ),
                   ],
                 ),
               ),
-            )
-          else if (_error != null)
-            Expanded(
+            );
+          }
+
+          if (snapshot.hasError || !snapshot.hasData) {
+            return ColoredBox(
+              color: Colors.black,
               child: ResponsiveLayout.scrollableCenter(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(
+                    const Icon(
                       Icons.error_outline,
                       size: 48,
-                      color: Theme.of(context).colorScheme.error,
+                      color: Colors.redAccent,
                     ),
                     const SizedBox(height: 16),
                     Text(
-                      _error!,
+                      l10n.t('configureStartFailed', {
+                        'error': '${snapshot.error ?? 'unknown'}',
+                      }),
                       textAlign: TextAlign.center,
-                      style: TextStyle(
-                          color: Theme.of(context).colorScheme.error),
+                      style: const TextStyle(color: Colors.white),
                     ),
                     const SizedBox(height: 16),
                     FilledButton.icon(
-                      onPressed: () {
-                        setState(() {
-                          _loading = true;
-                          _error = null;
-                          _finished = false;
-                        });
-                        _startConfigure();
-                      },
+                      onPressed: _restart,
                       icon: const Icon(Icons.refresh),
                       label: Text(l10n.t('commonRetry')),
                     ),
                   ],
                 ),
               ),
-            )
-          else ...[
-            Expanded(
-              child: RepaintBoundary(
-                key: _screenshotKey,
-                child: NativeTerminalView(
-                  key: _nativeTerminalKey,
-                  terminal: _terminal,
+            );
+          }
+
+          return Column(
+            children: [
+              Expanded(
+                child: NativeProotTerminal(
+                  key: ValueKey('configure-$_generation'),
+                  sessionId: 'configure-$_generation',
+                  command: snapshot.data!,
+                  mode: TerminalProotMode.compatibility,
+                  onSessionFinished: (_) {
+                    if (mounted) {
+                      setState(() => _finished = true);
+                    }
+                  },
                 ),
               ),
-            ),
-            TerminalToolbar(
-              pty: _pty,
-              ctrlNotifier: _ctrlNotifier,
-              altNotifier: _altNotifier,
-            ),
-          ],
-          if (_finished)
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: SizedBox(
-                width: double.infinity,
-                child: FilledButton.icon(
-                  onPressed: () => Navigator.of(context).pop(),
-                  icon: const Icon(Icons.check),
-                  label: Text(l10n.t('commonDone')),
-                ),
+              TerminalToolbar(
+                onWrite: _terminalInput.writeBytes,
+                ctrlNotifier: _terminalInput.ctrlNotifier,
+                altNotifier: _terminalInput.altNotifier,
               ),
-            ),
-        ],
+              if (_finished)
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      onPressed: () => Navigator.of(context).pop(),
+                      icon: const Icon(Icons.check),
+                      label: Text(l10n.t('commonDone')),
+                    ),
+                  ),
+                ),
+            ],
+          );
+        },
       ),
     );
   }

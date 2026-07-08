@@ -37,7 +37,8 @@ echo -e "  ${GREEN}✓${NC} proot-distro installed"
 
 # Install openclaw-termux from npm
 echo -e "\n${BLUE}[2/2]${NC} Installing openclaw-termux..."
-npm install -g openclaw-termux
+npm config set registry https://registry.npmmirror.com
+npm install -g openclaw-termux --registry=https://registry.npmmirror.com
 
 echo -e "\n${GREEN}═══════════════════════════════════════════${NC}"
 echo -e "${GREEN}Installation complete!${NC}"

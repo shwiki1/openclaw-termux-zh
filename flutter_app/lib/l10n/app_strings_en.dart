@@ -224,6 +224,12 @@ const Map<String, String> appStringsEn = {
   'customProviderRemoved': 'Preset {preset} removed',
   'customProviderActivePresetHint': 'Currently active preset: {preset}',
   'customProviderConnectionTestLabel': 'API Status',
+  'customProviderFetchModelsAction': 'Fetch Models',
+  'customProviderFetchingModelsAction': 'Fetching...',
+  'customProviderFetchModelsFailed': 'Failed to fetch models: {error}',
+  'customProviderSelectModelTitle': 'Select a Model',
+  'customProviderFetchedModelsHint':
+      '{count} models fetched. Tap one to fill the field.',
   'customProviderTestAction': 'Test Connection',
   'customProviderTestingAction': 'Testing...',
   'customProviderTestStatusUntested': 'Current settings have not been tested',
@@ -233,6 +239,7 @@ const Map<String, String> appStringsEn = {
       'Checking whether the current API settings are reachable',
   'customProviderTestStatusSuccess': 'Connection test succeeded',
   'customProviderTestStatusFailure': 'Connection test failed',
+  'customProviderTestModelsFound': 'Fetched {count} models',
   'customProviderTestCompatibilityHint': 'Probe mode: {compatibility}',
   'customProviderTestAutoDetectedHint':
       'Auto-detected probe mode: {compatibility}',

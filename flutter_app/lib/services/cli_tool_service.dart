@@ -393,28 +393,14 @@ export TMPDIR="${TMPDIR:-/tmp}"
 [ -r /root/.openclaw/cli-env.sh ] && . /root/.openclaw/cli-env.sh
 [ -r /root/.openclaw/cli-env-codex.sh ] && . /root/.openclaw/cli-env-codex.sh
 if [ -r /root/.openclaw/codex-proxy.env ]; then
-  proxy_healthy=false
-  if command -v python3 >/dev/null 2>&1; then
-    if python3 - <<'OPENCLAW_CODEX_PROXY_HEALTH' >/dev/null 2>&1
-import urllib.request
-urllib.request.urlopen("http://127.0.0.1:8787/health", timeout=1).read()
-OPENCLAW_CODEX_PROXY_HEALTH
-    then
-      proxy_healthy=true
-    fi
-  elif command -v node >/dev/null 2>&1; then
-    if node -e 'fetch("http://127.0.0.1:8787/health", {signal: AbortSignal.timeout(1000)}).then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))' >/dev/null 2>&1; then
-      proxy_healthy=true
-    fi
+  pkill -f "/root/.openclaw/codex-proxy.py" >/dev/null 2>&1 || true
+  pkill -f "/root/.openclaw/codex-proxy.js" >/dev/null 2>&1 || true
+  if command -v python3 >/dev/null 2>&1 && [ -r /root/.openclaw/codex-proxy.py ]; then
+    nohup python3 /root/.openclaw/codex-proxy.py >/tmp/openclaw-codex-proxy.log 2>&1 &
+  elif command -v node >/dev/null 2>&1 && [ -r /root/.openclaw/codex-proxy.js ]; then
+    nohup node /root/.openclaw/codex-proxy.js >/tmp/openclaw-codex-proxy.log 2>&1 &
   fi
-  if [ "$proxy_healthy" != true ]; then
-    if command -v python3 >/dev/null 2>&1 && [ -r /root/.openclaw/codex-proxy.py ]; then
-      nohup python3 /root/.openclaw/codex-proxy.py >/tmp/openclaw-codex-proxy.log 2>&1 &
-    elif command -v node >/dev/null 2>&1 && [ -r /root/.openclaw/codex-proxy.js ]; then
-      nohup node /root/.openclaw/codex-proxy.js >/tmp/openclaw-codex-proxy.log 2>&1 &
-    fi
-    sleep 0.3
-  fi
+  sleep 0.5
 fi
 
 openclaw_passthrough=false

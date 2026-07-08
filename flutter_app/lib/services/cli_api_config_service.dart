@@ -959,6 +959,137 @@ def target_url(upstream, path):
     return upstream + path
 
 
+def join_input_text(value):
+    if isinstance(value, str):
+        return value
+    if isinstance(value, list):
+        parts = []
+        for item in value:
+            if isinstance(item, str):
+                parts.append(item)
+                continue
+            if not isinstance(item, dict):
+                continue
+            if item.get("type") == "input_text":
+                parts.append(str(item.get("text") or ""))
+            elif item.get("type") == "message":
+                parts.append(join_input_text(item.get("content")))
+        return "\n".join(part for part in parts if part)
+    if isinstance(value, dict):
+        if value.get("type") == "input_text":
+            return str(value.get("text") or "")
+        if value.get("type") == "message":
+            return join_input_text(value.get("content"))
+    return ""
+
+
+def responses_to_chat(payload, forced_model, path):
+    model = forced_model or payload.get("model") or ""
+    input_value = payload.get("input")
+    messages = []
+    if isinstance(input_value, list):
+        for item in input_value:
+            if not isinstance(item, dict):
+                continue
+            role = item.get("role") or "user"
+            content = join_input_text(item.get("content"))
+            if not content:
+                content = join_input_text(item)
+            if content:
+                messages.append({"role": role, "content": content})
+    else:
+        text = join_input_text(input_value)
+        if text:
+            messages.append({"role": "user", "content": text})
+
+    if not messages:
+        instructions = str(payload.get("instructions") or "").strip()
+        if instructions:
+            messages.append({"role": "user", "content": instructions})
+
+    request = {
+        "model": model,
+        "messages": messages,
+        "stream": bool(payload.get("stream")),
+    }
+    if payload.get("temperature") is not None:
+        request["temperature"] = payload.get("temperature")
+    if payload.get("max_output_tokens") is not None:
+        request["max_tokens"] = payload.get("max_output_tokens")
+    if payload.get("top_p") is not None:
+        request["top_p"] = payload.get("top_p")
+    if isinstance(payload.get("tools"), list):
+        request["tools"] = payload.get("tools")
+    if isinstance(payload.get("tool_choice"), (str, dict)):
+        request["tool_choice"] = payload.get("tool_choice")
+    if payload.get("reasoning") is not None:
+        request["reasoning"] = payload.get("reasoning")
+    if path.endswith("/chat/completions"):
+        request["stream"] = bool(payload.get("stream"))
+    return request
+
+
+def chat_to_responses(payload, original_model):
+    choices = payload.get("choices") or []
+    first = choices[0] if choices else {}
+    message = first.get("message") if isinstance(first, dict) else {}
+    text = ""
+    if isinstance(message, dict):
+        content = message.get("content")
+        if isinstance(content, str):
+            text = content
+        elif isinstance(content, list):
+            parts = []
+            for item in content:
+                if isinstance(item, dict) and item.get("type") == "text":
+                    parts.append(str(item.get("text") or ""))
+            text = "\n".join(part for part in parts if part)
+    response_id = payload.get("id") or "resp_openclaw"
+    model = payload.get("model") or original_model or ""
+    usage = payload.get("usage") or {}
+    return {
+        "id": response_id,
+        "object": "response",
+        "created_at": payload.get("created") or 0,
+        "status": "completed",
+        "model": model,
+        "output": [
+            {
+                "id": f"{response_id}_output_0",
+                "type": "message",
+                "role": "assistant",
+                "content": [
+                    {
+                        "type": "output_text",
+                        "text": text,
+                        "annotations": [],
+                    },
+                ],
+            },
+        ],
+        "usage": {
+            "input_tokens": usage.get("prompt_tokens") or 0,
+            "output_tokens": usage.get("completion_tokens") or 0,
+            "total_tokens": usage.get("total_tokens") or 0,
+        },
+    }
+
+
+def build_models_response(model):
+    model_id = model or "openclaw-model"
+    return {
+        "object": "list",
+        "data": [
+            {
+                "id": model_id,
+                "object": "model",
+                "created": 0,
+                "owned_by": "openclaw",
+            },
+        ],
+    }
+
+
 def send_json(handler, status, payload):
     body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
     handler.send_response(status)
@@ -981,19 +1112,28 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if parsed_path == "/health":
             send_json(self, 200, {"ok": True, "upstream": upstream, "model": model, "has_key": bool(token)})
             return
+        if self.command.upper() == "GET" and parsed_path == "/v1/models":
+            send_json(self, 200, build_models_response(model))
+            return
 
         length = int(self.headers.get("content-length", "0") or "0")
         body = self.rfile.read(length) if length else None
-        if model and body and self.command.upper() in {"POST", "PUT", "PATCH"}:
+        target_path = self.path
+        original_model = model
+        if body and self.command.upper() in {"POST", "PUT", "PATCH"}:
             try:
                 payload = json.loads(body.decode("utf-8"))
-                if isinstance(payload, dict) and isinstance(payload.get("model"), str):
-                    payload["model"] = model
+                if isinstance(payload, dict):
+                    if parsed_path == "/v1/responses":
+                        payload = responses_to_chat(payload, model, parsed_path)
+                        target_path = "/v1/chat/completions"
+                    elif model and isinstance(payload.get("model"), str):
+                        payload["model"] = model
                     body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
             except Exception:
                 pass
         try:
-            req = urllib.request.Request(target_url(upstream, self.path), data=body, method=self.command)
+            req = urllib.request.Request(target_url(upstream, target_path), data=body, method=self.command)
             for key, value in self.headers.items():
                 if key.lower() in {"host", "content-length", "connection", "accept-encoding", "authorization"}:
                     continue
@@ -1001,30 +1141,38 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if token:
                 req.add_header("Authorization", "Bearer " + token)
             with urllib.request.urlopen(req, timeout=300) as resp:
+                data = resp.read()
+                if parsed_path == "/v1/responses":
+                    try:
+                        payload = json.loads(data.decode("utf-8"))
+                        send_json(self, resp.status, chat_to_responses(payload, original_model))
+                        return
+                    except Exception:
+                        pass
                 self.send_response(resp.status)
                 for key, value in resp.headers.items():
-                    if key.lower() in {"transfer-encoding", "connection", "content-encoding"}:
+                    if key.lower() in {"transfer-encoding", "connection", "content-encoding", "content-length"}:
                         continue
                     self.send_header(key, value)
+                self.send_header("Content-Length", str(len(data)))
                 self.end_headers()
-                while True:
-                    chunk = resp.read(8192)
-                    if not chunk:
-                        break
-                    self.wfile.write(chunk)
-                    self.wfile.flush()
+                self.wfile.write(data)
+                self.wfile.flush()
         except urllib.error.HTTPError as error:
             data = error.read()
             self.send_response(error.code)
+            self.send_header("Content-Type", error.headers.get("Content-Type", "application/json"))
             self.send_header("Content-Length", str(len(data)))
             self.end_headers()
             self.wfile.write(data)
+            self.wfile.flush()
         except Exception as error:
             data = str(error).encode("utf-8")
             self.send_response(502)
             self.send_header("Content-Length", str(len(data)))
             self.end_headers()
             self.wfile.write(data)
+            self.wfile.flush()
 
     def do_GET(self):
         self._proxy()

@@ -15,7 +15,10 @@ TMP_DIR=$(mktemp -d)
 
 trap 'rm -rf "$TMP_DIR"' EXIT
 
-TERMUX_REPO="https://packages.termux.dev/apt/termux-main"
+TERMUX_REPOS=(
+    "https://mirrors.ustc.edu.cn/termux/termux-main"
+    "https://packages.termux.dev/apt/termux-main"
+)
 
 # Fetch a Termux package and extract binaries
 fetch_termux_pkg() {
@@ -26,20 +29,27 @@ fetch_termux_pkg() {
     echo "    Fetching $pkg_name for $deb_arch..."
 
     # Get package filename from repo index
-    local pkg_url
-    pkg_url=$(curl -fsSL "${TERMUX_REPO}/dists/stable/main/binary-${deb_arch}/Packages" \
-        | grep -A 20 "^Package: ${pkg_name}$" \
-        | grep "^Filename:" \
-        | head -1 \
-        | awk '{print $2}')
+    local pkg_url=""
+    local repo_base=""
+    for candidate in "${TERMUX_REPOS[@]}"; do
+        pkg_url=$(curl -fsSL "${candidate}/dists/stable/main/binary-${deb_arch}/Packages" \
+            | grep -A 20 "^Package: ${pkg_name}$" \
+            | grep "^Filename:" \
+            | head -1 \
+            | awk '{print $2}' || true)
+        if [ -n "$pkg_url" ]; then
+            repo_base="$candidate"
+            break
+        fi
+    done
 
-    if [ -z "$pkg_url" ]; then
+    if [ -z "$pkg_url" ] || [ -z "$repo_base" ]; then
         echo "    WARN: $pkg_name not found in Termux repo for $deb_arch"
         return 1
     fi
 
     local deb_file="$TMP_DIR/${pkg_name}-${deb_arch}.deb"
-    curl -fsSL "${TERMUX_REPO}/${pkg_url}" -o "$deb_file"
+    curl -fsSL "${repo_base}/${pkg_url}" -o "$deb_file"
 
     mkdir -p "$extract_dir"
     cd "$extract_dir"
