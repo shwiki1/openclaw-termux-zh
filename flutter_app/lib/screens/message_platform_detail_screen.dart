@@ -189,6 +189,7 @@ class _MessagePlatformDetailScreenState
       return;
     }
 
+    await MessagePlatformConfigService.markWeixinPluginInstalledFromInstaller();
     await _refreshWeixinPluginStatus();
     if (!mounted) return;
 

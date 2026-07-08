@@ -39,6 +39,8 @@ class MessagePlatformConfigService {
     '/usr/lib/node_modules/@tencent/openclaw-weixin/package.json',
     '/root/.openclaw/node_modules/@tencent-weixin/openclaw-weixin/package.json',
     '/root/.openclaw/node_modules/@tencent/openclaw-weixin/package.json',
+    '/root/.openclaw/npm/projects/tencent-weixin-openclaw-weixin-7783ac86ba/package.json',
+    '/root/.openclaw/npm/projects/tencent-weixin-openclaw-weixin-7783ac86ba/node_modules/@tencent-weixin/openclaw-weixin/package.json',
   ];
   static const _weixinInstallerPackage =
       '@tencent-weixin/openclaw-weixin-cli@latest';
@@ -49,9 +51,6 @@ class MessagePlatformConfigService {
       'export npm_config_cache=$_persistentNpmCacheDir; '
       'export npm_config_prefer_offline=true; '
       'export npm_config_prefer_online=false; '
-      'openclaw plugins install "$weixinPluginPackage" || '
-      'openclaw plugins install @tencent-weixin/openclaw-weixin; '
-      'openclaw config set plugins.entries.$_weixinPluginId.enabled true; '
       'npx -y $_weixinInstallerPackage install';
 
   static String _shellEscape(String s) {
@@ -223,6 +222,15 @@ $command
     }
   }
 
+  static Future<void> markWeixinPluginInstalledFromInstaller() async {
+    await _setPluginEntryEnabled(
+      _weixinPluginId,
+      enabled: true,
+      cleanupAliases: <String>[_weixinPluginId, ..._weixinLegacyPluginIds],
+    );
+    await _writeCachedPluginInstalled(_weixinPluginId, true);
+  }
+
   static Map<String, dynamic>? _extractFeishuUiConfig(dynamic raw) {
     if (raw is! Map) return null;
     final channel = Map<String, dynamic>.from(raw);
@@ -379,6 +387,7 @@ $command
     required String pluginId,
     required List<String> aliases,
     required List<String> packagePaths,
+    List<String> packageNames = const <String>[],
   }) async {
     final config = await _readMutableConfig();
     final enabled = _pluginEntryEnabled(config, <String>[pluginId, ...aliases]);
@@ -386,7 +395,38 @@ $command
     if (enabled && packageExists) {
       return true;
     }
-    return packageExists;
+    if (packageExists) {
+      return true;
+    }
+    return _isPluginInstalledInOpenClawProjects(packageNames);
+  }
+
+  static Future<bool> _isPluginInstalledInOpenClawProjects(
+    List<String> packageNames,
+  ) async {
+    if (packageNames.isEmpty) {
+      return false;
+    }
+
+    final escapeRegex = RegExp(r'([.[\]{}()*+?^$|\\])');
+    final escapedNames = packageNames
+        .map((name) => name.replaceAllMapped(escapeRegex, (match) {
+              return '\\${match.group(0)}';
+            }))
+        .join('|');
+    final grepPattern =
+        '"name"[[:space:]]*:[[:space:]]*"($escapedNames)"';
+    final command = '''
+find /root/.openclaw/npm/projects -maxdepth 6 -type f -name package.json -print 2>/dev/null |
+  xargs grep -lE ${_shellEscape(grepPattern)} >/dev/null 2>&1
+''';
+
+    try {
+      await NativeBridge.runInProot(command, timeout: 20);
+      return true;
+    } catch (_) {
+      return false;
+    }
   }
 
   static Map<String, dynamic> _normalizeMutableConfig(dynamic value) {
@@ -539,16 +579,39 @@ $command
     final enableQqbot = _hasQqbotChannelConfig(channels) || hasQqbotLocal;
     final enableWeixin = _hasNonEmptyMap(channels[_weixinChannelId]);
 
-    await _setPluginEntryEnabled(
-      _qqbotPluginId,
-      enabled: enableQqbot,
-      cleanupAliases: <String>[_qqbotPluginId, ..._qqbotLegacyPluginIds],
-    );
-    await _setPluginEntryEnabled(
-      _weixinPluginId,
-      enabled: enableWeixin,
-      cleanupAliases: <String>[_weixinPluginId, ..._weixinLegacyPluginIds],
-    );
+    if (enableQqbot) {
+      await _setPluginEntryEnabled(
+        _qqbotPluginId,
+        enabled: true,
+        cleanupAliases: <String>[_qqbotPluginId, ..._qqbotLegacyPluginIds],
+      );
+    }
+    if (enableWeixin) {
+      await _setPluginEntryEnabled(
+        _weixinPluginId,
+        enabled: true,
+        cleanupAliases: <String>[_weixinPluginId, ..._weixinLegacyPluginIds],
+      );
+    }
+  }
+
+  /// Ensure messaging plugins required by current channel credentials are installed
+  /// before the gateway starts.
+  static Future<void> ensureMessagingPluginsForStartup() async {
+    final config = await _readMutableConfig();
+    final channels = _normalizeMutableConfig(config['channels']);
+
+    final hasQqbotLocal = await _readQqbotLocalConfig() != null;
+    final hasQqbotConfig = _hasQqbotChannelConfig(channels);
+    final shouldEnsureQqbot = hasQqbotConfig || hasQqbotLocal;
+    final hasWeixin = _hasNonEmptyMap(channels[_weixinChannelId]);
+
+    if (shouldEnsureQqbot) {
+      await ensureQqbotPluginInstalled();
+    }
+    if (hasWeixin) {
+      await ensureWeixinPluginInstalled();
+    }
   }
 
   static Future<Map<String, dynamic>> readConfig() async {
@@ -770,6 +833,7 @@ fs.writeFileSync(p, JSON.stringify(c, null, 2));
       pluginId: _qqbotPluginId,
       aliases: _qqbotLegacyPluginIds,
       packagePaths: _qqbotPluginPackagePaths,
+      packageNames: const <String>['@tencent-connect/openclaw-qqbot'],
     );
     await _writeCachedPluginInstalled(_qqbotPluginId, fastInstalled);
     return fastInstalled;
@@ -785,6 +849,10 @@ fs.writeFileSync(p, JSON.stringify(c, null, 2));
       pluginId: _weixinPluginId,
       aliases: _weixinLegacyPluginIds,
       packagePaths: _weixinPluginPackagePaths,
+      packageNames: const <String>[
+        '@tencent-weixin/openclaw-weixin',
+        '@tencent/openclaw-weixin',
+      ],
     );
     await _writeCachedPluginInstalled(_weixinPluginId, fastInstalled);
     return fastInstalled;
@@ -870,12 +938,27 @@ export CHOKIDAR_USEPOLLING=true
 export UV_USE_IO_URING=0
 mkdir -p /root/.npm $_persistentNpmCacheDir /tmp/npm-tmp
 export TMPDIR=/tmp/npm-tmp
-openclaw plugins install "$weixinPluginPackage" || openclaw plugins install @tencent-weixin/openclaw-weixin
-openclaw config set plugins.entries.$_weixinPluginId.enabled true || true
+node <<'NODE'
+const fs = require('fs');
+const p = '/root/.openclaw/openclaw.json';
+let c = {};
+try { c = JSON.parse(fs.readFileSync(p, 'utf8')); } catch {}
+c.plugins = c.plugins && typeof c.plugins === 'object' ? c.plugins : {};
+c.plugins.entries = c.plugins.entries && typeof c.plugins.entries === 'object' ? c.plugins.entries : {};
+for (const key of ['weixin', '@tencent/openclaw-weixin', '@tencent-weixin/openclaw-weixin']) {
+  delete c.plugins.entries[key];
+}
+c.plugins.entries['$_weixinPluginId'] = {
+  ...(c.plugins.entries['$_weixinPluginId'] || {}),
+  enabled: true,
+};
+fs.mkdirSync('/root/.openclaw', { recursive: true });
+fs.writeFileSync(p, JSON.stringify(c, null, 2));
+NODE
+echo ">>> Running official Weixin installer (it will select the compatible latest plugin automatically)..."
 npx -y $_weixinInstallerPackage install || (
-  openclaw plugins uninstall openclaw-weixin >/dev/null 2>&1 || true
-  openclaw plugins uninstall weixin >/dev/null 2>&1 || true
-  openclaw plugins install "$weixinPluginPackage" || openclaw plugins install @tencent-weixin/openclaw-weixin
+  echo ">>> First installer attempt failed, retrying once with cached mirror settings..."
+  npm cache verify >/dev/null 2>&1 || true
   npx -y $_weixinInstallerPackage install
 )
 ''';
