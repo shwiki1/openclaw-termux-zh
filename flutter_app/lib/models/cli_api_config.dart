@@ -1,5 +1,6 @@
 class CliApiConfig {
   final String toolId;
+  final String sharedProfileId;
   final String baseUrl;
   final String apiKey;
   final String model;
@@ -10,6 +11,7 @@ class CliApiConfig {
 
   const CliApiConfig({
     required this.toolId,
+    this.sharedProfileId = '',
     this.baseUrl = '',
     this.apiKey = '',
     this.model = '',
@@ -41,6 +43,7 @@ class CliApiConfig {
   String get effectiveCodexModel => effectiveToolModel;
 
   CliApiConfig copyWith({
+    String? sharedProfileId,
     String? baseUrl,
     String? apiKey,
     String? model,
@@ -52,6 +55,7 @@ class CliApiConfig {
   }) {
     return CliApiConfig(
       toolId: toolId,
+      sharedProfileId: sharedProfileId ?? this.sharedProfileId,
       baseUrl: baseUrl ?? this.baseUrl,
       apiKey: apiKey ?? this.apiKey,
       model: model ?? this.model,
@@ -64,6 +68,7 @@ class CliApiConfig {
 
   Map<String, dynamic> toJson() => {
         'profileName': profileName.trim(),
+        'sharedProfileId': sharedProfileId.trim(),
         'baseUrl': baseUrl.trim(),
         'apiKey': apiKey.trim(),
         'model': model.trim(),
@@ -79,6 +84,7 @@ class CliApiConfig {
     }
     return CliApiConfig(
       toolId: toolId,
+      sharedProfileId: _string(json['sharedProfileId']),
       baseUrl: _string(json['baseUrl']),
       apiKey: _string(json['apiKey']),
       model: _string(json['model']),

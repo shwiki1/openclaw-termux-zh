@@ -2,21 +2,19 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../constants.dart';
 import '../l10n/app_localizations.dart';
-import '../models/cli_tool.dart';
 import '../models/openclaw_install_options.dart';
 import '../models/setup_state.dart';
 import '../providers/setup_provider.dart';
 import '../services/backup_service.dart';
 import '../services/bundled_sample_config_service.dart';
 import '../services/cli_api_config_service.dart';
-import '../services/cli_tool_service.dart';
 import '../services/install_status_message_formatter.dart';
 import '../services/native_bridge.dart';
 import '../services/openclaw_version_service.dart';
 import '../services/preferences_service.dart';
 import '../services/provider_config_service.dart';
 import '../services/snapshot_service.dart';
-import '../widgets/cli_api_config_dialog.dart';
+import '../widgets/cli_api_profiles_dialog.dart';
 import '../widgets/openclaw_release_selector.dart';
 import '../widgets/progress_step.dart';
 import '../widgets/responsive_layout.dart';
@@ -302,10 +300,10 @@ class _SetupWizardScreenState extends State<SetupWizardScreen> {
       (_selectedNodeArchivePath ?? '').trim().isNotEmpty;
 
   Future<void> _loadCliApiConfigStatus() async {
-    final configs = await CliApiConfigService.loadAll();
+    final profiles = await CliApiConfigService.loadSharedProfiles();
     if (!mounted) return;
     setState(() {
-      _hasCliApiConfig = configs.values.any((config) => config.isConfigured);
+      _hasCliApiConfig = profiles.any((profile) => profile.isConfigured);
     });
   }
 
@@ -324,31 +322,7 @@ class _SetupWizardScreenState extends State<SetupWizardScreen> {
   }
 
   Future<void> _openCliApiConfig() async {
-    final tool = await showDialog<CliToolDefinition>(
-      context: context,
-      builder: (dialogContext) => SimpleDialog(
-        title: const Text('第三方 API 配置'),
-        children: [
-          for (final tool in CliToolService.allTools.where(
-            (tool) => CliApiConfigService.configurableToolIds.contains(tool.id),
-          ))
-            SimpleDialogOption(
-              onPressed: () => Navigator.of(dialogContext).pop(tool),
-              child: ListTile(
-                leading: Icon(tool.icon, color: tool.color),
-                title: Text(tool.name),
-                subtitle: const Text('API、模型、映射和推理强度'),
-              ),
-            ),
-        ],
-      ),
-    );
-
-    if (!mounted || tool == null) {
-      return;
-    }
-
-    final saved = await CliApiConfigDialog.show(context, tool: tool);
+    final saved = await CliApiProfilesDialog.show(context);
     if (saved) {
       await _loadCliApiConfigStatus();
     }

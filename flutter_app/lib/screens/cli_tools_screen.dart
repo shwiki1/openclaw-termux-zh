@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 
 import '../app.dart';
+import '../models/cli_api_config.dart';
 import '../models/cli_tool.dart';
 import '../services/cli_api_config_service.dart';
 import '../services/cli_tool_service.dart';
 import '../widgets/cli_api_config_dialog.dart';
+import '../widgets/cli_api_profiles_dialog.dart';
 import 'terminal_screen.dart';
 
 class CliToolsScreen extends StatefulWidget {
@@ -16,6 +18,7 @@ class CliToolsScreen extends StatefulWidget {
 
 class _CliToolsScreenState extends State<CliToolsScreen> {
   List<CliToolStatus> _statuses = const [];
+  List<CliApiConfig> _sharedProfiles = const [];
   bool _loading = true;
 
   @override
@@ -34,9 +37,11 @@ class _CliToolsScreenState extends State<CliToolsScreen> {
       // The Ubuntu rootfs may not exist yet; status checks below surface that.
     }
     final statuses = await CliToolService.checkAllStatuses();
+    final sharedProfiles = await CliApiConfigService.loadSharedProfiles();
     if (!mounted) return;
     setState(() {
       _statuses = statuses;
+      _sharedProfiles = sharedProfiles;
       _loading = false;
     });
   }
@@ -94,6 +99,13 @@ class _CliToolsScreenState extends State<CliToolsScreen> {
     }
   }
 
+  Future<void> _manageSharedApis() async {
+    final saved = await CliApiProfilesDialog.show(context);
+    if (saved && mounted) {
+      await _refresh();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -123,10 +135,55 @@ class _CliToolsScreenState extends State<CliToolsScreen> {
                     ),
                   ),
                   const SizedBox(height: 16),
+                  _buildSharedApiCard(theme),
+                  const SizedBox(height: 12),
                   for (final status in _statuses) _buildToolCard(theme, status),
                 ],
               ),
             ),
+    );
+  }
+
+  Widget _buildSharedApiCard(ThemeData theme) {
+    final configuredCount =
+        _sharedProfiles.where((profile) => profile.isConfigured).length;
+    final summary = _sharedProfiles.isEmpty
+        ? '还没有共享 API。先在这里添加 API 地址与 Key，再到各 CLI 工具里选择并配置模型。'
+        : '已维护 ${_sharedProfiles.length} 个共享 API，其中 ${configuredCount} 个已填写连接信息。';
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    '统一 API 配置',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                FilledButton.icon(
+                  onPressed: _loading ? null : _manageSharedApis,
+                  icon: const Icon(Icons.settings_input_component),
+                  label: const Text('管理 API'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Text(
+              summary,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 

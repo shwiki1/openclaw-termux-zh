@@ -2652,10 +2652,14 @@ class FloatingFileManagerService : Service() {
         val sharedRoot = defaultSharedRoot()
         val privateRoot = appPrivateRoot()
         val externalPrivate = getExternalFilesDir(null)
+        val cliToolsRoot = File(filesDir, "rootfs/ubuntu/opt/openclaw-cli")
         return buildList {
             add("内部" to sharedRoot)
             add("私有根" to privateRoot)
             add("files" to filesDir)
+            if (cliToolsRoot.exists()) {
+                add("CLI工具" to cliToolsRoot)
+            }
             add("cache" to cacheDir)
             if (noBackupFilesDir.exists()) {
                 add("no_backup" to noBackupFilesDir)
@@ -2674,10 +2678,12 @@ class FloatingFileManagerService : Service() {
 
     private fun shortDirLabel(dir: File): String {
         val path = dir.absolutePath
+        val cliToolsRoot = File(filesDir, "rootfs/ubuntu/opt/openclaw-cli")
         return when {
             path == defaultSharedRoot().absolutePath -> "内部存储"
             path == appPrivateRoot().absolutePath -> "应用私有"
             path == filesDir.absolutePath -> "files"
+            path == cliToolsRoot.absolutePath -> "CLI工具"
             path == cacheDir.absolutePath -> "cache"
             path == noBackupFilesDir.absolutePath -> "no_backup"
             getExternalFilesDir(null)?.absolutePath == path -> "外部私有"

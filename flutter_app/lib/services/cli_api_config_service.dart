@@ -32,81 +32,61 @@ class CliApiConfigService {
 
   static Future<CliApiConfig> load(String toolId) async {
     final configs = await _loadAll();
-    final tools = _asMap(configs['tools']);
-    return _activeConfigFromJson(toolId, _asMapOrNull(tools[toolId]));
+    return _resolvedToolConfig(toolId, configs);
   }
 
-  static Future<List<CliApiConfig>> loadProfiles(String toolId) async {
+  static Future<List<CliApiConfig>> loadSharedProfiles() async {
     final configs = await _loadAll();
-    final tools = _asMap(configs['tools']);
-    return _profilesFromJson(toolId, _asMapOrNull(tools[toolId]));
+    return _sharedProfilesFromConfig(configs);
   }
 
-  static Future<int> loadActiveProfileIndex(String toolId) async {
+  static Future<CliApiConfig> loadToolSettings(String toolId) async {
     final configs = await _loadAll();
-    final tools = _asMap(configs['tools']);
-    final toolJson = _asMapOrNull(tools[toolId]);
-    return _activeProfileIndexFromJson(toolJson);
+    return _toolSettingsFromConfig(toolId, configs);
   }
 
   static Future<Map<String, CliApiConfig>> loadAll() async {
     final configs = await _loadAll();
-    final tools = _asMap(configs['tools']);
     return {
       for (final toolId in configurableToolIds)
-        toolId: _activeConfigFromJson(toolId, _asMapOrNull(tools[toolId])),
+        toolId: _resolvedToolConfig(toolId, configs),
     };
   }
 
-  static Future<void> save(CliApiConfig config) async {
+  static Future<void> saveSharedProfiles(List<CliApiConfig> profiles) async {
     final configs = await _loadAll();
-    final tools = _asMap(configs['tools']);
-    configs['tools'] = tools;
-    final existing = _asMapOrNull(tools[config.toolId]);
-    final profiles = _profilesFromJson(config.toolId, existing);
-    var activeIndex = _activeProfileIndexFromJson(existing);
-    if (activeIndex < 0 || activeIndex >= profiles.length) {
-      activeIndex = 0;
-    }
-    if (profiles.isEmpty) {
-      profiles.add(config);
-      activeIndex = 0;
-    } else {
-      profiles[activeIndex] = config;
-    }
-    tools[config.toolId] = _toolProfilesJson(profiles, activeIndex);
-
-    await _writePrefsConfig(configs);
-    try {
-      await regenerateRuntimeFiles(configs: configs);
-    } catch (_) {
-      // Rootfs may not exist yet during first-run preconfiguration.
-      // The setup flow calls regenerateRuntimeFiles() again after extraction.
-    }
+    configs['sharedProfiles'] = _sharedProfilesJson(profiles);
+    await _persistConfig(configs);
   }
 
-  static Future<void> saveProfiles({
-    required String toolId,
-    required List<CliApiConfig> profiles,
-    required int activeProfileIndex,
-  }) async {
+  static Future<void> saveToolSettings(CliApiConfig config) async {
     final configs = await _loadAll();
     final tools = _asMap(configs['tools']);
     configs['tools'] = tools;
-    final normalized = profiles.isEmpty
-        ? [CliApiConfig(toolId: toolId, profileName: '默认')]
-        : profiles;
-    final activeIndex =
-        activeProfileIndex.clamp(0, normalized.length - 1).toInt();
-    tools[toolId] = _toolProfilesJson(normalized, activeIndex);
+    tools[config.toolId] = _toolSettingsJson(config);
+    await _persistConfig(configs);
+  }
 
-    await _writePrefsConfig(configs);
-    try {
-      await regenerateRuntimeFiles(configs: configs);
-    } catch (_) {
-      // Rootfs may not exist yet during first-run preconfiguration.
-      // The setup flow calls regenerateRuntimeFiles() again after extraction.
+  static Future<void> save(
+    CliApiConfig config, {
+    bool asSharedProfile = false,
+  }) async {
+    if (asSharedProfile) {
+      final profiles = await loadSharedProfiles();
+      final nextProfiles = List<CliApiConfig>.from(profiles);
+      final index = nextProfiles.indexWhere(
+        (item) => item.sharedProfileId == config.sharedProfileId,
+      );
+      final normalized = _normalizedSharedProfile(config);
+      if (index >= 0) {
+        nextProfiles[index] = normalized;
+      } else {
+        nextProfiles.add(normalized);
+      }
+      await saveSharedProfiles(nextProfiles);
+      return;
     }
+    await saveToolSettings(config);
   }
 
   static Future<List<String>> fetchModels({
@@ -157,12 +137,11 @@ class CliApiConfigService {
     Map<String, dynamic>? configs,
   }) async {
     final allConfigs = configs ?? await _loadAll();
-    final tools = _asMap(allConfigs['tools']);
-    final codex = _activeConfigFromJson('codex', _asMapOrNull(tools['codex']));
     final activeConfigs = {
       for (final toolId in configurableToolIds)
-        toolId: _activeConfigFromJson(toolId, _asMapOrNull(tools[toolId])),
+        toolId: _resolvedToolConfig(toolId, allConfigs),
     };
+    final codex = activeConfigs['codex'] ?? const CliApiConfig(toolId: 'codex');
 
     await _writePrefsConfig(allConfigs);
     await NativeBridge.writeRootfsFile(
@@ -223,21 +202,24 @@ class CliApiConfigService {
   static Future<Map<String, dynamic>> _loadAll() async {
     final prefsConfig = await _readPrefsConfig();
     if (prefsConfig.isNotEmpty) {
-      return prefsConfig;
+      final normalized = _normalizeConfig(prefsConfig);
+      if (!_deepEquals(prefsConfig, normalized)) {
+        await _writePrefsConfig(normalized);
+      }
+      return normalized;
     }
 
     try {
       final content = await NativeBridge.readRootfsFile(_configPath);
       if (content == null || content.trim().isEmpty) {
-        return <String, dynamic>{'tools': <String, dynamic>{}};
+        return _emptyConfig();
       }
       final decoded = jsonDecode(content);
-      final config = _asMap(decoded);
-      config['tools'] = _asMap(config['tools']);
+      final config = _normalizeConfig(_asMap(decoded));
       await _writePrefsConfig(config);
       return config;
     } catch (_) {
-      return <String, dynamic>{'tools': <String, dynamic>{}};
+      return _emptyConfig();
     }
   }
 
@@ -248,9 +230,7 @@ class CliApiConfigService {
       if (content == null || content.trim().isEmpty) {
         return <String, dynamic>{};
       }
-      final config = _asMap(jsonDecode(content));
-      config['tools'] = _asMap(config['tools']);
-      return config;
+      return _normalizeConfig(_asMap(jsonDecode(content)));
     } catch (_) {
       return <String, dynamic>{};
     }
@@ -279,20 +259,187 @@ class CliApiConfigService {
     return _asMap(value);
   }
 
-  static CliApiConfig _activeConfigFromJson(
+  static Future<void> _persistConfig(Map<String, dynamic> config) async {
+    final normalized = _normalizeConfig(config);
+    await _writePrefsConfig(normalized);
+    try {
+      await regenerateRuntimeFiles(configs: normalized);
+    } catch (_) {
+      // Rootfs may not exist yet during first-run preconfiguration.
+      // The setup flow calls regenerateRuntimeFiles() again after extraction.
+    }
+  }
+
+  static Map<String, dynamic> _emptyConfig() => <String, dynamic>{
+        'sharedProfiles': <Map<String, dynamic>>[],
+        'tools': <String, dynamic>{},
+      };
+
+  static Map<String, dynamic> _normalizeConfig(Map<String, dynamic> raw) {
+    final hasSharedProfiles = raw['sharedProfiles'] is List;
+    return hasSharedProfiles ? _normalizeModernConfig(raw) : _migrateLegacyConfig(raw);
+  }
+
+  static Map<String, dynamic> _normalizeModernConfig(Map<String, dynamic> raw) {
+    final config = _emptyConfig();
+    final sharedProfiles = <CliApiConfig>[];
+    final rawProfiles = raw['sharedProfiles'];
+    if (rawProfiles is List) {
+      for (var i = 0; i < rawProfiles.length; i++) {
+        sharedProfiles.add(
+          _normalizedSharedProfile(
+            CliApiConfig.fromJson(
+              'shared',
+              _asMapOrNull(rawProfiles[i]),
+            ).copyWith(
+              profileName: CliApiConfig.fromJson(
+                'shared',
+                _asMapOrNull(rawProfiles[i]),
+              ).profileName.trim().isEmpty
+                  ? 'API ${i + 1}'
+                  : null,
+              sharedProfileId: _sharedProfileIdFromJson(
+                _asMapOrNull(rawProfiles[i]),
+                index: i,
+              ),
+            ),
+          ),
+        );
+      }
+    }
+    config['sharedProfiles'] = _sharedProfilesJson(sharedProfiles);
+
+    final tools = _asMap(raw['tools']);
+    final normalizedTools = <String, dynamic>{};
+    for (final toolId in configurableToolIds) {
+      normalizedTools[toolId] = _toolSettingsJson(
+        _toolSettingsFromJson(toolId, _asMapOrNull(tools[toolId])),
+      );
+    }
+    config['tools'] = normalizedTools;
+    return config;
+  }
+
+  static Map<String, dynamic> _migrateLegacyConfig(Map<String, dynamic> raw) {
+    final tools = _asMap(raw['tools']);
+    final sharedProfiles = <CliApiConfig>[];
+    final sharedByKey = <String, String>{};
+    final normalizedTools = <String, dynamic>{};
+
+    for (final toolId in configurableToolIds) {
+      final toolJson = _asMapOrNull(tools[toolId]);
+      if (toolJson == null || toolJson.isEmpty) {
+        normalizedTools[toolId] = _toolSettingsJson(CliApiConfig(toolId: toolId));
+        continue;
+      }
+
+      final profiles = _legacyProfilesFromJson(toolId, toolJson);
+      final activeIndex = _activeProfileIndexFromJson(toolJson)
+          .clamp(0, profiles.length - 1)
+          .toInt();
+      for (var i = 0; i < profiles.length; i++) {
+        final sharedId = _ensureSharedProfile(
+          sharedProfiles,
+          sharedByKey,
+          profiles[i],
+          fallbackLabel: profiles[i].profileName.trim().isEmpty
+              ? '${toolId.toUpperCase()} API ${i + 1}'
+              : profiles[i].profileName.trim(),
+        );
+        if (i == activeIndex) {
+          normalizedTools[toolId] = _toolSettingsJson(
+            CliApiConfig(
+              toolId: toolId,
+              sharedProfileId: sharedId,
+              model: profiles[i].model,
+              reasoningEffort: profiles[i].reasoningEffort,
+              modelMapping: profiles[i].modelMapping,
+            ),
+          );
+        }
+      }
+      normalizedTools.putIfAbsent(
+        toolId,
+        () => _toolSettingsJson(CliApiConfig(toolId: toolId)),
+      );
+    }
+
+    return <String, dynamic>{
+      'sharedProfiles': _sharedProfilesJson(sharedProfiles),
+      'tools': normalizedTools,
+    };
+  }
+
+  static List<CliApiConfig> _sharedProfilesFromConfig(Map<String, dynamic> config) {
+    final rawProfiles = config['sharedProfiles'];
+    if (rawProfiles is! List) {
+      return const [];
+    }
+    return [
+      for (var i = 0; i < rawProfiles.length; i++)
+        _normalizedSharedProfile(
+          CliApiConfig.fromJson('shared', _asMapOrNull(rawProfiles[i])).copyWith(
+            profileName: CliApiConfig.fromJson('shared', _asMapOrNull(rawProfiles[i]))
+                    .profileName
+                    .trim()
+                    .isEmpty
+                ? 'API ${i + 1}'
+                : null,
+            sharedProfileId: _sharedProfileIdFromJson(
+              _asMapOrNull(rawProfiles[i]),
+              index: i,
+            ),
+          ),
+        ),
+    ];
+  }
+
+  static CliApiConfig _toolSettingsFromConfig(
+    String toolId,
+    Map<String, dynamic> config,
+  ) {
+    final tools = _asMap(config['tools']);
+    return _toolSettingsFromJson(toolId, _asMapOrNull(tools[toolId]));
+  }
+
+  static CliApiConfig _resolvedToolConfig(
+    String toolId,
+    Map<String, dynamic> config,
+  ) {
+    final toolSettings = _toolSettingsFromConfig(toolId, config);
+    final profile = _sharedProfileById(
+      _sharedProfilesFromConfig(config),
+      toolSettings.sharedProfileId,
+    );
+    return CliApiConfig(
+      toolId: toolId,
+      sharedProfileId: toolSettings.sharedProfileId,
+      profileName: toolSettings.profileName,
+      apiProtocol: profile?.effectiveApiProtocol ?? toolSettings.apiProtocol,
+      baseUrl: profile?.baseUrl ?? '',
+      apiKey: profile?.apiKey ?? '',
+      model: toolSettings.model,
+      reasoningEffort: toolSettings.reasoningEffort,
+      modelMapping: toolSettings.modelMapping,
+    );
+  }
+
+  static CliApiConfig _toolSettingsFromJson(
     String toolId,
     Map<String, dynamic>? json,
   ) {
-    final profiles = _profilesFromJson(toolId, json);
-    if (profiles.isEmpty) {
-      return CliApiConfig(toolId: toolId);
-    }
-    final activeIndex = _activeProfileIndexFromJson(json);
-    final index = activeIndex.clamp(0, profiles.length - 1).toInt();
-    return profiles[index];
+    final settings = CliApiConfig.fromJson(toolId, json);
+    return CliApiConfig(
+      toolId: toolId,
+      sharedProfileId: settings.sharedProfileId,
+      model: settings.model,
+      reasoningEffort: settings.reasoningEffort,
+      modelMapping: settings.modelMapping,
+      profileName: settings.profileName,
+    );
   }
 
-  static List<CliApiConfig> _profilesFromJson(
+  static List<CliApiConfig> _legacyProfilesFromJson(
     String toolId,
     Map<String, dynamic>? json,
   ) {
@@ -321,26 +468,118 @@ class CliApiConfigService {
     return 0;
   }
 
-  static Map<String, dynamic> _toolProfilesJson(
+  static String _ensureSharedProfile(
+    List<CliApiConfig> sharedProfiles,
+    Map<String, String> sharedByKey,
+    CliApiConfig profile, {
+    required String fallbackLabel,
+  }) {
+    final dedupeKey = _sharedProfileDedupeKey(profile);
+    if (dedupeKey.isNotEmpty) {
+      final existing = sharedByKey[dedupeKey];
+      if (existing != null) {
+        return existing;
+      }
+    }
+
+    final sharedId = profile.sharedProfileId.trim().isNotEmpty
+        ? profile.sharedProfileId.trim()
+        : _newSharedProfileId(sharedProfiles.length);
+    final normalized = _normalizedSharedProfile(
+      profile.copyWith(
+        sharedProfileId: sharedId,
+        profileName:
+            profile.profileName.trim().isEmpty ? fallbackLabel : profile.profileName,
+      ),
+    );
+    sharedProfiles.add(normalized);
+    if (dedupeKey.isNotEmpty) {
+      sharedByKey[dedupeKey] = sharedId;
+    }
+    return sharedId;
+  }
+
+  static CliApiConfig _normalizedSharedProfile(CliApiConfig profile) {
+    return CliApiConfig(
+      toolId: 'shared',
+      sharedProfileId: profile.sharedProfileId.trim(),
+      profileName: profile.profileName.trim(),
+      apiProtocol: profile.effectiveApiProtocol,
+      baseUrl: profile.baseUrl.trim(),
+      apiKey: profile.apiKey.trim(),
+    );
+  }
+
+  static String _sharedProfileDedupeKey(CliApiConfig profile) {
+    final protocol = profile.effectiveApiProtocol.trim();
+    final baseUrl = profile.baseUrl.trim();
+    final apiKey = profile.apiKey.trim();
+    if (protocol.isEmpty && baseUrl.isEmpty && apiKey.isEmpty) {
+      return '';
+    }
+    return '$protocol|$baseUrl|$apiKey';
+  }
+
+  static String _sharedProfileIdFromJson(
+    Map<String, dynamic>? json, {
+    required int index,
+  }) {
+    final existing = CliApiConfig.fromJson('shared', json).sharedProfileId.trim();
+    return existing.isNotEmpty ? existing : _newSharedProfileId(index);
+  }
+
+  static String _newSharedProfileId(int index) =>
+      'shared-${index + 1}-${DateTime.now().millisecondsSinceEpoch}';
+
+  static CliApiConfig? _sharedProfileById(
     List<CliApiConfig> profiles,
-    int activeIndex,
+    String sharedProfileId,
   ) {
-    final safeIndex = activeIndex.clamp(0, profiles.length - 1).toInt();
-    final active = profiles[safeIndex];
+    final id = sharedProfileId.trim();
+    if (id.isEmpty) {
+      return null;
+    }
+    for (final profile in profiles) {
+      if (profile.sharedProfileId.trim() == id) {
+        return profile;
+      }
+    }
+    return null;
+  }
+
+  static List<Map<String, dynamic>> _sharedProfilesJson(
+    List<CliApiConfig> profiles,
+  ) {
+    final normalized = <Map<String, dynamic>>[];
+    for (var i = 0; i < profiles.length; i++) {
+      final profile = _normalizedSharedProfile(
+        profiles[i].copyWith(
+          profileName:
+              profiles[i].profileName.trim().isEmpty ? 'API ${i + 1}' : null,
+          sharedProfileId: profiles[i].sharedProfileId.trim().isEmpty
+              ? _newSharedProfileId(i)
+              : profiles[i].sharedProfileId.trim(),
+        ),
+      );
+      normalized.add(profile.toJson());
+    }
+    return normalized;
+  }
+
+  static Map<String, dynamic> _toolSettingsJson(CliApiConfig config) {
     return <String, dynamic>{
-      ...active.toJson(),
-      'activeProfileIndex': safeIndex,
-      'profiles': [
-        for (var i = 0; i < profiles.length; i++)
-          profiles[i]
-              .copyWith(
-                profileName: profiles[i].profileName.trim().isEmpty
-                    ? 'API ${i + 1}'
-                    : profiles[i].profileName,
-              )
-              .toJson(),
-      ],
+      'sharedProfileId': config.sharedProfileId.trim(),
+      'model': config.model.trim(),
+      'reasoningEffort': config.reasoningEffort.trim(),
+      'modelMapping': config.modelMapping.trim(),
+      'codexModelMapping': config.modelMapping.trim(),
+      'profileName': config.profileName.trim(),
     };
+  }
+
+  static bool _deepEquals(dynamic left, dynamic right) {
+    final encoder = const JsonEncoder();
+    return encoder.convert(left) == encoder.convert(right);
   }
 
   static String _buildGlobalEnvFile() {
