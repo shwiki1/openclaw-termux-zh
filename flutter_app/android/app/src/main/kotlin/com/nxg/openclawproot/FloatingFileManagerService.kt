@@ -1103,7 +1103,7 @@ class FloatingFileManagerService : Service() {
             setTextColor(TEXT_MUTED_COLOR)
             textSize = 11f
             setPadding(dp(10), dp(8), dp(10), dp(8))
-            text = editor.cursorLabel()
+            this.text = editor.cursorLabel()
         }
         fun refreshCursorStatus() {
             cursorStatus.text = editor.cursorLabel()
