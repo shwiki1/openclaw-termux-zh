@@ -42,9 +42,13 @@ class MessagePlatformConfigService {
   ];
   static const _weixinInstallerPackage =
       '@tencent-weixin/openclaw-weixin-cli@latest';
+  static const _persistentNpmCacheDir = '/root/.npm/openclaw-cache';
   static const weixinInstallerCommand =
       'export npm_config_registry=${AppConstants.npmRegistryUrl}; '
       'export NPM_CONFIG_REGISTRY=${AppConstants.npmRegistryUrl}; '
+      'export npm_config_cache=$_persistentNpmCacheDir; '
+      'export npm_config_prefer_offline=true; '
+      'export npm_config_prefer_online=false; '
       'openclaw plugins install "$weixinPluginPackage" || '
       'openclaw plugins install @tencent-weixin/openclaw-weixin; '
       'openclaw config set plugins.entries.$_weixinPluginId.enabled true; '
@@ -64,10 +68,18 @@ export NODE_EXTRA_CA_CERTS=/etc/ssl/certs/ca-certificates.crt
 export UV_USE_IO_URING=0
 export npm_config_registry=${AppConstants.npmRegistryUrl}
 export NPM_CONFIG_REGISTRY=${AppConstants.npmRegistryUrl}
+export npm_config_audit=false
+export npm_config_fund=false
+export npm_config_progress=false
+export npm_config_update_notifier=false
 export npm_config_fetch_retries=5
 export npm_config_fetch_retry_mintimeout=2000
 export npm_config_fetch_retry_maxtimeout=20000
-export npm_config_prefer_online=true
+export npm_config_prefer_offline=true
+export npm_config_prefer_online=false
+export npm_config_cache=$_persistentNpmCacheDir
+mkdir -p /root/.npm $_persistentNpmCacheDir /tmp/npm-tmp
+export TMPDIR=/tmp/npm-tmp
 $command
 ''';
   }
@@ -469,6 +481,39 @@ $command
     await _writeMutableConfig(config);
   }
 
+  static Future<String> _installPluginWithRepair({
+    required String primaryPackage,
+    required String fallbackPackage,
+    required List<String> uninstallCommands,
+    required String installNotificationText,
+    required String repairNotificationText,
+  }) async {
+    try {
+      return await _runOpenclawCommandWithRetries(
+        <String>[
+          'openclaw plugins install "$primaryPackage"',
+          'openclaw plugins install $fallbackPackage',
+        ],
+        timeout: 1800,
+        notificationText: installNotificationText,
+      );
+    } catch (_) {
+      await _runOpenclawCommand(
+        '${uninstallCommands.join('; ')}; true',
+        timeout: 120,
+        notificationText: repairNotificationText,
+      );
+      return _runOpenclawCommandWithRetries(
+        <String>[
+          'openclaw plugins install "$primaryPackage"',
+          'openclaw plugins install $fallbackPackage',
+        ],
+        timeout: 1800,
+        notificationText: installNotificationText,
+      );
+    }
+  }
+
   static Future<void> _normalizeQqbotChannelConfig({
     required String appId,
     required String appSecret,
@@ -758,19 +803,15 @@ fs.writeFileSync(p, JSON.stringify(c, null, 2));
       return;
     }
 
-    await _runOpenclawCommand(
-      'openclaw plugins uninstall qqbot || true; '
-      'openclaw plugins uninstall openclaw-qqbot || true',
-      timeout: 90,
-      notificationText: 'Preparing QQ plugin...',
-    );
-    await _runOpenclawCommandWithRetries(
-      <String>[
-        'openclaw plugins install "$qqbotPluginPackage"',
-        'openclaw plugins install @tencent-connect/openclaw-qqbot',
+    await _installPluginWithRepair(
+      primaryPackage: qqbotPluginPackage,
+      fallbackPackage: '@tencent-connect/openclaw-qqbot',
+      uninstallCommands: const <String>[
+        'openclaw plugins uninstall qqbot >/dev/null 2>&1 || true',
+        'openclaw plugins uninstall openclaw-qqbot >/dev/null 2>&1 || true',
       ],
-      timeout: 1800,
-      notificationText: 'Installing QQ plugin...',
+      installNotificationText: 'Installing QQ plugin...',
+      repairNotificationText: 'Repairing QQ plugin installation...',
     );
     await _setPluginEntryEnabled(
       _qqbotPluginId,
@@ -793,19 +834,15 @@ fs.writeFileSync(p, JSON.stringify(c, null, 2));
       return;
     }
 
-    await _runOpenclawCommand(
-      'openclaw plugins uninstall openclaw-weixin || true; '
-      'openclaw plugins uninstall weixin || true',
-      timeout: 90,
-      notificationText: 'Preparing Weixin plugin...',
-    );
-    await _runOpenclawCommandWithRetries(
-      <String>[
-        'openclaw plugins install "$weixinPluginPackage"',
-        'openclaw plugins install @tencent-weixin/openclaw-weixin',
+    await _installPluginWithRepair(
+      primaryPackage: weixinPluginPackage,
+      fallbackPackage: '@tencent-weixin/openclaw-weixin',
+      uninstallCommands: const <String>[
+        'openclaw plugins uninstall openclaw-weixin >/dev/null 2>&1 || true',
+        'openclaw plugins uninstall weixin >/dev/null 2>&1 || true',
       ],
-      timeout: 1800,
-      notificationText: 'Installing Weixin plugin...',
+      installNotificationText: 'Installing Weixin plugin...',
+      repairNotificationText: 'Repairing Weixin plugin installation...',
     );
     await _setPluginEntryEnabled(
       _weixinPluginId,
@@ -819,16 +856,28 @@ fs.writeFileSync(p, JSON.stringify(c, null, 2));
     return '''
 export npm_config_registry=${AppConstants.npmRegistryUrl}
 export NPM_CONFIG_REGISTRY=${AppConstants.npmRegistryUrl}
+export npm_config_audit=false
+export npm_config_fund=false
+export npm_config_progress=false
+export npm_config_update_notifier=false
 export npm_config_fetch_retries=5
 export npm_config_fetch_retry_mintimeout=2000
 export npm_config_fetch_retry_maxtimeout=20000
+export npm_config_prefer_offline=true
+export npm_config_prefer_online=false
+export npm_config_cache=$_persistentNpmCacheDir
 export CHOKIDAR_USEPOLLING=true
 export UV_USE_IO_URING=0
-openclaw plugins uninstall openclaw-weixin >/dev/null 2>&1 || true
-openclaw plugins uninstall weixin >/dev/null 2>&1 || true
+mkdir -p /root/.npm $_persistentNpmCacheDir /tmp/npm-tmp
+export TMPDIR=/tmp/npm-tmp
 openclaw plugins install "$weixinPluginPackage" || openclaw plugins install @tencent-weixin/openclaw-weixin
 openclaw config set plugins.entries.$_weixinPluginId.enabled true || true
-npx -y $_weixinInstallerPackage install
+npx -y $_weixinInstallerPackage install || (
+  openclaw plugins uninstall openclaw-weixin >/dev/null 2>&1 || true
+  openclaw plugins uninstall weixin >/dev/null 2>&1 || true
+  openclaw plugins install "$weixinPluginPackage" || openclaw plugins install @tencent-weixin/openclaw-weixin
+  npx -y $_weixinInstallerPackage install
+)
 ''';
   }
 

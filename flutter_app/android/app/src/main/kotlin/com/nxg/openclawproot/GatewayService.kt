@@ -67,7 +67,7 @@ class GatewayService : Service() {
 
             if (inst != null && isRunning) {
                 val elapsed = System.currentTimeMillis() - inst.startTime
-                return elapsed < 120_000
+                return elapsed < 30_000
             }
 
             return false
@@ -468,8 +468,8 @@ class GatewayService : Service() {
             var consecutivePortMisses = 0
             var portWarningActive = false
             try {
-                // Wait 45s before first check 鈥?give the process time to start
-                Thread.sleep(45_000)
+                // Give startup some time, but surface hangs sooner.
+                Thread.sleep(20_000)
                 while (!Thread.interrupted() && isRunning && !stopping) {
                     val proc = gatewayProcess
                     if (proc != null && !proc.isAlive) {
@@ -498,7 +498,7 @@ class GatewayService : Service() {
                             }
                         }
                     }
-                    Thread.sleep(15_000) // Check every 15s
+                    Thread.sleep(10_000) // Check every 10s
                 }
             } catch (_: InterruptedException) {}
         }.apply { isDaemon = true; start() }

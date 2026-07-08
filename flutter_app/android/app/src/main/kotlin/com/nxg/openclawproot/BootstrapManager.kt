@@ -650,6 +650,7 @@ class BootstrapManager(
         tmpDir.setWritable(true, false)
         tmpDir.setExecutable(true, false)
 
+        ensureLsofCompatScript()
         // 8. Fix executable permissions on critical directories.
         //    Our Java extraction might not preserve all permission bits correctly
         //    (dpkg error 100 = "Could not exec dpkg" = permission issue).
@@ -686,6 +687,107 @@ class BootstrapManager(
                 zoneinfo.copyTo(localtime, overwrite = true)
             } catch (_: Exception) {}
         }
+    }
+
+    private fun ensureLsofCompatScript() {
+        val wrapper = File("$rootfsDir/usr/local/bin/lsof")
+        wrapper.parentFile?.mkdirs()
+        val script = """
+#!/usr/bin/env python3
+# OpenClaw lsof compat shim for Android/proot.
+import os
+import re
+import sys
+
+SELF = os.path.realpath(__file__)
+for candidate in ("/usr/bin/lsof", "/bin/lsof"):
+    try:
+        if os.path.exists(candidate) and os.path.realpath(candidate) != SELF:
+            os.execv(candidate, [candidate, *sys.argv[1:]])
+    except Exception:
+        pass
+
+PORT_RE = re.compile(r":(\d+)")
+
+def extract_port(argv):
+    for arg in argv:
+        match = PORT_RE.search(arg)
+        if match:
+            try:
+                return int(match.group(1))
+            except ValueError:
+                return None
+    return None
+
+def listening_inodes(port):
+    target = f"{port:04X}"
+    inodes = set()
+    for table in ("/proc/net/tcp", "/proc/net/tcp6"):
+        try:
+            with open(table, "r", encoding="utf-8", errors="ignore") as handle:
+                next(handle, None)
+                for line in handle:
+                    parts = line.split()
+                    if len(parts) < 10:
+                        continue
+                    local_addr = parts[1]
+                    state = parts[3]
+                    inode = parts[9]
+                    try:
+                        local_port = local_addr.split(":")[1].upper()
+                    except Exception:
+                        continue
+                    if state == "0A" and local_port == target:
+                        inodes.add(inode)
+        except OSError:
+            continue
+    return inodes
+
+def pids_for_inodes(inodes):
+    pids = []
+    for pid in os.listdir("/proc"):
+        if not pid.isdigit():
+            continue
+        fd_dir = f"/proc/{pid}/fd"
+        try:
+            fd_names = os.listdir(fd_dir)
+        except OSError:
+            continue
+        for fd_name in fd_names:
+            try:
+                target = os.readlink(os.path.join(fd_dir, fd_name))
+            except OSError:
+                continue
+            if not target.startswith("socket:["):
+                continue
+            inode = target[8:-1]
+            if inode in inodes:
+                pids.append(int(pid))
+                break
+    return sorted(set(pids))
+
+port = extract_port(sys.argv[1:])
+if port is None:
+    sys.exit(0)
+
+pids = pids_for_inodes(listening_inodes(port))
+if "-t" in sys.argv[1:]:
+    for pid in pids:
+        print(pid)
+else:
+    if pids:
+        print("COMMAND PID")
+        for pid in pids:
+            print(f"node {pid}")
+sys.exit(0)
+""".trimIndent()
+
+        if (!wrapper.exists() || !wrapper.readText().contains("OpenClaw lsof compat shim")) {
+            wrapper.writeText(script)
+        }
+        wrapper.setReadable(true, false)
+        wrapper.setWritable(true, true)
+        wrapper.setExecutable(true, false)
     }
 
     /**

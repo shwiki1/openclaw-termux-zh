@@ -711,7 +711,7 @@ fs.writeFileSync(p, JSON.stringify(c, null, 2));
   void _startHealthCheck() {
     _cancelAllTimers();
     // Start probing quickly so the homepage status and Web UI URL update sooner.
-    _initialDelayTimer = Timer(const Duration(seconds: 3), () {
+    _initialDelayTimer = Timer(const Duration(seconds: 1), () {
       _initialDelayTimer = null;
       if (_state.status == GatewayStatus.stopped ||
           _state.status == GatewayStatus.stopping) {
@@ -719,7 +719,7 @@ fs.writeFileSync(p, JSON.stringify(c, null, 2));
       }
       _checkHealth();
       _healthTimer = Timer.periodic(
-        const Duration(seconds: 3),
+        const Duration(seconds: 2),
         (_) => _checkHealth(),
       );
     });
@@ -752,7 +752,7 @@ fs.writeFileSync(p, JSON.stringify(c, null, 2));
         // Grace period: give the service time to boot before declaring failure.
         if (_startingAt != null &&
             _state.status == GatewayStatus.starting &&
-            DateTime.now().difference(_startingAt!).inSeconds < 45) {
+            DateTime.now().difference(_startingAt!).inSeconds < 25) {
           _updateState(_state.copyWith(
             logs: [
               ..._state.logs,

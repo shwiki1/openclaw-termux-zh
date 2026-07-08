@@ -877,7 +877,7 @@ class BootstrapService {
             estimatedDuration: const Duration(minutes: 3),
             task: () => NativeBridge.runInProot(
               'apt-get install -y --no-install-recommends '
-              'ca-certificates git python3 make g++ curl wget',
+              'ca-certificates git python3 make g++ curl wget lsof',
             ),
           );
           bootstrapStatus = await NativeBridge.getBootstrapStatus();
