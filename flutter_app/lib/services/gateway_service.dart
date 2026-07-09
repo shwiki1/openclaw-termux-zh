@@ -633,21 +633,10 @@ fs.writeFileSync(p, JSON.stringify(c, null, 2));
         }
       } catch (_) {}
       await ProviderConfigService.migrateCustomProviderConfigIfNeeded();
+      await ProviderConfigService.repairGatewayStartupConfigIfNeeded();
       await ProviderConfigService.ensureGatewayDefaults();
       await MessagePlatformConfigService.migrateFeishuConfigIfNeeded();
       await MessagePlatformConfigService.repairMessagingPluginConfigIfNeeded();
-      try {
-        await MessagePlatformConfigService.ensureMessagingPluginsForStartup();
-      } catch (_) {
-        _updateState(
-          _state.copyWith(
-            logs: [
-              ..._state.logs,
-              _ts('[WARN] Messaging plugin preinstall failed, gateway will continue and retry later.'),
-            ],
-          ),
-        );
-      }
       await _writeNodeAllowConfig();
       final refreshedDashboardUrl = await _readConfiguredDashboardUrl();
       if (refreshedDashboardUrl != null) {
@@ -805,6 +794,7 @@ fs.writeFileSync(p, JSON.stringify(c, null, 2));
 
   Future<void> applyConfigChanges({String source = 'configuration'}) async {
     await ProviderConfigService.migrateCustomProviderConfigIfNeeded();
+    await ProviderConfigService.repairGatewayStartupConfigIfNeeded();
     await ProviderConfigService.ensureGatewayDefaults();
     await MessagePlatformConfigService.repairMessagingPluginConfigIfNeeded();
 

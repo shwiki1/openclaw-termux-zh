@@ -7,6 +7,9 @@ on:
       - 'flutter_app/**'
       - 'scripts/fetch-proot-binaries.sh'
       - 'scripts/build-prebuilt-rootfs.sh'
+      - 'scripts/prebuilt-rootfs-metadata.sh'
+      - 'scripts/fetch-prebuilt-rootfs-asset.sh'
+      - 'scripts/publish-prebuilt-rootfs-asset.sh'
       - 'scripts/build-apk.sh'
       - 'scripts/build_release.py'
       - '.github/workflows/flutter-build.yml'
@@ -16,6 +19,9 @@ on:
       - 'flutter_app/**'
       - 'scripts/fetch-proot-binaries.sh'
       - 'scripts/build-prebuilt-rootfs.sh'
+      - 'scripts/prebuilt-rootfs-metadata.sh'
+      - 'scripts/fetch-prebuilt-rootfs-asset.sh'
+      - 'scripts/publish-prebuilt-rootfs-asset.sh'
       - 'scripts/build-apk.sh'
       - 'scripts/build_release.py'
       - '.github/workflows/flutter-build.yml'
@@ -61,7 +67,20 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends binutils curl gzip qemu-user-static unzip xz-utils zstd
 
+      - name: Restore bundled OpenClaw rootfs
+        id: restore_rootfs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if bash scripts/fetch-prebuilt-rootfs-asset.sh --arch arm64 --release-tag basic-resource; then
+            echo "restored=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "restored=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Build bundled OpenClaw rootfs
+        if: steps.restore_rootfs.outputs.restored != 'true'
         run: |
           set -euo pipefail
           bash scripts/build-prebuilt-rootfs.sh --no-docker --arch arm64 --mirror http://mirrors.tuna.tsinghua.edu.cn/ubuntu-ports
@@ -75,6 +94,14 @@ jobs:
           fi
           echo "Bundled rootfs size: ${SIZE_MB} MB"
           sudo rm -rf .tmp/prebuilt-rootfs .tmp/rootfs-cache
+
+      - name: Publish bundled OpenClaw rootfs
+        if: steps.restore_rootfs.outputs.restored != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          bash scripts/publish-prebuilt-rootfs-asset.sh --arch arm64 --release-tag basic-resource
 
       - name: Install Android SDK packages
         run: |

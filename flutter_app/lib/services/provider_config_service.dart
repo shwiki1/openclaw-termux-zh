@@ -15,6 +15,14 @@ class ProviderConfigService {
   static const _customOpenaiContextWindow = 128000;
   static const _customOpenaiMaxTokens = 8192;
   static const _localGatewayMode = 'local';
+  static const _fallbackWebSearchProvider = 'duckduckgo';
+  static const _legacyKimiSearchProvider = 'kimi';
+  static const _moonshotPluginId = 'moonshot';
+  static const _moonshotPluginAliases = <String>[
+    _moonshotPluginId,
+    '@openclaw/moonshot-provider',
+    'moonshot-provider',
+  ];
 
   static final Set<String> _builtInProviderIds = {
     for (final provider in AiProvider.all.where(
@@ -136,6 +144,32 @@ class ProviderConfigService {
     final providers = _asStringKeyedMap(models['providers']);
     models['providers'] = providers;
     return providers;
+  }
+
+  static Map<String, dynamic> _ensureToolsSection(
+    Map<String, dynamic> config,
+  ) {
+    final tools = _asStringKeyedMap(config['tools']);
+    config['tools'] = tools;
+    return tools;
+  }
+
+  static Map<String, dynamic> _ensureWebToolsSection(
+    Map<String, dynamic> config,
+  ) {
+    final tools = _ensureToolsSection(config);
+    final web = _asStringKeyedMap(tools['web']);
+    tools['web'] = web;
+    return web;
+  }
+
+  static Map<String, dynamic> _ensureWebSearchSection(
+    Map<String, dynamic> config,
+  ) {
+    final web = _ensureWebToolsSection(config);
+    final search = _asStringKeyedMap(web['search']);
+    web['search'] = search;
+    return search;
   }
 
   static Map<String, dynamic> _ensureAgentsSection(
@@ -347,6 +381,61 @@ class ProviderConfigService {
 
     final primary = _readActiveModel(config);
     return _isNonEmptyString(primary);
+  }
+
+  static bool _cleanupLegacyMoonshotPluginConfig(
+    Map<String, dynamic> config,
+  ) {
+    final before = jsonEncode(config);
+    final plugins = _asStringKeyedMap(config['plugins']);
+    final entries = _asStringKeyedMap(plugins['entries']);
+    for (final alias in _moonshotPluginAliases) {
+      entries.remove(alias);
+    }
+
+    final allow = plugins['allow'];
+    if (allow is List) {
+      plugins['allow'] = allow
+          .map((item) => item?.toString() ?? '')
+          .where(
+            (item) => item.isNotEmpty && !_moonshotPluginAliases.contains(item),
+          )
+          .toList();
+      if ((plugins['allow'] as List).isEmpty) {
+        plugins.remove('allow');
+      }
+    }
+
+    if (entries.isEmpty) {
+      plugins.remove('entries');
+    } else {
+      plugins['entries'] = entries;
+    }
+
+    if (plugins.isEmpty) {
+      config.remove('plugins');
+    } else {
+      config['plugins'] = plugins;
+    }
+
+    return before != jsonEncode(config);
+  }
+
+  static bool _repairLegacyWebSearchProvider(Map<String, dynamic> config) {
+    final search = _ensureWebSearchSection(config);
+    final provider = search['provider'];
+    if (provider is! String) {
+      return false;
+    }
+
+    final normalizedProvider = provider.trim().toLowerCase();
+    if (normalizedProvider != _legacyKimiSearchProvider) {
+      return false;
+    }
+
+    search['provider'] = _fallbackWebSearchProvider;
+    search['enabled'] = true;
+    return true;
   }
 
   static Map<String, dynamic> _providerEntryForSave({
@@ -763,6 +852,24 @@ class ProviderConfigService {
     }
 
     await _writeConfigMap(config);
+  }
+
+  static Future<void> repairGatewayStartupConfigIfNeeded() async {
+    try {
+      final config = await _readConfigMap();
+      final before = jsonEncode(config);
+
+      _cleanupLegacyMoonshotPluginConfig(config);
+      _repairLegacyWebSearchProvider(config);
+
+      if (before == jsonEncode(config)) {
+        return;
+      }
+
+      await _writeConfigMap(config);
+    } catch (_) {
+      // Non-fatal: a stale optional plugin warning should not block startup.
+    }
   }
 
   static Future<bool> readBonjourEnabled() async {
