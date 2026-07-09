@@ -497,6 +497,83 @@ class ProviderConfigService {
     return null;
   }
 
+  static String? _extractModelIdFromEntry(dynamic value) {
+    if (value is String) {
+      final trimmed = value.trim();
+      return trimmed.isEmpty ? null : trimmed;
+    }
+    if (value is Map) {
+      final id = _trimmedString(value['id']);
+      if (id.isNotEmpty) {
+        return id;
+      }
+      final model = _trimmedString(value['model']);
+      if (model.isNotEmpty) {
+        return model;
+      }
+      final name = _trimmedString(value['name']);
+      if (name.isNotEmpty) {
+        return name;
+      }
+    }
+    return null;
+  }
+
+  static bool _normalizeProviderModelsShape({
+    required String providerId,
+    required Map<String, dynamic> providerConfig,
+    String? activeModelRef,
+  }) {
+    final rawModels = providerConfig['models'];
+    if (rawModels is String) {
+      final trimmed = rawModels.trim();
+      if (trimmed.isEmpty) {
+        return false;
+      }
+      providerConfig['models'] = [trimmed];
+      return true;
+    }
+
+    if (rawModels is! List || rawModels.isEmpty) {
+      return false;
+    }
+
+    final normalizedModels = <String>[];
+    for (final item in rawModels) {
+      final modelId = _extractModelIdFromEntry(item);
+      if (_isNonEmptyString(modelId) && !normalizedModels.contains(modelId)) {
+        normalizedModels.add(modelId!.trim());
+      }
+    }
+
+    if (normalizedModels.isEmpty) {
+      final activeProviderId = providerIdFromModelRef(activeModelRef);
+      if (activeProviderId == providerId && _isNonEmptyString(activeModelRef)) {
+        final separatorIndex = activeModelRef!.indexOf('/');
+        if (separatorIndex >= 0 &&
+            separatorIndex < activeModelRef.length - 1) {
+          normalizedModels.add(activeModelRef.substring(separatorIndex + 1));
+        }
+      }
+    }
+
+    if (normalizedModels.isEmpty) {
+      return false;
+    }
+
+    final alreadyNormalized =
+        rawModels.length == normalizedModels.length &&
+        rawModels.every(
+          (item) => item is String && normalizedModels.contains(item.trim()),
+        );
+    if (alreadyNormalized) {
+      return false;
+    }
+
+    providerConfig['models'] = normalizedModels;
+    return true;
+  }
+
   static String? _normalizeThinkingLevel(dynamic value) {
     if (value is! String) {
       return null;
@@ -716,9 +793,19 @@ class ProviderConfigService {
       var metadataChanged = false;
 
       for (final entry in providers.entries.toList()) {
+        final providerConfig = _asStringKeyedMap(entry.value);
+        if (_normalizeProviderModelsShape(
+          providerId: entry.key,
+          providerConfig: providerConfig,
+          activeModelRef: activeModel,
+        )) {
+          providers[entry.key] = providerConfig;
+          configChanged = true;
+        }
+
         final preset = _customPresetFromEntry(
           providerId: entry.key,
-          rawProviderConfig: entry.value,
+          rawProviderConfig: providerConfig,
           allowList: allowList,
           presetMetadata: presetMetadata,
         );
@@ -731,7 +818,6 @@ class ProviderConfigService {
           preset.baseUrl,
           preset.compatibility,
         );
-        final providerConfig = _asStringKeyedMap(entry.value);
         if (normalizedBaseUrl != preset.baseUrl) {
           providerConfig['baseUrl'] = normalizedBaseUrl;
           providers[entry.key] = providerConfig;
@@ -906,9 +992,22 @@ class ProviderConfigService {
     try {
       final config = await _readConfigMap();
       final before = jsonEncode(config);
+      final activeModel = _readActiveModel(config);
 
       _cleanupLegacyMoonshotPluginConfig(config);
       _repairLegacyWebSearchProvider(config);
+
+      final providers = _ensureProvidersSection(config);
+      for (final entry in providers.entries.toList()) {
+        final providerConfig = _asStringKeyedMap(entry.value);
+        if (_normalizeProviderModelsShape(
+          providerId: entry.key,
+          providerConfig: providerConfig,
+          activeModelRef: activeModel,
+        )) {
+          providers[entry.key] = providerConfig;
+        }
+      }
 
       if (before == jsonEncode(config)) {
         return;
