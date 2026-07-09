@@ -65,7 +65,7 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends binutils curl gzip qemu-user-static unzip xz-utils zstd
+          sudo apt-get install -y --no-install-recommends binutils curl gzip lftp qemu-user-static unzip xz-utils zstd
 
       - name: Restore bundled OpenClaw rootfs
         id: restore_rootfs
@@ -164,13 +164,18 @@ jobs:
           FLUTTER_SDK="$(dirname "$(dirname "$(command -v flutter)")")"
           APP_VERSION="$(awk '/^version:/ {print $2; exit}' pubspec.yaml)"
           VERSION_BASE="${APP_VERSION%%+*}"
-          VERSION_CODE="${APP_VERSION#*+}"
-          if [ "$VERSION_CODE" = "$APP_VERSION" ] || [ -z "$VERSION_CODE" ]; then
-            VERSION_CODE="$GITHUB_RUN_NUMBER"
+          PUBSPEC_VERSION_CODE="${APP_VERSION#*+}"
+          if [ "$PUBSPEC_VERSION_CODE" = "$APP_VERSION" ] || [ -z "$PUBSPEC_VERSION_CODE" ]; then
+            PUBSPEC_VERSION_CODE="1"
+          fi
+          VERSION_CODE="${GITHUB_RUN_NUMBER:-$PUBSPEC_VERSION_CODE}"
+          if [ "${VERSION_CODE}" -lt "${PUBSPEC_VERSION_CODE}" ]; then
+            VERSION_CODE="${PUBSPEC_VERSION_CODE}"
           fi
           VERSION_NAME="$VERSION_BASE"
           echo "APP_VERSION_NAME=${VERSION_NAME}" >> "$GITHUB_ENV"
           echo "APP_VERSION_CODE=${VERSION_CODE}" >> "$GITHUB_ENV"
+          echo "APP_FULL_VERSION=${VERSION_NAME}+${VERSION_CODE}" >> "$GITHUB_ENV"
 
           {
             echo "sdk.dir=${ANDROID_HOME}"
@@ -284,7 +289,9 @@ jobs:
             --split-per-abi \
             --target-platform android-arm64 \
             --build-name "$APP_VERSION_NAME" \
-            --build-number "$APP_VERSION_CODE"
+            --build-number "$APP_VERSION_CODE" \
+            --dart-define=APP_VERSION_NAME="$APP_VERSION_NAME" \
+            --dart-define=APP_VERSION_CODE="$APP_VERSION_CODE"
 
       - name: Verify APK native PRoot binaries
         run: |
@@ -333,6 +340,74 @@ jobs:
           name: openclaw-apks
           path: artifacts/*.apk
           retention-days: 30
+
+      - name: Build update manifest
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.collect.outputs.version }}"
+          VERSION_CODE="${{ steps.collect.outputs.version_code }}"
+          APK_PATH="$(find artifacts -maxdepth 1 -type f -name '*.apk' | head -n 1)"
+          APK_FILE="$(basename "$APK_PATH")"
+          BASE_URL="https://api.lziyu.cn/openclaw"
+          export VERSION VERSION_CODE APK_FILE BASE_URL
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          version = os.environ["VERSION"]
+          version_code = int(os.environ["VERSION_CODE"])
+          apk_file = os.environ["APK_FILE"]
+          base_url = os.environ["BASE_URL"].rstrip("/")
+          manifest = {
+              "version": version,
+              "buildNumber": version_code,
+              "fileName": apk_file,
+              "url": f"{base_url}/{apk_file}",
+              "pageUrl": base_url,
+              "assets": [
+                  {
+                      "name": apk_file,
+                      "downloadUrl": f"{base_url}/{apk_file}",
+                  }
+              ],
+          }
+          Path("artifacts/latest.json").write_text(
+              json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
+              encoding="utf-8",
+          )
+          PY
+        env:
+          VERSION: ${{ steps.collect.outputs.version }}
+          VERSION_CODE: ${{ steps.collect.outputs.version_code }}
+          BASE_URL: https://api.lziyu.cn/openclaw
+
+      - name: Upload update package to FTP
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        env:
+          UPDATE_FTP_HOST: ${{ secrets.UPDATE_FTP_HOST }}
+          UPDATE_FTP_USERNAME: ${{ secrets.UPDATE_FTP_USERNAME }}
+          UPDATE_FTP_PASSWORD: ${{ secrets.UPDATE_FTP_PASSWORD }}
+          UPDATE_FTP_REMOTE_DIR: ${{ secrets.UPDATE_FTP_REMOTE_DIR }}
+        run: |
+          set -euo pipefail
+          FTP_HOST="${UPDATE_FTP_HOST:-dns025.idc-icp.com}"
+          if [ -z "${UPDATE_FTP_USERNAME:-}" ] || [ -z "${UPDATE_FTP_PASSWORD:-}" ]; then
+            echo "FTP secrets are missing. Skipping FTP upload."
+            exit 0
+          fi
+          REMOTE_DIR="${UPDATE_FTP_REMOTE_DIR:-openclaw}"
+          lftp -u "${UPDATE_FTP_USERNAME}","${UPDATE_FTP_PASSWORD}" "${FTP_HOST}" <<EOF
+          set ssl:verify-certificate no
+          set ftp:ssl-allow no
+          set net:max-retries 2
+          mkdir -p ${REMOTE_DIR}
+          cd ${REMOTE_DIR}
+          mput -O . artifacts/*.apk
+          put -O . artifacts/latest.json
+          bye
+          EOF
 
       - name: Comment on PR
         if: github.event_name == 'pull_request'

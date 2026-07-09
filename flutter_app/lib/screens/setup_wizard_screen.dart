@@ -431,7 +431,7 @@ class _SetupWizardScreenState extends State<SetupWizardScreen> {
       final currentOpenClawVersion =
           await _versionService.readInstalledVersion();
       final compatibility = picked.compatibility(
-        currentAppVersion: AppConstants.version,
+        currentAppVersion: AppConstants.fullVersion,
         currentOpenClawVersion: currentOpenClawVersion,
       );
       final shouldContinue = switch (picked.kind) {

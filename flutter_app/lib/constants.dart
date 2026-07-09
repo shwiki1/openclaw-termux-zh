@@ -1,6 +1,10 @@
 class AppConstants {
   static const String appName = '次元虾';
-  static const String version = '2.0.43';
+  static const String version =
+      String.fromEnvironment('APP_VERSION_NAME', defaultValue: '2.0.48');
+  static const String buildNumber =
+      String.fromEnvironment('APP_VERSION_CODE', defaultValue: '124');
+  static const String fullVersion = '$version+$buildNumber';
   static const String packageName = 'com.agent.cyx';
 
   /// Matches ANSI escape sequences (e.g. color codes in terminal output).
@@ -12,8 +16,8 @@ class AppConstants {
       'https://github.com/JunWan666/openclaw-termux-zh';
   static const String license = 'MIT';
 
-  static const String githubApiLatestRelease =
-      'https://api.github.com/repos/JunWan666/openclaw-termux-zh/releases/latest';
+  static const String appUpdateBaseUrl = 'https://api.lziyu.cn/openclaw';
+  static const String appUpdateManifestUrl = '$appUpdateBaseUrl/latest.json';
 
   // NextGenX
   static const String orgName = 'NextGenX';

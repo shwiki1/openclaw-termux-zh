@@ -98,7 +98,7 @@ class BackupLibraryService {
   }) async {
     final content = await BackupService.buildConfigBackupContent();
     final fileName =
-        'openclaw-config-local-${_timestampSuffix()}-v${AppConstants.version}.json';
+        'openclaw-config-local-${_timestampSuffix()}-v${AppConstants.fullVersion}.json';
     final targetFile = await _buildUniqueFile(fileName);
     await targetFile.writeAsString(content, flush: true);
     return _buildEntry(

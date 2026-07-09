@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:openclaw/constants.dart';
+import 'package:openclaw/models/ai_provider.dart';
 import 'package:openclaw/models/custom_provider_preset.dart';
 import 'package:openclaw/services/provider_config_service.dart';
 
@@ -248,5 +249,79 @@ void main() {
       expect(customPresets, hasLength(1));
       expect(customPresets.single.alias, '旧别名');
     });
+
+    test('migrateCustomProviderConfigIfNeeded normalizes legacy string models',
+        () async {
+      rootfsFiles[configPath] = jsonEncode(<String, dynamic>{
+        'agents': {
+          'defaults': {
+            'model': {
+              'primary': 'custom-openai/agnes-2.0-flash',
+            },
+          },
+        },
+        'models': {
+          'providers': {
+            'custom-openai': {
+              'baseUrl': 'https://api.example.com/v1',
+              'api': 'openai-completions',
+              'apiKey': 'sk-test',
+              'models': ['agnes-2.0-flash'],
+            },
+          },
+        },
+      });
+
+      await ProviderConfigService.migrateCustomProviderConfigIfNeeded();
+
+      final savedConfig =
+          jsonDecode(rootfsFiles[configPath]!) as Map<String, dynamic>;
+      final providers = ((savedConfig['models']
+          as Map<String, dynamic>)['providers'] as Map<String, dynamic>);
+      final customOpenai = providers['custom-openai'] as Map<String, dynamic>;
+      final firstModel =
+          (customOpenai['models'] as List).first as Map<String, dynamic>;
+
+      expect(firstModel['id'], 'agnes-2.0-flash');
+      expect(firstModel['name'], 'agnes-2.0-flash');
+    });
+  });
+
+  test('saveProviderConfig writes model objects and enables active model',
+      () async {
+    rootfsFiles[configPath] = jsonEncode(<String, dynamic>{
+      'agents': {
+        'defaults': {
+          'model': <String, dynamic>{},
+        },
+      },
+      'models': {
+        'providers': <String, dynamic>{},
+      },
+    });
+
+    await ProviderConfigService.saveProviderConfig(
+      provider: AiProvider.openai,
+      apiKey: 'sk-test',
+      model: 'gpt-5.5',
+    );
+
+    final savedConfig =
+        jsonDecode(rootfsFiles[configPath]!) as Map<String, dynamic>;
+    final openai = (((savedConfig['models'] as Map<String, dynamic>)['providers']
+        as Map<String, dynamic>)['openai'] as Map<String, dynamic>);
+    final firstModel = (openai['models'] as List).first as Map<String, dynamic>;
+    final defaults =
+        ((savedConfig['agents'] as Map<String, dynamic>)['defaults']
+            as Map<String, dynamic>);
+    final enabledModels = defaults['models'] as Map<String, dynamic>;
+
+    expect(firstModel['id'], 'gpt-5.5');
+    expect(firstModel['name'], 'gpt-5.5');
+    expect(
+      (defaults['model'] as Map<String, dynamic>)['primary'],
+      'gpt-5.5',
+    );
+    expect(enabledModels.containsKey('gpt-5.5'), isTrue);
   });
 }

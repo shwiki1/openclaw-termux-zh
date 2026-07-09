@@ -83,7 +83,7 @@ class _SplashScreenState extends State<SplashScreen>
       // Auto-export snapshot when app version changes (#55)
       try {
         final oldVersion = prefs.lastAppVersion;
-        if (oldVersion != null && oldVersion != AppConstants.version) {
+        if (oldVersion != null && oldVersion != AppConstants.fullVersion) {
           final hasPermission = await NativeBridge.hasStoragePermission();
           if (hasPermission) {
             final sdcard = await NativeBridge.getExternalStoragePath();
@@ -115,7 +115,7 @@ class _SplashScreenState extends State<SplashScreen>
             );
           }
         }
-        prefs.lastAppVersion = AppConstants.version;
+        prefs.lastAppVersion = AppConstants.fullVersion;
       } catch (_) {}
 
       bool setupComplete;

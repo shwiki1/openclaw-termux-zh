@@ -25,12 +25,16 @@ class UpdateReleaseAsset {
 
 class UpdateResult {
   final String latest;
+  final String latestVersion;
+  final int latestBuildNumber;
   final String url;
   final bool available;
   final List<UpdateReleaseAsset> assets;
 
   const UpdateResult({
     required this.latest,
+    required this.latestVersion,
+    required this.latestBuildNumber,
     required this.url,
     required this.available,
     required this.assets,
@@ -89,23 +93,31 @@ class UpdateService {
 
   static Future<UpdateResult> check() async {
     final response = await http.get(
-      Uri.parse(AppConstants.githubApiLatestRelease),
-      headers: {'Accept': 'application/vnd.github.v3+json'},
+      Uri.parse(AppConstants.appUpdateManifestUrl),
+      headers: {'Accept': 'application/json'},
     );
 
     if (response.statusCode != 200) {
-      throw Exception('GitHub API returned ${response.statusCode}');
+      throw Exception('Update manifest returned ${response.statusCode}');
     }
 
     final data = jsonDecode(response.body) as Map<String, dynamic>;
-    final tagName = data['tag_name'] as String;
-    final htmlUrl = data['html_url'] as String;
-    final assets = ((data['assets'] as List?) ?? const [])
+    final latestVersion = data['version']?.toString().trim() ?? '';
+    if (latestVersion.isEmpty) {
+      throw Exception('Update manifest missing version');
+    }
+
+    final latestBuildNumber = int.tryParse(
+          data['buildNumber']?.toString().trim() ?? '',
+        ) ??
+        0;
+    final apkUrl = data['url']?.toString().trim() ?? '';
+    final assets = ((data['assets'] as List?) ?? const <dynamic>[])
         .whereType<Map>()
         .map(
           (rawAsset) => UpdateReleaseAsset(
             name: rawAsset['name'] as String? ?? '',
-            downloadUrl: rawAsset['browser_download_url'] as String? ?? '',
+            downloadUrl: rawAsset['downloadUrl'] as String? ?? '',
           ),
         )
         .where(
@@ -113,13 +125,35 @@ class UpdateService {
         )
         .toList();
 
-    // Strip leading 'v' if present
-    final latest = tagName.startsWith('v') ? tagName.substring(1) : tagName;
-    final available = _isNewer(latest, AppConstants.version);
+    if (assets.isEmpty && apkUrl.isNotEmpty) {
+      assets.add(
+        UpdateReleaseAsset(
+          name: data['fileName']?.toString().trim().isNotEmpty == true
+              ? data['fileName'].toString().trim()
+              : '次元虾-${latestVersion}+${latestBuildNumber}-arm64-v8a.apk',
+          downloadUrl: apkUrl,
+        ),
+      );
+    }
+
+    final latest = latestBuildNumber > 0
+        ? '$latestVersion+$latestBuildNumber'
+        : latestVersion;
+    final available = _isRemoteNewer(
+      remoteVersion: latestVersion,
+      remoteBuildNumber: latestBuildNumber,
+      localVersion: AppConstants.version,
+      localBuildNumber: int.tryParse(AppConstants.buildNumber) ?? 0,
+    );
+    final landingUrl = data['pageUrl']?.toString().trim().isNotEmpty == true
+        ? data['pageUrl'].toString().trim()
+        : (apkUrl.isNotEmpty ? apkUrl : AppConstants.appUpdateBaseUrl);
 
     return UpdateResult(
       latest: latest,
-      url: htmlUrl,
+      latestVersion: latestVersion,
+      latestBuildNumber: latestBuildNumber,
+      url: landingUrl,
       available: available,
       assets: assets,
     );
@@ -160,15 +194,20 @@ class UpdateService {
   }
 
   /// Returns true if [remote] is newer than [local] by semver comparison.
-  static bool _isNewer(String remote, String local) {
-    final r = remote.split('.').map(int.parse).toList();
-    final l = local.split('.').map(int.parse).toList();
+  static bool _isRemoteNewer({
+    required String remoteVersion,
+    required int remoteBuildNumber,
+    required String localVersion,
+    required int localBuildNumber,
+  }) {
+    final r = remoteVersion.split('.').map(int.parse).toList();
+    final l = localVersion.split('.').map(int.parse).toList();
     for (var i = 0; i < 3; i++) {
       final rv = i < r.length ? r[i] : 0;
       final lv = i < l.length ? l[i] : 0;
       if (rv > lv) return true;
       if (rv < lv) return false;
     }
-    return false;
+    return remoteBuildNumber > localBuildNumber;
   }
 }

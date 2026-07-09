@@ -238,6 +238,10 @@ def build_artifacts(version: str, build_number: str) -> None:
             "--target-platform",
             "android-arm64",
             *build_args,
+            "--dart-define",
+            f"APP_VERSION_NAME={version}",
+            "--dart-define",
+            f"APP_VERSION_CODE={build_number}",
         ],
         cwd=FLUTTER_DIR,
     )
@@ -253,14 +257,14 @@ def copy_if_exists(source: Path, target: Path, copied_files: list[Path]) -> None
     copied_files.append(target)
 
 
-def collect_artifacts(version: str, output_dir: Path) -> list[Path]:
+def collect_artifacts(version: str, build_number: str, output_dir: Path) -> list[Path]:
     copied_files: list[Path] = []
     output_dir.mkdir(parents=True, exist_ok=True)
 
     apk_root = FLUTTER_DIR / "build" / "app" / "outputs" / "flutter-apk"
 
     arm64_source = apk_root / ARM64_APK
-    arm64_target = output_dir / f"OpenClaw-v{version}-arm64-v8a.apk"
+    arm64_target = output_dir / f"OpenClaw-v{version}+{build_number}-arm64-v8a.apk"
     copy_if_exists(arm64_source, arm64_target, copied_files)
 
     doc_source = DOCS_DIR / f"release-v{version}.zh.md"
@@ -345,7 +349,7 @@ def main() -> int:
     fetch_proot_if_needed(args.skip_fetch_proot)
     run_pub_get(args.skip_pub_get)
     build_artifacts(version, build_number)
-    copied_files = collect_artifacts(version, output_dir)
+    copied_files = collect_artifacts(version, build_number, output_dir)
     print_summary(version, build_number, output_dir, copied_files)
 
     print("\n提示：如果你要正式发布，建议使用自己的 keystore 进行签名。")

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../app.dart';
 import '../l10n/app_localizations.dart';
 import '../services/native_bridge.dart';
+import '../services/provider_config_service.dart';
 
 class JsonSyntaxTextController extends TextEditingController {
   JsonSyntaxTextController({super.text});
@@ -253,7 +254,10 @@ class _ConfigEditorScreenState extends State<ConfigEditorScreen> {
 
     setState(() => _saving = true);
     try {
-      final formatted = '${_prettyPrintJson(_controller.text)}\n';
+      final decoded = jsonDecode(_controller.text) as Map<String, dynamic>;
+      ProviderConfigService.sanitizeConfigMapForWrite(decoded);
+      final formatted =
+          '${const JsonEncoder.withIndent('  ').convert(decoded)}\n';
       await NativeBridge.writeRootfsFile(_configPath, formatted);
       if (!mounted) return;
       _controller.text = formatted;
