@@ -74,6 +74,7 @@ jobs:
             exit 1
           fi
           echo "Bundled rootfs size: ${SIZE_MB} MB"
+          sudo rm -rf .tmp/prebuilt-rootfs .tmp/rootfs-cache
 
       - name: Install Android SDK packages
         run: |
