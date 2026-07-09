@@ -426,7 +426,160 @@ install_openclaw_plugin() {
   chroot_run bash -lc "export npm_config_registry=$(shell_quote "$NPM_REGISTRY"); export NPM_CONFIG_REGISTRY=$(shell_quote "$NPM_REGISTRY"); export npm_config_disturl=$(shell_quote "$NPM_DISTURL"); export npm_config_audit=false; export npm_config_fund=false; export npm_config_progress=false; export npm_config_update_notifier=false; export npm_config_cache=/tmp/npm-cache; export TMPDIR=/tmp/npm-tmp; openclaw plugins install $(shell_quote "$package_spec") || npm install -g --omit=dev --force $(shell_quote "$fallback_spec")"
 }
 
+repair_qqbot_plugin_runtime() {
+  echo "==> Repairing QQBot plugin runtime metadata"
+  chroot_run node <<'NODE'
+const fs = require('fs');
+const path = require('path');
+
+const qqbotTools = ['qqbot_channel_api', 'qqbot_remind'];
+const englishReply =
+  'Something went wrong while processing your request. Please try again, or use /new to start a fresh session.';
+const chineseReply =
+  '⚠️ 处理请求时发生错误。请重试，或发送 /new 新建会话。也可能是当前 API 地址、Key、模型名或模型映射配置错误，请检查后重试。';
+const packageRoots = new Set([
+  '/usr/local/lib/node_modules/@tencent-connect/openclaw-qqbot',
+  '/usr/lib/node_modules/@tencent-connect/openclaw-qqbot',
+  '/root/.openclaw/node_modules/@tencent-connect/openclaw-qqbot',
+  '/root/.openclaw/extensions/openclaw-qqbot',
+]);
+
+function addProjectRoots(baseDir) {
+  if (!fs.existsSync(baseDir)) return;
+  for (const entry of fs.readdirSync(baseDir, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    const candidate = path.join(
+      baseDir,
+      entry.name,
+      'node_modules',
+      '@tencent-connect',
+      'openclaw-qqbot',
+    );
+    if (fs.existsSync(candidate)) {
+      packageRoots.add(candidate);
+    }
+  }
+}
+
+function normalizeManifestLikeObject(target) {
+  let changed = false;
+  if (!Array.isArray(target.channels)) {
+    target.channels = [];
+    changed = true;
+  }
+  if (!target.channels.includes('qqbot')) {
+    target.channels.push('qqbot');
+    changed = true;
+  }
+  if (!target.channelConfigs || typeof target.channelConfigs !== 'object') {
+    target.channelConfigs = {};
+    changed = true;
+  }
+  const qqbotConfig =
+    target.channelConfigs.qqbot && typeof target.channelConfigs.qqbot === 'object'
+      ? target.channelConfigs.qqbot
+      : {};
+  const preferOver = Array.isArray(qqbotConfig.preferOver)
+    ? qqbotConfig.preferOver.map(String).filter(Boolean)
+    : [];
+  if (!preferOver.includes('qqbot')) {
+    preferOver.push('qqbot');
+    changed = true;
+  }
+  qqbotConfig.preferOver = preferOver;
+  target.channelConfigs.qqbot = qqbotConfig;
+  if (!target.contracts || typeof target.contracts !== 'object') {
+    target.contracts = {};
+    changed = true;
+  }
+  const tools = Array.isArray(target.contracts.tools)
+    ? target.contracts.tools.map(String).filter(Boolean)
+    : [];
+  for (const tool of qqbotTools) {
+    if (!tools.includes(tool)) {
+      tools.push(tool);
+      changed = true;
+    }
+  }
+  target.contracts.tools = tools;
+  return changed;
+}
+
+function patchJsonFile(filePath, mutate) {
+  if (!fs.existsSync(filePath)) return false;
+  let json;
+  try {
+    json = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+  } catch (_) {
+    return false;
+  }
+  const changed = mutate(json) === true;
+  if (changed) {
+    fs.writeFileSync(filePath, JSON.stringify(json, null, 2));
+  }
+  return changed;
+}
+
+function patchTextFile(filePath) {
+  if (!fs.existsSync(filePath)) return false;
+  let content;
+  try {
+    content = fs.readFileSync(filePath, 'utf8');
+  } catch (_) {
+    return false;
+  }
+  if (!content.includes(englishReply)) {
+    return false;
+  }
+  fs.writeFileSync(filePath, content.split(englishReply).join(chineseReply));
+  return true;
+}
+
+function walkAndPatchText(rootDir) {
+  const stack = [rootDir];
+  while (stack.length > 0) {
+    const current = stack.pop();
+    let entries = [];
+    try {
+      entries = fs.readdirSync(current, { withFileTypes: true });
+    } catch (_) {
+      continue;
+    }
+    for (const entry of entries) {
+      const fullPath = path.join(current, entry.name);
+      if (entry.isDirectory()) {
+        stack.push(fullPath);
+        continue;
+      }
+      if (!/\.(?:cjs|mjs|js|json)$/i.test(entry.name)) {
+        continue;
+      }
+      patchTextFile(fullPath);
+    }
+  }
+}
+
+addProjectRoots('/root/.openclaw/npm/projects');
+addProjectRoots('/root/.openclaw/extensions');
+
+for (const rootDir of packageRoots) {
+  if (!fs.existsSync(rootDir)) continue;
+  patchJsonFile(path.join(rootDir, 'openclaw.plugin.json'), (json) =>
+    normalizeManifestLikeObject(json),
+  );
+  patchJsonFile(path.join(rootDir, 'package.json'), (json) => {
+    if (!json.openclaw || typeof json.openclaw !== 'object') {
+      json.openclaw = {};
+    }
+    return normalizeManifestLikeObject(json.openclaw);
+  });
+  walkAndPatchText(rootDir);
+}
+NODE
+}
+
 install_openclaw_plugin "$QQBOT_PACKAGE" "@tencent-connect/openclaw-qqbot"
+repair_qqbot_plugin_runtime
 install_openclaw_plugin "$WEIXIN_PACKAGE" "@tencent-weixin/openclaw-weixin"
 
 echo "==> Enabling bundled messaging plugins"

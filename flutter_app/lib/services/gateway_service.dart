@@ -107,6 +107,18 @@ class GatewayService {
       return '$timestamp [WARN] Model pricing bootstrap timed out; the gateway can continue running.';
     }
 
+    if (trimmedBody.contains(
+      'plugin must declare contracts.tools before registering agent tools',
+    )) {
+      return '$timestamp [WARN] QQ 机器人插件缺少 tools 契约声明，应用已尝试自动兼容修复。若机器人仍回复失败，请检查 API 地址、Key、模型名或模型映射是否正确，并重启网关。';
+    }
+
+    if (trimmedBody.contains(
+      'Something went wrong while processing your request. Please try again, or use /new to start a fresh session.',
+    )) {
+      return '$timestamp [WARN] 机器人处理请求失败，请重试，或发送 /new 新建会话。也可能是当前 API 地址、Key、模型名或模型映射配置错误，请检查后重启网关。';
+    }
+
     return null;
   }
 
@@ -792,7 +804,10 @@ fs.writeFileSync(p, JSON.stringify(c, null, 2));
     }
   }
 
-  Future<void> applyConfigChanges({String source = 'configuration'}) async {
+  Future<void> applyConfigChanges({
+    String source = 'configuration',
+    bool restartGateway = false,
+  }) async {
     await ProviderConfigService.migrateCustomProviderConfigIfNeeded();
     await ProviderConfigService.repairGatewayStartupConfigIfNeeded();
     await ProviderConfigService.ensureGatewayDefaults();
@@ -806,6 +821,24 @@ fs.writeFileSync(p, JSON.stringify(c, null, 2));
         ..._state.logs,
         _ts('[INFO] $source updated. Changes will apply the next time the gateway starts.'),
       ]));
+      return;
+    }
+
+    if (restartGateway) {
+      _updateState(_state.copyWith(logs: [
+        ..._state.logs,
+        _ts('[INFO] $source updated. Restarting gateway so the new model and plugin settings take effect.'),
+      ]));
+      try {
+        await stop();
+        await Future<void>.delayed(const Duration(milliseconds: 400));
+        await start();
+      } catch (e) {
+        _updateState(_state.copyWith(logs: [
+          ..._state.logs,
+          _ts('[ERROR] Failed to restart after $source update: $e'),
+        ]));
+      }
       return;
     }
 

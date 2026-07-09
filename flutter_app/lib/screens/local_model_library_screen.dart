@@ -111,6 +111,7 @@ class _LocalModelLibraryScreenState extends State<LocalModelLibraryScreen> {
         }
         await context.read<GatewayProvider>().applyConfigChanges(
               source: 'local model preset ${preset.displayName}',
+              restartGateway: true,
             );
       }
 

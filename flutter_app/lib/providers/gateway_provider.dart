@@ -43,8 +43,14 @@ class GatewayProvider extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
-  Future<void> applyConfigChanges({String source = 'configuration'}) async {
-    await _gatewayService.applyConfigChanges(source: source);
+  Future<void> applyConfigChanges({
+    String source = 'configuration',
+    bool restartGateway = false,
+  }) async {
+    await _gatewayService.applyConfigChanges(
+      source: source,
+      restartGateway: restartGateway,
+    );
   }
 
   void clearLogs() {

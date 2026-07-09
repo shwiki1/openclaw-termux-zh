@@ -161,6 +161,7 @@ class _ProvidersScreenState extends State<ProvidersScreen> {
       await ProviderConfigService.activateModel(preset.modelRef);
       await gatewayProvider.applyConfigChanges(
         source: 'provider preset ${preset.displayName}',
+        restartGateway: true,
       );
       if (!mounted) {
         return;

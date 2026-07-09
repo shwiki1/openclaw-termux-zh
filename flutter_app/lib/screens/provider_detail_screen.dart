@@ -126,6 +126,7 @@ class _ProviderDetailScreenState extends State<ProviderDetailScreen> {
       );
       await gatewayProvider.applyConfigChanges(
         source: '${widget.provider.id} provider settings',
+        restartGateway: true,
       );
       if (_supportsCustomBaseUrl) {
         _baseUrlController.text = normalizedBaseUrl;
@@ -188,6 +189,7 @@ class _ProviderDetailScreenState extends State<ProviderDetailScreen> {
           provider: widget.provider);
       await gatewayProvider.applyConfigChanges(
         source: '${widget.provider.id} provider settings',
+        restartGateway: true,
       );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

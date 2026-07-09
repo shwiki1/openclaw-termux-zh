@@ -680,6 +680,7 @@ class _CustomProviderDetailScreenState
       );
       await gatewayProvider.applyConfigChanges(
         source: 'custom provider preset ${preset.displayName}',
+        restartGateway: true,
       );
       if (!mounted) {
         return;
@@ -751,6 +752,7 @@ class _CustomProviderDetailScreenState
       );
       await gatewayProvider.applyConfigChanges(
         source: 'custom provider preset ${preset.displayName}',
+        restartGateway: true,
       );
       if (!mounted) {
         return;

@@ -277,6 +277,29 @@ class _CliApiConfigDialogState extends State<CliApiConfigDialog> {
     }
   }
 
+  Future<void> _restoreDefaults() async {
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+
+    try {
+      await CliApiConfigService.restoreToolDefaultConfig(widget.tool.id);
+      await _load();
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _error = error.toString();
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _saving = false;
+        });
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -298,6 +321,13 @@ class _CliApiConfigDialogState extends State<CliApiConfigDialog> {
                   children: [
                     Text(
                       '这里仅配置 ${widget.tool.name} 自己的共享 API 选择、模型、映射和推理强度。API 地址与 Key 请在统一 API 管理里维护。',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      '未选择共享 API 时，将恢复为工具自己的官方登录/默认配置模式，不再由应用覆盖配置文件。',
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: theme.colorScheme.onSurfaceVariant,
                       ),
@@ -479,6 +509,12 @@ class _CliApiConfigDialogState extends State<CliApiConfigDialog> {
               ),
       ),
       actions: [
+        TextButton(
+          onPressed: _loading || _saving || _loadingModels
+              ? null
+              : _restoreDefaults,
+          child: const Text('恢复默认配置'),
+        ),
         TextButton(
           onPressed: _saving || _loadingModels
               ? null

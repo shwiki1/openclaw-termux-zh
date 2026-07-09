@@ -380,6 +380,7 @@ class _LocalModelScreenState extends State<LocalModelScreen> {
         }
         await context.read<GatewayProvider>().applyConfigChanges(
               source: 'local model preset ${preset.displayName}',
+              restartGateway: true,
             );
       }
       await _refreshState();
