@@ -14,12 +14,14 @@ void main() {
       final adapter = _FakeHttpClientAdapter((options) async {
         expect(
           options.uri.toString(),
-          'https://api.example.com/v1/chat/completions',
+          'https://api.example.com/v1/models',
         );
         expect(options.headers['Authorization'], 'Bearer sk-test');
-        expect(options.data['model'], 'demo-model');
-        expect(options.data['max_tokens'], 1);
-        return _jsonResponse({'ok': true}, 200);
+        return _jsonResponse({
+          'data': [
+            {'id': 'demo-model'},
+          ],
+        }, 200);
       });
 
       final dio = Dio()..httpClientAdapter = adapter;
@@ -29,7 +31,6 @@ void main() {
         compatibility: CustomProviderCompatibility.openaiChatCompletions,
         apiKey: 'sk-test',
         baseUrl: 'https://api.example.com/v1',
-        modelId: 'demo-model',
       );
 
       expect(result.success, isTrue);
@@ -37,16 +38,23 @@ void main() {
         result.compatibility,
         CustomProviderCompatibility.openaiChatCompletions,
       );
+      expect(result.modelCount, 1);
     });
 
     test('auto-detect prefers Google endpoint when base URL matches', () async {
       final adapter = _FakeHttpClientAdapter((options) async {
         expect(
           options.uri.toString(),
-          'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=AIza-test',
+          'https://generativelanguage.googleapis.com/v1beta/models?key=AIza-test',
         );
-        expect(options.data['generationConfig']['maxOutputTokens'], 1);
-        return _jsonResponse({'candidates': []}, 200);
+        return _jsonResponse({
+          'models': [
+            {
+              'name': 'models/gemini-2.0-flash',
+              'supportedGenerationMethods': ['generateContent'],
+            },
+          ],
+        }, 200);
       });
 
       final dio = Dio()..httpClientAdapter = adapter;
@@ -56,7 +64,6 @@ void main() {
         compatibility: CustomProviderCompatibility.autoDetect,
         apiKey: 'AIza-test',
         baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
-        modelId: 'gemini-2.0-flash',
       );
 
       expect(result.success, isTrue);
@@ -65,6 +72,7 @@ void main() {
         CustomProviderCompatibility.googleGenerativeAi,
       );
       expect(result.autoDetected, isTrue);
+      expect(result.modelCount, 1);
     });
 
     test('auto-detect prefers Zhipu endpoint when host is bigmodel.cn',
@@ -72,11 +80,14 @@ void main() {
       final adapter = _FakeHttpClientAdapter((options) async {
         expect(
           options.uri.toString(),
-          'https://open.bigmodel.cn/api/paas/v4/chat/completions',
+          'https://open.bigmodel.cn/api/paas/v4/models',
         );
         expect(options.headers['Authorization'], 'Bearer zhipu-test');
-        expect(options.data['model'], 'glm-5');
-        return _jsonResponse({'id': 'chatcmpl-test'}, 200);
+        return _jsonResponse({
+          'data': [
+            {'id': 'glm-5'},
+          ],
+        }, 200);
       });
 
       final dio = Dio()..httpClientAdapter = adapter;
@@ -86,7 +97,6 @@ void main() {
         compatibility: CustomProviderCompatibility.autoDetect,
         apiKey: 'zhipu-test',
         baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
-        modelId: 'glm-5',
       );
 
       expect(result.success, isTrue);
@@ -95,6 +105,7 @@ void main() {
         CustomProviderCompatibility.zhipuChatCompletions,
       );
       expect(result.autoDetected, isTrue);
+      expect(result.modelCount, 1);
     });
 
     test('returns HTTP error details when probe fails', () async {
@@ -116,7 +127,6 @@ void main() {
         compatibility: CustomProviderCompatibility.openaiResponses,
         apiKey: 'bad-key',
         baseUrl: 'https://api.example.com/v1',
-        modelId: 'demo-model',
       );
 
       expect(result.success, isFalse);

@@ -672,27 +672,26 @@ find /root/.openclaw/npm/projects -maxdepth 6 -type f -name package.json -print 
     try {
       return await action();
     } finally {
-      if (removedChannels.isEmpty) {
-        return;
-      }
+      if (removedChannels.isNotEmpty) {
+        final restoreConfig = await _readMutableConfig();
+        final restoreChannels = _normalizeMutableConfig(
+          restoreConfig['channels'],
+        );
+        var changed = false;
 
-      final restoreConfig = await _readMutableConfig();
-      final restoreChannels = _normalizeMutableConfig(restoreConfig['channels']);
-      var changed = false;
-
-      for (final entry in removedChannels.entries) {
-        if (!restoreChannels.containsKey(entry.key)) {
-          restoreChannels[entry.key] = entry.value;
-          changed = true;
+        for (final entry in removedChannels.entries) {
+          if (!restoreChannels.containsKey(entry.key)) {
+            restoreChannels[entry.key] = entry.value;
+            changed = true;
+          }
         }
-      }
 
-      if (!changed) {
-        return;
-      }
+        if (changed) {
+          restoreConfig['channels'] = restoreChannels;
+          await _writeMutableConfig(restoreConfig);
+        }
 
-      restoreConfig['channels'] = restoreChannels;
-      await _writeMutableConfig(restoreConfig);
+      }
     }
   }
 
