@@ -26,3 +26,45 @@ No modifications are made to FFmpegKit itself. Project-owned code calls the publ
 
 - `flutter_app/android/app/src/main/kotlin/com/nxg/openclawproot/MediaToolbox.kt`
 - `flutter_app/android/app/src/main/kotlin/com/nxg/openclawproot/FloatingFileManagerService.kt`
+
+## Bundled Ubuntu/OpenClaw Rootfs
+
+- Generated artifact: `flutter_app/assets/bootstrap/openclaw-rootfs-noble-arm64.tar.gz`
+- Generator: `scripts/build-prebuilt-rootfs.sh`
+- Ubuntu base: Ubuntu Base 24.04.3 arm64, downloaded from Ubuntu cdimage
+  mirrors configured in the generator script.
+- Installed Ubuntu packages: `ca-certificates`, `git`, `python3`, `make`,
+  `g++`, `curl`, `wget`, `lsof`, plus their transitive dependencies.
+- Additional runtime packages: Node.js 24.15.0 arm64, `openclaw@latest`,
+  `@tencent-connect/openclaw-qqbot@latest`, and
+  `@tencent-weixin/openclaw-weixin@latest`.
+
+### Source Access
+
+Ubuntu package source code is available from Ubuntu source repositories for
+the `noble`, `noble-updates`, `noble-backports`, and `noble-security` suites.
+Each package also retains its Debian/Ubuntu copyright metadata under:
+
+- `/usr/share/doc/<package>/copyright`
+
+Node.js source is available from:
+
+- https://github.com/nodejs/node
+
+OpenClaw and plugin npm package source/provenance is available from:
+
+- https://github.com/openclaw/openclaw
+- https://github.com/tencent-connect/openclaw-qqbot
+- npm package metadata for `@tencent-weixin/openclaw-weixin`
+
+### Project Modifications
+
+The generated rootfs is not a modified Ubuntu source tree. The build process:
+
+- Configures apt to use domestic Ubuntu mirrors.
+- Installs the packages listed above.
+- Installs Node.js under `/usr/local`.
+- Installs OpenClaw and both messaging plugins with npm.
+- Writes `/root/.npmrc` mirror settings.
+- Enables `openclaw-qqbot` and `openclaw-weixin` in
+  `/root/.openclaw/openclaw.json`.

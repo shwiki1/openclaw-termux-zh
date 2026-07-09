@@ -238,7 +238,8 @@ Included icons:
 
 - Version: 24.15.0 for arm64, 22.22.2 for armv7 configuration.
 - License: MIT-style Node.js license with third-party notices.
-- Used as: bundled or downloaded Node.js runtime archive.
+- Used as: Node.js runtime inside the bundled/prebuilt proot environment, and
+  as a fallback downloaded runtime archive where configured.
 - Upstream: https://nodejs.org/
 - Source for distributed binary: https://github.com/nodejs/node
 - Modifications: none.
@@ -248,23 +249,64 @@ Included icons:
 
 - Version: Ubuntu Base 24.04.3 ("noble").
 - License: mixed open-source package licenses.
-- Used as: bundled or downloaded Linux rootfs archive for the proot environment.
+- Used as: base Linux rootfs for the bundled/prebuilt proot environment.
 - Upstream: https://ubuntu.com/download/base
 - Source for distributed binary: Ubuntu source package repositories and package
   copyright files under `/usr/share/doc/*/copyright` inside the installed rootfs.
 - Modifications: apt sources are configured to domestic mirrors during setup.
 - Required notices: each installed package keeps its own license terms.
 
+## Bundled OpenClaw Prebuilt Rootfs
+
+- Version: generated at APK build time by `scripts/build-prebuilt-rootfs.sh`
+  from Ubuntu Base 24.04.3 for arm64.
+- License: aggregate of Ubuntu packages, Node.js, OpenClaw, and npm package
+  dependencies; see the component entries in this file.
+- Used as: `assets/bootstrap/openclaw-rootfs-noble-arm64.tar.gz` packaged
+  inside the APK to avoid slow first-run environment and plugin downloads.
+- Upstream: Ubuntu Base, Node.js, npm registry packages, and OpenClaw plugin
+  package sources listed below.
+- Source for distributed binary: see `OPEN_SOURCE_SOURCES.md` and package
+  metadata/license files retained inside the rootfs under npm package folders.
+- Modifications: installs base packages, Node.js, OpenClaw, QQ Bot plugin, and
+  Weixin plugin; writes npm mirror config and enables both messaging plugins in
+  `/root/.openclaw/openclaw.json`.
+- Required notices: preserve all component licenses and provide GPL/LGPL source
+  access for system packages included in the generated rootfs.
+
 ## OpenClaw npm Package
 
-- Version: selected by the user or setup flow; default recommended version is
-  declared in `flutter_app/lib/models/openclaw_install_options.dart`.
-- License: package-specific metadata from npm; currently treated as a runtime
-  package installed by npm.
+- Version: `latest` at prebuilt-rootfs build time; latest observed by the
+  2026-07-09 registry check was 2026.6.11.
+- License: MIT.
 - Used as: OpenClaw CLI/runtime inside the proot environment.
 - Upstream: https://www.npmjs.com/package/openclaw
 - Source for distributed binary: npm package tarball and upstream package
-  metadata.
+  metadata; upstream repository https://github.com/openclaw/openclaw
 - Modifications: none.
 - Required notices: preserve package license and notices from the installed npm
   package.
+
+## Tencent Connect OpenClaw QQ Bot Plugin
+
+- Version: `@tencent-connect/openclaw-qqbot@latest` at prebuilt-rootfs build
+  time; latest observed by the 2026-07-09 registry check was 1.7.2.
+- License: MIT; package tarball includes `LICENSE`.
+- Used as: QQ Bot channel plugin preinstalled in the bundled OpenClaw rootfs.
+- Upstream: https://github.com/tencent-connect/openclaw-qqbot
+- Source for distributed binary: npm package tarball
+  `@tencent-connect/openclaw-qqbot`.
+- Modifications: none; the app only enables the plugin entry in OpenClaw config.
+- Required notices: preserve package license and copyright notices.
+
+## Tencent Weixin OpenClaw Plugin
+
+- Version: `@tencent-weixin/openclaw-weixin@latest` at prebuilt-rootfs build
+  time; latest observed by the 2026-07-09 registry check was 2.4.6.
+- License: MIT; package metadata and tarball license both declare MIT.
+- Used as: Weixin channel plugin preinstalled in the bundled OpenClaw rootfs.
+- Upstream: https://www.npmjs.com/package/@tencent-weixin/openclaw-weixin
+- Source for distributed binary: npm package tarball
+  `@tencent-weixin/openclaw-weixin`.
+- Modifications: none; the app only enables the plugin entry in OpenClaw config.
+- Required notices: preserve package license and copyright notices.

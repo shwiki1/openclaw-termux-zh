@@ -13,7 +13,13 @@ ARCH="arm64"
 MIRROR=""
 USE_DOCKER=0
 NO_DOCKER=0
-PACKAGES=(ca-certificates git python3 make g++ curl wget)
+PACKAGES=(ca-certificates git python3 make g++ curl wget lsof)
+NODE_VERSION="${NODE_VERSION:-24.15.0}"
+OPENCLAW_VERSION="${OPENCLAW_VERSION:-latest}"
+QQBOT_PACKAGE="${QQBOT_PACKAGE:-@tencent-connect/openclaw-qqbot@latest}"
+WEIXIN_PACKAGE="${WEIXIN_PACKAGE:-@tencent-weixin/openclaw-weixin@latest}"
+NPM_REGISTRY="${NPM_REGISTRY:-https://registry.npmmirror.com}"
+NPM_DISTURL="${NPM_DISTURL:-https://npmmirror.com/mirrors/node}"
 
 usage() {
   cat <<USAGE
@@ -31,6 +37,8 @@ Notes:
   - Run from Linux or WSL.
   - Use --docker on Windows/WSL when host sudo is not available.
   - Cross-arch builds need qemu-user-static installed.
+  - The archive includes Ubuntu base packages, Node.js, OpenClaw, and the QQ/
+    Weixin bot plugins so first run does not need slow npm/plugin installs.
   - The APK will still fall back to standard Ubuntu base + apt if this archive
     is missing, corrupt, or does not contain the required base packages.
 USAGE
@@ -135,16 +143,23 @@ if [[ "$USE_DOCKER" == "1" && "$NO_DOCKER" != "1" ]]; then
     -w /work \
     -e CODENAME="$CODENAME" \
     -e UBUNTU_VERSION="$UBUNTU_VERSION" \
+    -e NODE_VERSION="$NODE_VERSION" \
+    -e OPENCLAW_VERSION="$OPENCLAW_VERSION" \
+    -e QQBOT_PACKAGE="$QQBOT_PACKAGE" \
+    -e WEIXIN_PACKAGE="$WEIXIN_PACKAGE" \
+    -e NPM_REGISTRY="$NPM_REGISTRY" \
+    -e NPM_DISTURL="$NPM_DISTURL" \
     -e OPENCLAW_ROOTFS_CACHE=/tmp/openclaw-rootfs-cache \
     -e OPENCLAW_ROOTFS_WORKDIR=/tmp/openclaw-prebuilt-rootfs \
     ubuntu:24.04 \
-    bash -lc "apt-get update && apt-get install -y --no-install-recommends ca-certificates curl qemu-user-static mount sudo && bash scripts/build-prebuilt-rootfs.sh --no-docker --arch '$ROOTFS_ARCH' ${mirror_args[*]}"
+    bash -lc "apt-get update && apt-get install -y --no-install-recommends ca-certificates curl xz-utils qemu-user-static mount sudo && bash scripts/build-prebuilt-rootfs.sh --no-docker --arch '$ROOTFS_ARCH' ${mirror_args[*]}"
   exit 0
 fi
 
 need_command curl
 need_command tar
 need_command mountpoint
+need_command xz
 if [[ "$(id -u)" != "0" ]]; then
   need_command sudo
 fi
@@ -212,6 +227,30 @@ chroot_run() {
   else
     run_root chroot "$ROOTFS_DIR" /usr/bin/env -i "${env_args[@]}" "$@"
   fi
+}
+
+download_with_fallbacks() {
+  local destination="$1"
+  shift
+  local downloaded=0
+  local url
+  for url in "$@"; do
+    echo "    -> $url"
+    if curl -fL --retry 3 --connect-timeout 20 -o "$destination.tmp" "$url"; then
+      mv "$destination.tmp" "$destination"
+      downloaded=1
+      break
+    fi
+  done
+  if [[ "$downloaded" != "1" ]]; then
+    rm -f "$destination.tmp"
+    echo "Failed to download $destination" >&2
+    return 1
+  fi
+}
+
+shell_quote() {
+  printf "'%s'" "$(printf "%s" "$1" | sed "s/'/'\\\\''/g")"
 }
 
 echo "==> Building prebuilt rootfs: $OUTPUT_NAME"
@@ -309,6 +348,124 @@ echo "==> Installing base packages: ${PACKAGES[*]}"
 chroot_run apt-get update
 chroot_run apt-get install -y --no-install-recommends "${PACKAGES[@]}"
 
+case "$ROOTFS_ARCH" in
+  arm64)
+    NODE_ARCH="arm64"
+    ;;
+  armhf)
+    NODE_ARCH="armv7l"
+    ;;
+  amd64)
+    NODE_ARCH="x64"
+    ;;
+  *)
+    echo "Unsupported Node.js arch for $ROOTFS_ARCH" >&2
+    exit 2
+    ;;
+esac
+
+NODE_BASENAME="node-v${NODE_VERSION}-linux-${NODE_ARCH}.tar.xz"
+NODE_TARBALL="$CACHE_DIR/$NODE_BASENAME"
+NODE_URLS=(
+  "$NPM_DISTURL/v$NODE_VERSION/$NODE_BASENAME"
+  "https://mirrors.ustc.edu.cn/node/v$NODE_VERSION/$NODE_BASENAME"
+  "https://mirrors.aliyun.com/nodejs-release/v$NODE_VERSION/$NODE_BASENAME"
+  "https://nodejs.org/dist/v$NODE_VERSION/$NODE_BASENAME"
+)
+
+if [[ ! -s "$NODE_TARBALL" ]]; then
+  echo "==> Downloading Node.js $NODE_VERSION for $NODE_ARCH"
+  download_with_fallbacks "$NODE_TARBALL" "${NODE_URLS[@]}"
+else
+  echo "==> Reusing cached Node.js $NODE_VERSION"
+fi
+
+echo "==> Installing Node.js $NODE_VERSION"
+run_root rm -rf "$ROOTFS_DIR/usr/local/bin/node" \
+  "$ROOTFS_DIR/usr/local/bin/npm" \
+  "$ROOTFS_DIR/usr/local/bin/npx" \
+  "$ROOTFS_DIR/usr/local/lib/node_modules/npm"
+run_root tar -xJf "$NODE_TARBALL" -C "$ROOTFS_DIR/usr/local" --strip-components=1
+run_root mkdir -p \
+  "$ROOTFS_DIR/root/.openclaw" \
+  "$ROOTFS_DIR/root/.npm" \
+  "$ROOTFS_DIR/usr/local/etc" \
+  "$ROOTFS_DIR/tmp/npm-cache" \
+  "$ROOTFS_DIR/tmp/npm-tmp"
+
+run_root tee "$ROOTFS_DIR/root/.npmrc" >/dev/null <<EOF
+registry=$NPM_REGISTRY
+disturl=$NPM_DISTURL
+audit=false
+fund=false
+progress=false
+update-notifier=false
+fetch-retries=5
+fetch-retry-mintimeout=2000
+fetch-retry-maxtimeout=20000
+EOF
+run_root cp "$ROOTFS_DIR/root/.npmrc" "$ROOTFS_DIR/usr/local/etc/npmrc"
+
+echo "==> Verifying Node.js and npm"
+chroot_run node --version
+chroot_run npm --version
+
+OPENCLAW_SPEC="openclaw@$OPENCLAW_VERSION"
+if [[ "$OPENCLAW_VERSION" == "latest" ]]; then
+  OPENCLAW_SPEC="openclaw@latest"
+fi
+
+echo "==> Installing OpenClaw: $OPENCLAW_SPEC"
+chroot_run bash -lc "npm_config_registry=$(shell_quote "$NPM_REGISTRY") NPM_CONFIG_REGISTRY=$(shell_quote "$NPM_REGISTRY") npm_config_disturl=$(shell_quote "$NPM_DISTURL") npm_config_audit=false npm_config_fund=false npm_config_progress=false npm_config_update_notifier=false npm_config_cache=/tmp/npm-cache TMPDIR=/tmp/npm-tmp npm install -g --omit=dev --force $(shell_quote "$OPENCLAW_SPEC")"
+chroot_run openclaw --version
+
+install_openclaw_plugin() {
+  local package_spec="$1"
+  local fallback_spec="$2"
+  echo "==> Installing OpenClaw plugin: $package_spec"
+  chroot_run bash -lc "export npm_config_registry=$(shell_quote "$NPM_REGISTRY"); export NPM_CONFIG_REGISTRY=$(shell_quote "$NPM_REGISTRY"); export npm_config_disturl=$(shell_quote "$NPM_DISTURL"); export npm_config_audit=false; export npm_config_fund=false; export npm_config_progress=false; export npm_config_update_notifier=false; export npm_config_cache=/tmp/npm-cache; export TMPDIR=/tmp/npm-tmp; openclaw plugins install $(shell_quote "$package_spec") || npm install -g --omit=dev --force $(shell_quote "$fallback_spec")"
+}
+
+install_openclaw_plugin "$QQBOT_PACKAGE" "@tencent-connect/openclaw-qqbot"
+install_openclaw_plugin "$WEIXIN_PACKAGE" "@tencent-weixin/openclaw-weixin"
+
+echo "==> Enabling bundled messaging plugins"
+chroot_run node <<'NODE'
+const fs = require('fs');
+const path = require('path');
+const configPath = '/root/.openclaw/openclaw.json';
+let config = {};
+try {
+  config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+} catch (_) {}
+config.plugins = config.plugins && typeof config.plugins === 'object' ? config.plugins : {};
+config.plugins.entries = config.plugins.entries && typeof config.plugins.entries === 'object'
+  ? config.plugins.entries
+  : {};
+for (const alias of [
+  'qqbot',
+  '@tencent-connect/openclaw-qqbot',
+  'weixin',
+  '@tencent/openclaw-weixin',
+  '@tencent-weixin/openclaw-weixin',
+]) {
+  delete config.plugins.entries[alias];
+}
+config.plugins.entries['openclaw-qqbot'] = {
+  ...(config.plugins.entries['openclaw-qqbot'] || {}),
+  enabled: true,
+};
+config.plugins.entries['openclaw-weixin'] = {
+  ...(config.plugins.entries['openclaw-weixin'] || {}),
+  enabled: true,
+};
+fs.mkdirSync(path.dirname(configPath), { recursive: true });
+fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+NODE
+
+echo "==> Cleaning npm cache"
+chroot_run npm cache clean --force >/dev/null 2>&1 || true
+
 echo "==> Cleaning rootfs"
 chroot_run apt-get clean
 unmount_rootfs_paths
@@ -320,6 +477,10 @@ fi
 run_root rm -rf \
   "$ROOTFS_DIR/var/lib/apt/lists/"* \
   "$ROOTFS_DIR/var/cache/apt/archives/"*.deb \
+  "$ROOTFS_DIR/root/.npm/_logs" \
+  "$ROOTFS_DIR/root/.cache" \
+  "$ROOTFS_DIR/tmp/npm-cache" \
+  "$ROOTFS_DIR/tmp/npm-tmp" \
   "$ROOTFS_DIR/tmp/"* \
   "$ROOTFS_DIR/var/tmp/"*
 
@@ -328,6 +489,11 @@ format=openclaw-prebuilt-rootfs
 codename=$CODENAME
 arch=$ROOTFS_ARCH
 packages=${PACKAGES[*]}
+node=$NODE_VERSION
+openclaw=$OPENCLAW_VERSION
+qqbot=$QQBOT_PACKAGE
+weixin=$WEIXIN_PACKAGE
+npm_registry=$NPM_REGISTRY
 built_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 EOF
 

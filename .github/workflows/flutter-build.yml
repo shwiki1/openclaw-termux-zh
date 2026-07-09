@@ -6,6 +6,7 @@ on:
     paths:
       - 'flutter_app/**'
       - 'scripts/fetch-proot-binaries.sh'
+      - 'scripts/build-prebuilt-rootfs.sh'
       - 'scripts/build-apk.sh'
       - 'scripts/build_release.py'
       - '.github/workflows/flutter-build.yml'
@@ -14,6 +15,7 @@ on:
     paths:
       - 'flutter_app/**'
       - 'scripts/fetch-proot-binaries.sh'
+      - 'scripts/build-prebuilt-rootfs.sh'
       - 'scripts/build-apk.sh'
       - 'scripts/build_release.py'
       - '.github/workflows/flutter-build.yml'
@@ -33,7 +35,7 @@ jobs:
   build:
     name: Build arm64-v8a APK
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 120
     outputs:
       version: ${{ steps.collect.outputs.version }}
 
@@ -57,7 +59,21 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends binutils curl unzip xz-utils zstd
+          sudo apt-get install -y --no-install-recommends binutils curl gzip qemu-user-static unzip xz-utils zstd
+
+      - name: Build bundled OpenClaw rootfs
+        run: |
+          set -euo pipefail
+          bash scripts/build-prebuilt-rootfs.sh --no-docker --arch arm64 --mirror http://mirrors.tuna.tsinghua.edu.cn/ubuntu-ports
+          ROOTFS=flutter_app/assets/bootstrap/openclaw-rootfs-noble-arm64.tar.gz
+          test -s "$ROOTFS"
+          gzip -t "$ROOTFS"
+          SIZE_MB=$(du -m "$ROOTFS" | cut -f1)
+          if [ "$SIZE_MB" -lt 80 ]; then
+            echo "ERROR: bundled rootfs looks too small (${SIZE_MB} MB)"
+            exit 1
+          fi
+          echo "Bundled rootfs size: ${SIZE_MB} MB"
 
       - name: Install Android SDK packages
         run: |
@@ -411,15 +427,16 @@ jobs:
 
             ### First Run
             1. Install the APK
-            2. Follow the setup wizard (downloads ~500MB Ubuntu rootfs)
-            3. Start the gateway from the dashboard
-            4. Access the web dashboard at `http://127.0.0.1:18789`
+            2. Follow the setup wizard; Ubuntu, Node.js, OpenClaw, QQ Bot, and Weixin plugins are bundled in the APK
+            3. Add your API/provider configuration
+            4. Start the gateway from the dashboard
+            5. Access the web dashboard at `http://127.0.0.1:18789`
 
             ### Requirements
             - Android 10+ (API 29)
             - arm64-v8a device
-            - ~500MB free storage for initial setup
-            - Internet connection for first-time setup
+            - ~1.5GB free storage for extracting the bundled environment
+            - Internet connection only for API/model access and optional updates
           files: artifacts/*
           draft: false
           prerelease: false

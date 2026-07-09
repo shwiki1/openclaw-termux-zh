@@ -1,26 +1,29 @@
-Place optional offline bootstrap archives here.
+Build-time bootstrap archives live here.
 
-These large archives are no longer included in the APK by default. Keeping
-them in this folder is only for local caching, testing, or building a special
-offline package. The normal APK downloads Ubuntu/Node.js online, and the setup
-wizard can also accept a local prebuilt rootfs archive or a direct prebuilt
-rootfs download URL.
+The release workflow generates and packages this archive into the arm64-v8a
+APK:
 
-Supported file names match the upstream download file names, for example:
+- `openclaw-rootfs-noble-arm64.tar.gz`
+
+It is produced by `scripts/build-prebuilt-rootfs.sh` and includes Ubuntu base
+packages, Node.js, OpenClaw, and the QQ/Weixin bot plugins. First-run setup
+prefers this bundled archive and only falls back to the standard online flow if
+the archive is missing, corrupt, or fails validation.
+
+Other archives in this directory are local caches or manual fallback resources
+unless they are explicitly declared in `flutter_app/pubspec.yaml`.
+
+Supported fallback file names match upstream download file names, for example:
 
 - `ubuntu-base-24.04.3-base-arm64.tar.gz`
-- `node-v24.14.1-linux-arm64.tar.xz`
+- `node-v24.15.0-linux-arm64.tar.xz`
 
-If a matching file is intentionally bundled into the APK, setup will prefer
-that local copy first and fall back to downloading it online if needed.
-
-Prebuilt rootfs archives can also be placed here to skip runtime
-`apt-get update/install` during first setup:
+Prebuilt rootfs archives for local testing can also be placed here:
 
 - `openclaw-rootfs-noble-arm64.tar.gz`
 - `openclaw-rootfs-noble-armhf.tar.gz`
 - `openclaw-rootfs-noble-amd64.tar.gz`
 
-These archives should already include `ca-certificates git python3 make g++
-curl wget`. If extraction or package detection fails, setup falls back to the
-standard Ubuntu base rootfs flow.
+The arm64 archive should include at least `ca-certificates git python3 make g++
+curl wget lsof`, Node.js, and OpenClaw. If extraction or package detection
+fails, setup falls back to the standard Ubuntu base rootfs flow.
