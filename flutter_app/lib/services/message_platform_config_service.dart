@@ -10,7 +10,8 @@ class MessagePlatformConfigService {
   static const _configPath = '/root/.openclaw/openclaw.json';
   static const _feishuChannelId = 'feishu';
   static const _qqbotChannelId = 'qqbot';
-  static const _weixinChannelId = 'weixin';
+  static const _weixinUiChannelId = 'weixin';
+  static const _weixinChannelId = 'openclaw-weixin';
   static const _legacyLarkChannelId = 'lark';
   static const _defaultFeishuAccountId = 'default';
   static const qqbotPluginPackage = '@tencent-connect/openclaw-qqbot@latest';
@@ -27,6 +28,7 @@ class MessagePlatformConfigService {
   static const qqbotConnectUrl = 'https://q.qq.com/qqbot/openclaw/login.html';
   static const weixinPluginPackage = '@tencent-weixin/openclaw-weixin@latest';
   static const _weixinPluginId = 'openclaw-weixin';
+  static const _weixinLegacyChannelIds = <String>[_weixinUiChannelId];
   static const _weixinLegacyPluginIds = <String>[
     'weixin',
     '@tencent/openclaw-weixin',
@@ -42,8 +44,6 @@ class MessagePlatformConfigService {
     '/root/.openclaw/npm/projects/tencent-weixin-openclaw-weixin-7783ac86ba/package.json',
     '/root/.openclaw/npm/projects/tencent-weixin-openclaw-weixin-7783ac86ba/node_modules/@tencent-weixin/openclaw-weixin/package.json',
   ];
-  static const _weixinInstallerPackage =
-      '@tencent-weixin/openclaw-weixin-cli@latest';
   static const _persistentNpmCacheDir = '/root/.npm/openclaw-cache';
   static const weixinInstallerCommand =
       'export npm_config_registry=${AppConstants.npmRegistryUrl}; '
@@ -51,7 +51,8 @@ class MessagePlatformConfigService {
       'export npm_config_cache=$_persistentNpmCacheDir; '
       'export npm_config_prefer_offline=true; '
       'export npm_config_prefer_online=false; '
-      'npx -y $_weixinInstallerPackage install';
+      'openclaw plugins install "$weixinPluginPackage" && '
+      'openclaw channels login --channel $_weixinChannelId';
 
   static String _shellEscape(String s) {
     return "'${s.replaceAll("'", "'\\''")}'";
@@ -319,6 +320,13 @@ $command
     return payload;
   }
 
+  static String _canonicalChannelIdForStorage(String channelId) {
+    if (channelId == _weixinUiChannelId) {
+      return _weixinChannelId;
+    }
+    return channelId;
+  }
+
   static Future<Map<String, dynamic>?> _readQqbotLocalConfig() async {
     final prefs = await _loadPrefs();
     final appId = prefs.qqbotAppId?.trim();
@@ -439,6 +447,157 @@ find /root/.openclaw/npm/projects -maxdepth 6 -type f -name package.json -print 
     return <String, dynamic>{};
   }
 
+  static List<String> _normalizeStringList(dynamic value) {
+    if (value is List) {
+      return value
+          .map((item) => item?.toString().trim() ?? '')
+          .where((item) => item.isNotEmpty)
+          .toList();
+    }
+    return <String>[];
+  }
+
+  static String _configJson(dynamic value) => jsonEncode(value);
+
+  static Map<String, String?> _extractQqbotCredentials(
+    Map<String, dynamic> channel,
+  ) {
+    String? appId = channel['appId'] as String?;
+    String? appSecret = channel['clientSecret'] as String?;
+    appSecret ??= channel['appSecret'] as String?;
+
+    final accounts = channel['accounts'];
+    if ((!_isNonEmptyString(appId) || !_isNonEmptyString(appSecret)) &&
+        accounts is Map) {
+      for (final account in accounts.values) {
+        if (account is! Map) {
+          continue;
+        }
+        final normalizedAccount = Map<String, dynamic>.from(account);
+        appId ??= normalizedAccount['appId'] as String?;
+        appSecret ??= normalizedAccount['clientSecret'] as String?;
+        appSecret ??= normalizedAccount['appSecret'] as String?;
+        if (_isNonEmptyString(appId) && _isNonEmptyString(appSecret)) {
+          break;
+        }
+      }
+    }
+
+    return {
+      'appId': _isNonEmptyString(appId) ? appId!.trim() : null,
+      'appSecret': _isNonEmptyString(appSecret) ? appSecret!.trim() : null,
+    };
+  }
+
+  static bool _setPluginEntryEnabledInConfig(
+    Map<String, dynamic> config,
+    String pluginId, {
+    required bool enabled,
+    required List<String> cleanupAliases,
+  }) {
+    final before = _configJson(config);
+    final plugins = _normalizeMutableConfig(config['plugins']);
+    final entries = _normalizeMutableConfig(plugins['entries']);
+
+    for (final alias in cleanupAliases) {
+      if (alias != pluginId) {
+        entries.remove(alias);
+      }
+    }
+
+    if (enabled) {
+      final entry = _normalizeMutableConfig(entries[pluginId]);
+      entry['enabled'] = true;
+      entries[pluginId] = entry;
+    } else {
+      entries.remove(pluginId);
+    }
+
+    final allow = _normalizeStringList(plugins['allow'])
+      ..removeWhere((item) => cleanupAliases.contains(item));
+    if (enabled && !allow.contains(pluginId)) {
+      allow.add(pluginId);
+    }
+
+    if (entries.isEmpty) {
+      plugins.remove('entries');
+    } else {
+      plugins['entries'] = entries;
+    }
+
+    if (allow.isEmpty) {
+      plugins.remove('allow');
+    } else {
+      plugins['allow'] = allow;
+    }
+
+    if (plugins.isEmpty) {
+      config.remove('plugins');
+    } else {
+      config['plugins'] = plugins;
+    }
+
+    return before != _configJson(config);
+  }
+
+  static bool _migrateWeixinChannelConfigInConfig(Map<String, dynamic> config) {
+    final before = _configJson(config);
+    final channels = _normalizeMutableConfig(config['channels']);
+    final canonicalChannel = _normalizeMutableConfig(channels[_weixinChannelId]);
+
+    for (final legacyId in _weixinLegacyChannelIds) {
+      final legacyChannel = _normalizeMutableConfig(channels[legacyId]);
+      if (legacyChannel.isEmpty) {
+        channels.remove(legacyId);
+        continue;
+      }
+      if (canonicalChannel.isEmpty) {
+        channels[_weixinChannelId] = legacyChannel;
+      }
+      channels.remove(legacyId);
+    }
+
+    if (channels.isEmpty) {
+      config.remove('channels');
+    } else {
+      config['channels'] = channels;
+    }
+    return before != _configJson(config);
+  }
+
+  static bool _normalizeQqbotChannelConfigInConfig(
+    Map<String, dynamic> config, {
+    String? appId,
+    String? appSecret,
+  }) {
+    final before = _configJson(config);
+    final channels = _normalizeMutableConfig(config['channels']);
+    final existing = _normalizeMutableConfig(channels[_qqbotChannelId]);
+    final extracted = _extractQqbotCredentials(existing);
+
+    final normalizedAppId =
+        _isNonEmptyString(appId) ? appId!.trim() : extracted['appId'];
+    final normalizedAppSecret = _isNonEmptyString(appSecret)
+        ? appSecret!.trim()
+        : extracted['appSecret'];
+
+    if (_isNonEmptyString(normalizedAppId) &&
+        _isNonEmptyString(normalizedAppSecret)) {
+      existing['enabled'] = true;
+      existing['appId'] = normalizedAppId;
+      existing['clientSecret'] = normalizedAppSecret;
+      existing.remove('appSecret');
+      existing.remove('accounts');
+      channels[_qqbotChannelId] = existing;
+      config['channels'] = channels;
+    } else if (existing.remove('appSecret') != null) {
+      channels[_qqbotChannelId] = existing;
+      config['channels'] = channels;
+    }
+
+    return before != _configJson(config);
+  }
+
   static bool _hasNonEmptyMap(dynamic value) {
     if (value is! Map) {
       return false;
@@ -483,41 +642,75 @@ find /root/.openclaw/npm/projects -maxdepth 6 -type f -name package.json -print 
     );
   }
 
+  static Future<T> _withTemporarilyRemovedChannels<T>(
+    List<String> channelIds,
+    Future<T> Function() action,
+  ) async {
+    if (channelIds.isEmpty) {
+      return action();
+    }
+
+    final config = await _readMutableConfig();
+    final channels = _normalizeMutableConfig(config['channels']);
+    final removedChannels = <String, dynamic>{};
+
+    for (final channelId in channelIds) {
+      if (channels.containsKey(channelId)) {
+        removedChannels[channelId] = channels.remove(channelId);
+      }
+    }
+
+    if (removedChannels.isNotEmpty) {
+      if (channels.isEmpty) {
+        config.remove('channels');
+      } else {
+        config['channels'] = channels;
+      }
+      await _writeMutableConfig(config);
+    }
+
+    try {
+      return await action();
+    } finally {
+      if (removedChannels.isEmpty) {
+        return;
+      }
+
+      final restoreConfig = await _readMutableConfig();
+      final restoreChannels = _normalizeMutableConfig(restoreConfig['channels']);
+      var changed = false;
+
+      for (final entry in removedChannels.entries) {
+        if (!restoreChannels.containsKey(entry.key)) {
+          restoreChannels[entry.key] = entry.value;
+          changed = true;
+        }
+      }
+
+      if (!changed) {
+        return;
+      }
+
+      restoreConfig['channels'] = restoreChannels;
+      await _writeMutableConfig(restoreConfig);
+    }
+  }
+
   static Future<void> _setPluginEntryEnabled(
     String pluginId, {
     required bool enabled,
     required List<String> cleanupAliases,
   }) async {
     final config = await _readMutableConfig();
-    final plugins = _normalizeMutableConfig(config['plugins']);
-    final entries = _normalizeMutableConfig(plugins['entries']);
-
-    for (final alias in cleanupAliases) {
-      if (alias != pluginId) {
-        entries.remove(alias);
-      }
+    final changed = _setPluginEntryEnabledInConfig(
+      config,
+      pluginId,
+      enabled: enabled,
+      cleanupAliases: cleanupAliases,
+    );
+    if (!changed) {
+      return;
     }
-
-    if (enabled) {
-      final entry = _normalizeMutableConfig(entries[pluginId]);
-      entry['enabled'] = true;
-      entries[pluginId] = entry;
-    } else {
-      entries.remove(pluginId);
-    }
-
-    if (entries.isEmpty) {
-      plugins.remove('entries');
-    } else {
-      plugins['entries'] = entries;
-    }
-
-    if (plugins.isEmpty) {
-      config.remove('plugins');
-    } else {
-      config['plugins'] = plugins;
-    }
-
     await _writeMutableConfig(config);
   }
 
@@ -527,31 +720,34 @@ find /root/.openclaw/npm/projects -maxdepth 6 -type f -name package.json -print 
     required List<String> uninstallCommands,
     required String installNotificationText,
     required String repairNotificationText,
+    List<String> temporaryDisabledChannelIds = const <String>[],
   }) async {
-    try {
-      return await _runOpenclawCommandWithRetries(
-        <String>[
-          'openclaw plugins install "$primaryPackage"',
-          'openclaw plugins install $fallbackPackage',
-        ],
-        timeout: 1800,
-        notificationText: installNotificationText,
-      );
-    } catch (_) {
-      await _runOpenclawCommand(
-        '${uninstallCommands.join('; ')}; true',
-        timeout: 120,
-        notificationText: repairNotificationText,
-      );
-      return _runOpenclawCommandWithRetries(
-        <String>[
-          'openclaw plugins install "$primaryPackage"',
-          'openclaw plugins install $fallbackPackage',
-        ],
-        timeout: 1800,
-        notificationText: installNotificationText,
-      );
-    }
+    return _withTemporarilyRemovedChannels(temporaryDisabledChannelIds, () async {
+      try {
+        return await _runOpenclawCommandWithRetries(
+          <String>[
+            'openclaw plugins install "$primaryPackage"',
+            'openclaw plugins install $fallbackPackage',
+          ],
+          timeout: 1800,
+          notificationText: installNotificationText,
+        );
+      } catch (_) {
+        await _runOpenclawCommand(
+          '${uninstallCommands.join('; ')}; true',
+          timeout: 120,
+          notificationText: repairNotificationText,
+        );
+        return _runOpenclawCommandWithRetries(
+          <String>[
+            'openclaw plugins install "$primaryPackage"',
+            'openclaw plugins install $fallbackPackage',
+          ],
+          timeout: 1800,
+          notificationText: installNotificationText,
+        );
+      }
+    });
   }
 
   static Future<void> _normalizeQqbotChannelConfig({
@@ -559,40 +755,57 @@ find /root/.openclaw/npm/projects -maxdepth 6 -type f -name package.json -print 
     required String appSecret,
   }) async {
     final config = await _readMutableConfig();
-    final channels = _normalizeMutableConfig(config['channels']);
-    final existing = _normalizeMutableConfig(channels[_qqbotChannelId]);
-
-    existing['enabled'] = true;
-    existing['appId'] = appId;
-    existing['clientSecret'] = appSecret;
-    existing.remove('appSecret');
-    channels[_qqbotChannelId] = existing;
-    config['channels'] = channels;
-
+    final changed = _normalizeQqbotChannelConfigInConfig(
+      config,
+      appId: appId,
+      appSecret: appSecret,
+    );
+    if (!changed) {
+      return;
+    }
     await _writeMutableConfig(config);
   }
 
   static Future<void> repairMessagingPluginConfigIfNeeded() async {
     final config = await _readMutableConfig();
+    final before = _configJson(config);
+    _migrateWeixinChannelConfigInConfig(config);
+    final qqbotLocal = await _readQqbotLocalConfig();
+    final hasQqbotLocal = qqbotLocal != null;
+    if (hasQqbotLocal) {
+      _normalizeQqbotChannelConfigInConfig(
+        config,
+        appId: qqbotLocal['appId'] as String?,
+        appSecret: qqbotLocal['appSecret'] as String?,
+      );
+    } else {
+      _normalizeQqbotChannelConfigInConfig(config);
+    }
     final channels = _normalizeMutableConfig(config['channels']);
-    final hasQqbotLocal = await _readQqbotLocalConfig() != null;
     final enableQqbot = _hasQqbotChannelConfig(channels) || hasQqbotLocal;
     final enableWeixin = _hasNonEmptyMap(channels[_weixinChannelId]);
 
     if (enableQqbot) {
-      await _setPluginEntryEnabled(
+      _setPluginEntryEnabledInConfig(
+        config,
         _qqbotPluginId,
         enabled: true,
         cleanupAliases: <String>[_qqbotPluginId, ..._qqbotLegacyPluginIds],
       );
     }
     if (enableWeixin) {
-      await _setPluginEntryEnabled(
+      _setPluginEntryEnabledInConfig(
+        config,
         _weixinPluginId,
         enabled: true,
         cleanupAliases: <String>[_weixinPluginId, ..._weixinLegacyPluginIds],
       );
     }
+
+    if (before == _configJson(config)) {
+      return;
+    }
+    await _writeMutableConfig(config);
   }
 
   /// Ensure messaging plugins required by current channel credentials are installed
@@ -623,9 +836,11 @@ find /root/.openclaw/npm/projects -maxdepth 6 -type f -name package.json -print 
         final channels = config['channels'] as Map<String, dynamic>?;
         if (channels != null) {
           for (final entry in channels.entries) {
-            final key = entry.key == _legacyLarkChannelId
-                ? _feishuChannelId
-                : entry.key;
+            final key = switch (entry.key) {
+              _legacyLarkChannelId => _feishuChannelId,
+              _weixinChannelId => _weixinUiChannelId,
+              _ => entry.key,
+            };
             final normalized = _normalizeUiConfig(
               channelId: entry.key,
               value: entry.value,
@@ -712,7 +927,8 @@ find /root/.openclaw/npm/projects -maxdepth 6 -type f -name package.json -print 
       return;
     }
 
-    final channelIdJson = jsonEncode(channelId);
+    final storageChannelId = _canonicalChannelIdForStorage(channelId);
+    final channelIdJson = jsonEncode(storageChannelId);
     final storedPayload = _storagePayloadForSave(
       channelId: channelId,
       payload: payload,
@@ -761,12 +977,17 @@ fs.writeFileSync(p, JSON.stringify(c, null, 2));
       // Start fresh if config is missing or invalid.
     }
 
+    final before = _configJson(config);
     config['channels'] ??= <String, dynamic>{};
-    (config['channels'] as Map<String, dynamic>)[channelId] = payload;
+    final storageChannelId = _canonicalChannelIdForStorage(channelId);
+    (config['channels'] as Map<String, dynamic>)[storageChannelId] = payload;
     if (channelId == _feishuChannelId) {
       (config['channels'] as Map<String, dynamic>).remove(_legacyLarkChannelId);
     }
 
+    if (before == _configJson(config)) {
+      return;
+    }
     const encoder = JsonEncoder.withIndent('  ');
     await NativeBridge.writeRootfsFile(_configPath, encoder.convert(config));
   }
@@ -779,7 +1000,8 @@ fs.writeFileSync(p, JSON.stringify(c, null, 2));
       return;
     }
 
-    final channelIdJson = jsonEncode(channelId);
+    final storageChannelId = _canonicalChannelIdForStorage(channelId);
+    final channelIdJson = jsonEncode(storageChannelId);
 
     final script = '''
 const fs = require("fs");
@@ -816,9 +1038,13 @@ fs.writeFileSync(p, JSON.stringify(c, null, 2));
       // Nothing to remove if config is missing or invalid.
     }
 
+    final before = _configJson(config);
     final channels = config['channels'] as Map<String, dynamic>?;
-    channels?.remove(channelId);
+    channels?.remove(_canonicalChannelIdForStorage(channelId));
 
+    if (before == _configJson(config)) {
+      return;
+    }
     const encoder = JsonEncoder.withIndent('  ');
     await NativeBridge.writeRootfsFile(_configPath, encoder.convert(config));
   }
@@ -880,6 +1106,7 @@ fs.writeFileSync(p, JSON.stringify(c, null, 2));
       ],
       installNotificationText: 'Installing QQ plugin...',
       repairNotificationText: 'Repairing QQ plugin installation...',
+      temporaryDisabledChannelIds: const <String>[_qqbotChannelId],
     );
     await _setPluginEntryEnabled(
       _qqbotPluginId,
@@ -911,6 +1138,10 @@ fs.writeFileSync(p, JSON.stringify(c, null, 2));
       ],
       installNotificationText: 'Installing Weixin plugin...',
       repairNotificationText: 'Repairing Weixin plugin installation...',
+      temporaryDisabledChannelIds: const <String>[
+        _weixinChannelId,
+        _weixinUiChannelId,
+      ],
     );
     await _setPluginEntryEnabled(
       _weixinPluginId,
@@ -920,7 +1151,63 @@ fs.writeFileSync(p, JSON.stringify(c, null, 2));
     await _writeCachedPluginInstalled(_weixinPluginId, true);
   }
 
-  static String buildWeixinInstallerTerminalCommand() {
+  static String _buildWeixinPluginConfigScript() {
+    return '''
+const fs = require('fs');
+const p = '$_configPath';
+let c = {};
+try { c = JSON.parse(fs.readFileSync(p, 'utf8')); } catch {}
+c.plugins = c.plugins && typeof c.plugins === 'object' ? c.plugins : {};
+c.plugins.entries = c.plugins.entries && typeof c.plugins.entries === 'object' ? c.plugins.entries : {};
+for (const key of ['weixin', '@tencent/openclaw-weixin', '@tencent-weixin/openclaw-weixin']) {
+  delete c.plugins.entries[key];
+}
+c.plugins.entries['$_weixinPluginId'] = {
+  ...(c.plugins.entries['$_weixinPluginId'] || {}),
+  enabled: true,
+};
+const allow = Array.isArray(c.plugins.allow) ? c.plugins.allow.filter(Boolean) : [];
+if (!allow.includes('$_weixinPluginId')) {
+  allow.push('$_weixinPluginId');
+}
+c.plugins.allow = allow;
+fs.mkdirSync('/root/.openclaw', { recursive: true });
+fs.writeFileSync(p, JSON.stringify(c, null, 2));
+''';
+  }
+
+  static String _buildWeixinPreInstallCleanupScript() {
+    return '''
+const fs = require('fs');
+const p = '$_configPath';
+let c = {};
+try { c = JSON.parse(fs.readFileSync(p, 'utf8')); } catch {}
+if (c.channels && typeof c.channels === 'object') {
+  delete c.channels['$_weixinUiChannelId'];
+  delete c.channels['$_weixinChannelId'];
+  if (Object.keys(c.channels).length === 0) {
+    delete c.channels;
+  }
+}
+fs.mkdirSync('/root/.openclaw', { recursive: true });
+fs.writeFileSync(p, JSON.stringify(c, null, 2));
+''';
+  }
+
+  static String buildWeixinInstallerTerminalCommand({bool loginOnly = false}) {
+    final installStep = loginOnly
+        ? 'echo ">>> Weixin plugin already installed, skipping package download..."'
+        : '''
+node <<'NODE'
+${_buildWeixinPreInstallCleanupScript()}
+NODE
+echo ">>> Installing Weixin plugin from mirrored npm registry..."
+openclaw plugins install "$weixinPluginPackage" || (
+  echo ">>> First install attempt failed, retrying with package name fallback..."
+  openclaw plugins install @tencent-weixin/openclaw-weixin
+)
+''';
+
     return '''
 export npm_config_registry=${AppConstants.npmRegistryUrl}
 export NPM_CONFIG_REGISTRY=${AppConstants.npmRegistryUrl}
@@ -938,29 +1225,15 @@ export CHOKIDAR_USEPOLLING=true
 export UV_USE_IO_URING=0
 mkdir -p /root/.npm $_persistentNpmCacheDir /tmp/npm-tmp
 export TMPDIR=/tmp/npm-tmp
+$installStep
 node <<'NODE'
-const fs = require('fs');
-const p = '/root/.openclaw/openclaw.json';
-let c = {};
-try { c = JSON.parse(fs.readFileSync(p, 'utf8')); } catch {}
-c.plugins = c.plugins && typeof c.plugins === 'object' ? c.plugins : {};
-c.plugins.entries = c.plugins.entries && typeof c.plugins.entries === 'object' ? c.plugins.entries : {};
-for (const key of ['weixin', '@tencent/openclaw-weixin', '@tencent-weixin/openclaw-weixin']) {
-  delete c.plugins.entries[key];
-}
-c.plugins.entries['$_weixinPluginId'] = {
-  ...(c.plugins.entries['$_weixinPluginId'] || {}),
-  enabled: true,
-};
-fs.mkdirSync('/root/.openclaw', { recursive: true });
-fs.writeFileSync(p, JSON.stringify(c, null, 2));
+${
+      _buildWeixinPluginConfigScript()
+    }
 NODE
-echo ">>> Running official Weixin installer (it will select the compatible latest plugin automatically)..."
-npx -y $_weixinInstallerPackage install || (
-  echo ">>> First installer attempt failed, retrying once with cached mirror settings..."
-  npm cache verify >/dev/null 2>&1 || true
-  npx -y $_weixinInstallerPackage install
-)
+echo ">>> Starting Weixin login flow..."
+echo ">>> If a QR code link appears below, open it on another device and scan with WeChat."
+openclaw channels login --channel $_weixinChannelId
 ''';
   }
 

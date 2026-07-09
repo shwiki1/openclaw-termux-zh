@@ -56,7 +56,7 @@ class MessagePlatform {
     id: 'weixin',
     nameKey: 'messagePlatformNameWeixin',
     descriptionKey: 'messagePlatformDescriptionWeixin',
-    configPath: 'channels.weixin',
+    configPath: 'channels.openclaw-weixin',
     icon: Icons.chat_rounded,
     color: Color(0xFF07C160),
   );

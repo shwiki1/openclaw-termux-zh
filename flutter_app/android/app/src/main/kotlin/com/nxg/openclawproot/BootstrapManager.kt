@@ -40,6 +40,7 @@ class BootstrapManager(
     private val workspaceRootDir get() = File("$rootfsDir/root/.openclaw")
     private val workspaceBackupManifestName = "openclaw-workspace-backup.json"
     private val workspaceBackupFormat = "openclaw-workspace-backup"
+    private val workspacePermissionMarkerName = ".android-permissions-v3"
     private val workspaceBackupRelativePaths = listOf(
         ".env",
         "openclaw.json",
@@ -72,6 +73,7 @@ class BootstrapManager(
         // Create fake /proc and /sys files for proot bind mounts
         setupFakeSysdata()
         ensureDefaultTimezone()
+        ensureOpenClawWorkspacePermissions()
     }
 
     private fun ensureRootfsRuntimeDirectories() {
@@ -260,6 +262,7 @@ class BootstrapManager(
                                 when {
                                     entry.isDirectory -> {
                                         outFile.mkdirs()
+                                        applyDirectoryPermissions(outFile)
                                     }
                                     entry.isSymbolicLink -> {
                                         // Defer symlinks to phase 2
@@ -278,6 +281,8 @@ class BootstrapManager(
                                         try {
                                             if (targetFile.exists()) {
                                                 targetFile.copyTo(outFile, overwrite = true)
+                                                outFile.setReadable(true, false)
+                                                outFile.setWritable(true, true)
                                                 if (targetFile.canExecute()) {
                                                     outFile.setExecutable(true, false)
                                                 }
@@ -296,7 +301,7 @@ class BootstrapManager(
                                             }
                                         }
                                         outFile.setReadable(true, false)
-                                        outFile.setWritable(true, false)
+                                        outFile.setWritable(true, true)
                                         val mode = entry.mode
                                         if (mode == 0 || mode and 0b001_001_001 != 0) {
                                             val path = name.lowercase()
@@ -387,6 +392,7 @@ class BootstrapManager(
 
         // Post-extraction: configure rootfs for proot compatibility
         configureRootfs()
+        ensureExtractedRootfsPermissions()
 
         // Clean up tarball
         File(tarPath).delete()
@@ -473,6 +479,7 @@ class BootstrapManager(
                                     when {
                                         tarEntry.isDirectory -> {
                                             outFile.mkdirs()
+                                            applyDirectoryPermissions(outFile)
                                         }
                                         tarEntry.isSymbolicLink -> {
                                             try {
@@ -490,6 +497,8 @@ class BootstrapManager(
                                             try {
                                                 if (targetFile.exists()) {
                                                     targetFile.copyTo(outFile, overwrite = true)
+                                                    outFile.setReadable(true, false)
+                                                    outFile.setWritable(true, true)
                                                     if (targetFile.canExecute()) {
                                                         outFile.setExecutable(true, false)
                                                     }
@@ -506,7 +515,7 @@ class BootstrapManager(
                                                 }
                                             }
                                             outFile.setReadable(true, false)
-                                            outFile.setWritable(true, false)
+                                            outFile.setWritable(true, true)
                                             val mode = tarEntry.mode
                                             if (mode and 0b001_001_001 != 0) {
                                                 outFile.setExecutable(true, false)
@@ -790,6 +799,109 @@ sys.exit(0)
         wrapper.setExecutable(true, false)
     }
 
+    private fun applyDirectoryPermissions(dir: File) {
+        if (!dir.exists()) {
+            return
+        }
+        dir.setReadable(true, false)
+        dir.setWritable(true, true)
+        dir.setExecutable(true, false)
+    }
+
+    private fun shouldBeExecutable(file: File): Boolean {
+        val normalizedPath = file.absolutePath.replace('\\', '/').lowercase()
+        return file.canExecute() ||
+            normalizedPath.contains("/bin/") ||
+            normalizedPath.contains("/sbin/") ||
+            normalizedPath.contains("/lib/apt/methods/") ||
+            normalizedPath.contains("/usr/lib/dpkg/") ||
+            normalizedPath.contains("/usr/lib/git-core/") ||
+            normalizedPath.contains("/usr/libexec/") ||
+            normalizedPath.endsWith(".sh") ||
+            normalizedPath.endsWith(".run") ||
+            normalizedPath.endsWith(".so") ||
+            normalizedPath.contains(".so.")
+    }
+
+    private fun hardenRegularFilePermissions(path: File) {
+        if (!path.exists() || !path.isFile) {
+            return
+        }
+        path.setReadable(true, false)
+        path.setWritable(true, true)
+        if (shouldBeExecutable(path)) {
+            path.setExecutable(true, false)
+        }
+    }
+
+    private fun fixPermissionsRecursive(path: File) {
+        if (!path.exists()) {
+            return
+        }
+        try {
+            if (java.nio.file.Files.isSymbolicLink(path.toPath())) {
+                return
+            }
+        } catch (_: Exception) {}
+
+        if (path.isDirectory) {
+            applyDirectoryPermissions(path)
+            path.listFiles()?.forEach { child ->
+                fixPermissionsRecursive(child)
+            }
+            return
+        }
+
+        hardenRegularFilePermissions(path)
+    }
+
+    private fun workspacePermissionMarker(): File =
+        File(workspaceRootDir, workspacePermissionMarkerName)
+
+    private fun resetOpenClawWorkspacePermissionMarker() {
+        try {
+            workspacePermissionMarker().delete()
+        } catch (_: Exception) {}
+    }
+
+    private fun ensureExtractedRootfsPermissions() {
+        applyDirectoryPermissions(File(rootfsDir))
+        fixPermissionsRecursive(workspaceRootDir)
+        fixPermissionsRecursive(File("$rootfsDir/root/.config/openclaw"))
+        resetOpenClawWorkspacePermissionMarker()
+        ensureOpenClawWorkspacePermissions()
+    }
+
+    private fun ensureOpenClawWorkspacePermissions() {
+        val rootfs = File(rootfsDir)
+        if (!rootfs.exists()) {
+            return
+        }
+
+        val workspaceRoot = workspaceRootDir
+        if (!workspaceRoot.exists()) {
+            return
+        }
+
+        val marker = workspacePermissionMarker()
+        if (marker.exists()) {
+            return
+        }
+
+        listOf(
+            workspaceRoot,
+            File("$rootfsDir/root/.config/openclaw"),
+        ).forEach { path ->
+            fixPermissionsRecursive(path)
+        }
+
+        try {
+            marker.parentFile?.mkdirs()
+            marker.writeText("ok\n")
+            hardenRegularFilePermissions(marker)
+        } catch (_: Exception) {}
+    }
+
     /**
      * Ensure all files in executable directories have the execute bit set.
      * Java's File API doesn't support full Unix permissions, so tar extraction
@@ -834,22 +946,26 @@ sys.exit(0)
 
     /** Recursively set +rx on all regular files in a directory tree. */
     private fun fixExecRecursive(dir: File) {
+        applyDirectoryPermissions(dir)
         dir.listFiles()?.forEach { file ->
             if (file.isDirectory) {
                 fixExecRecursive(file)
             } else if (file.isFile) {
                 file.setReadable(true, false)
+                file.setWritable(true, true)
                 file.setExecutable(true, false)
             }
         }
     }
 
     private fun fixSharedLibsRecursive(dir: File) {
+        applyDirectoryPermissions(dir)
         dir.listFiles()?.forEach { file ->
             if (file.isDirectory) {
                 fixSharedLibsRecursive(file)
             } else if (file.name.endsWith(".so") || file.name.contains(".so.")) {
                 file.setReadable(true, false)
+                file.setWritable(true, true)
                 file.setExecutable(true, false)
             }
         }
@@ -867,7 +983,7 @@ sys.exit(0)
         // Ensure files are writable
         for (name in listOf("passwd", "shadow", "group", "gshadow")) {
             val f = File("$rootfsDir/etc/$name")
-            if (f.exists()) f.setWritable(true, false)
+            if (f.exists()) f.setWritable(true, true)
         }
 
         // Add Android app user to /etc/passwd
@@ -957,6 +1073,7 @@ sys.exit(0)
                                 when {
                                     entry.isDirectory -> {
                                         outFile.mkdirs()
+                                        applyDirectoryPermissions(outFile)
                                     }
                                     entry.isSymbolicLink -> {
                                         try {
@@ -975,7 +1092,7 @@ sys.exit(0)
                                             }
                                         }
                                         outFile.setReadable(true, false)
-                                        outFile.setWritable(true, false)
+                                        outFile.setWritable(true, true)
                                         // Set executable for bin/ files and .so files
                                         val mode = entry.mode
                                         if (mode and 0b001_001_001 != 0 ||
@@ -1645,6 +1762,7 @@ require('/root/.openclaw/proot-compat.js');
 
         validateWorkspaceBackupArchive(archiveFile)
         clearWorkspaceBackupTargets()
+        resetOpenClawWorkspacePermissionMarker()
 
         ZipFile(archiveFile).use { zip ->
             val entries = zip.entries()
@@ -1688,6 +1806,7 @@ require('/root/.openclaw/proot-compat.js');
 
                 if (entry.isDirectory || normalizedName.endsWith("/")) {
                     outputFile.mkdirs()
+                    applyDirectoryPermissions(outputFile)
                     continue
                 }
 
@@ -1697,7 +1816,7 @@ require('/root/.openclaw/proot-compat.js');
                     }
                 }
                 outputFile.setReadable(true, false)
-                outputFile.setWritable(true, false)
+                outputFile.setWritable(true, true)
             }
         }
 
@@ -1827,6 +1946,7 @@ require('/root/.openclaw/proot-compat.js');
         val file = File("$rootfsDir/$path")
         file.parentFile?.mkdirs()
         file.writeText(content)
+        hardenRegularFilePermissions(file)
     }
 
     fun copyBundledAssetToFile(assetPath: String, destinationPath: String) {
@@ -1847,7 +1967,7 @@ require('/root/.openclaw/proot-compat.js');
         }
 
         destinationFile.setReadable(true, false)
-        destinationFile.setWritable(true, false)
+        destinationFile.setWritable(true, true)
     }
 
     /**

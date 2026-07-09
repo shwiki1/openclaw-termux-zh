@@ -179,7 +179,11 @@ class _MessagePlatformDetailScreenState
 
   Future<void> _openWeixinInstaller() async {
     final result = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(builder: (_) => const WeixinInstallerScreen()),
+      MaterialPageRoute(
+        builder: (_) => WeixinInstallerScreen(
+          loginOnly: _weixinPluginStatus == _WeixinPluginStatus.installed,
+        ),
+      ),
     );
     await MessagePlatformConfigService.invalidatePluginStatusCache(
       'openclaw-weixin',

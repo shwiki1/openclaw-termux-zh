@@ -8,7 +8,12 @@ import '../widgets/native_proot_terminal.dart';
 import '../widgets/terminal_toolbar.dart';
 
 class WeixinInstallerScreen extends StatefulWidget {
-  const WeixinInstallerScreen({super.key});
+  const WeixinInstallerScreen({
+    super.key,
+    this.loginOnly = false,
+  });
+
+  final bool loginOnly;
 
   @override
   State<WeixinInstallerScreen> createState() => _WeixinInstallerScreenState();
@@ -42,9 +47,9 @@ class _WeixinInstallerScreenState extends State<WeixinInstallerScreen> {
   String get _command => 'echo "=== OpenClaw Weixin Installer ===" && '
       'echo "The installer may show a QR code or a login link." && '
       'echo "Use the native terminal selection handles to copy links." && '
-      'echo "If the first install attempt fails, the script will retry with mirrored npm sources." && '
+      'echo "The login flow will open directly in this terminal after plugin checks finish." && '
       'echo "" && '
-      '${MessagePlatformConfigService.buildWeixinInstallerTerminalCommand()}; '
+      '${MessagePlatformConfigService.buildWeixinInstallerTerminalCommand(loginOnly: widget.loginOnly)}; '
       'echo "" && echo "Weixin installer finished. You can return now."';
 
   void _consumeOutput(String chunk) {
