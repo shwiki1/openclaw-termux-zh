@@ -40,9 +40,9 @@ need_command gh
 need_command gzip
 need_command python3
 
-ASSET_NAME="$("$METADATA_SCRIPT" asset-name)"
-MANIFEST_NAME="$("$METADATA_SCRIPT" manifest-name)"
-EXPECTED_FINGERPRINT="$("$METADATA_SCRIPT" fingerprint)"
+ASSET_NAME="$(bash "$METADATA_SCRIPT" asset-name)"
+MANIFEST_NAME="$(bash "$METADATA_SCRIPT" manifest-name)"
+EXPECTED_FINGERPRINT="$(bash "$METADATA_SCRIPT" fingerprint)"
 DEST_PATH="$ASSET_DIR/$ASSET_NAME"
 MANIFEST_PATH="$TMP_DIR/$MANIFEST_NAME"
 

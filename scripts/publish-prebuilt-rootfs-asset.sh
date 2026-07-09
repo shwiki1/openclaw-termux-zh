@@ -39,8 +39,8 @@ need_command() {
 need_command gh
 need_command python3
 
-ASSET_NAME="$("$METADATA_SCRIPT" asset-name)"
-MANIFEST_NAME="$("$METADATA_SCRIPT" manifest-name)"
+ASSET_NAME="$(bash "$METADATA_SCRIPT" asset-name)"
+MANIFEST_NAME="$(bash "$METADATA_SCRIPT" manifest-name)"
 ARCHIVE_PATH="$ASSET_DIR/$ASSET_NAME"
 MANIFEST_PATH="$TMP_DIR/$MANIFEST_NAME"
 
@@ -52,7 +52,7 @@ fi
 rm -rf "$TMP_DIR"
 mkdir -p "$TMP_DIR"
 
-"$METADATA_SCRIPT" write-manifest "$MANIFEST_PATH" "$ARCHIVE_PATH"
+bash "$METADATA_SCRIPT" write-manifest "$MANIFEST_PATH" "$ARCHIVE_PATH"
 
 if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
   gh release create "$RELEASE_TAG" \
