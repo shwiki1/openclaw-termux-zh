@@ -886,7 +886,7 @@ function walkAndPatchText(rootDir) {
         stack.push(fullPath);
         continue;
       }
-      if (!/\.(?:cjs|mjs|js|json)$/i.test(entry.name)) {
+      if (!/\.(?:cjs|mjs|js|json)\$/i.test(entry.name)) {
         continue;
       }
       if (patchTextFile(fullPath)) {
@@ -926,7 +926,7 @@ for (const rootDir of packageRoots) {
 }
 
 console.log(
-  `[openclaw-app] QQBot runtime repair complete: roots=${patchedRoots}, files=${patchedFiles}`,
+  `[openclaw-app] QQBot runtime repair complete: roots=\${patchedRoots}, files=\${patchedFiles}`,
 );
 NODE
 ''';
