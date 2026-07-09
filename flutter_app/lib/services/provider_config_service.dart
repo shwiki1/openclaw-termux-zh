@@ -12,8 +12,6 @@ class ProviderConfigService {
   static const _customPresetMetadataPath =
       '/root/.openclaw/app/custom-provider-presets.json';
   static const _customOpenaiId = 'custom-openai';
-  static const _customOpenaiContextWindow = 128000;
-  static const _customOpenaiMaxTokens = 8192;
   static const _localGatewayMode = 'local';
   static const _fallbackWebSearchProvider = 'duckduckgo';
   static const _legacyKimiSearchProvider = 'kimi';
@@ -233,6 +231,14 @@ class ProviderConfigService {
     return _asStringKeyedMap(presets[providerId]);
   }
 
+  static String _customPresetMetadataThinkingLevel(
+    Map<String, dynamic>? metadata,
+    String providerId,
+  ) {
+    final entry = _customPresetMetadataEntry(metadata, providerId);
+    return _trimmedString(entry['thinkingLevel']);
+  }
+
   static bool _setCustomPresetAlias(
     Map<String, dynamic> metadata, {
     required String providerId,
@@ -261,6 +267,36 @@ class ProviderConfigService {
     }
 
     existingEntry['alias'] = trimmedAlias;
+    presets[providerId] = existingEntry;
+    return true;
+  }
+
+  static bool _setCustomPresetThinkingLevel(
+    Map<String, dynamic> metadata, {
+    required String providerId,
+    required String? thinkingLevel,
+  }) {
+    final presets = _ensureCustomPresetMetadataEntries(metadata);
+    final existingEntry = _asStringKeyedMap(presets[providerId]);
+    final normalizedThinkingLevel = _normalizeThinkingLevel(thinkingLevel);
+    final currentThinkingLevel =
+        _normalizeThinkingLevel(existingEntry['thinkingLevel']);
+
+    if (normalizedThinkingLevel == currentThinkingLevel) {
+      return false;
+    }
+
+    if (normalizedThinkingLevel == null) {
+      existingEntry.remove('thinkingLevel');
+      if (existingEntry.isEmpty) {
+        presets.remove(providerId);
+      } else {
+        presets[providerId] = existingEntry;
+      }
+      return true;
+    }
+
+    existingEntry['thinkingLevel'] = normalizedThinkingLevel;
     presets[providerId] = existingEntry;
     return true;
   }
@@ -306,21 +342,6 @@ class ProviderConfigService {
     if (separatorIndex <= 0) return null;
     return trimmed.substring(0, separatorIndex);
   }
-
-  static Map<String, dynamic> _customOpenaiModelEntry(String model) => {
-        'id': model,
-        'name': model,
-        'input': const ['text'],
-        'reasoning': false,
-        'contextWindow': _customOpenaiContextWindow,
-        'maxTokens': _customOpenaiMaxTokens,
-        'cost': const {
-          'input': 0,
-          'output': 0,
-          'cacheRead': 0,
-          'cacheWrite': 0,
-        },
-      };
 
   static void _ensureLocalGatewayMode(Map<String, dynamic> config) {
     final gateway = _ensureGatewaySection(config);
@@ -641,6 +662,10 @@ class ProviderConfigService {
             _stringOrNull(allowListEntry['alias']) ??
             '')
         .trim();
+    final thinkingLevel = _normalizeThinkingLevel(
+          _customPresetMetadataThinkingLevel(presetMetadata, providerId),
+        ) ??
+        _extractThinkingLevel(providerConfig);
 
     return CustomProviderPreset(
       providerId: providerId,
@@ -652,7 +677,7 @@ class ProviderConfigService {
         apiValue: _stringOrNull(providerConfig['api']),
         baseUrl: baseUrl,
       ),
-      thinkingLevel: _extractThinkingLevel(providerConfig),
+      thinkingLevel: thinkingLevel,
     );
   }
 
@@ -725,6 +750,21 @@ class ProviderConfigService {
           configChanged = true;
         }
 
+        final models = providerConfig['models'];
+        if (models is List &&
+            models.isNotEmpty &&
+            models.first is Map<String, dynamic>) {
+          providerConfig['models'] = [preset.modelId];
+          providers[entry.key] = providerConfig;
+          configChanged = true;
+        } else if (models is List &&
+            models.isNotEmpty &&
+            models.first is Map) {
+          providerConfig['models'] = [preset.modelId];
+          providers[entry.key] = providerConfig;
+          configChanged = true;
+        }
+
         if (_clearLegacyAliasInAllowList(config, modelRef: normalizedPrimary)) {
           configChanged = true;
         }
@@ -733,6 +773,14 @@ class ProviderConfigService {
           presetMetadata,
           providerId: entry.key,
           alias: preset.alias,
+        )) {
+          metadataChanged = true;
+        }
+
+        if (_setCustomPresetThinkingLevel(
+          presetMetadata,
+          providerId: entry.key,
+          thinkingLevel: preset.thinkingLevel,
         )) {
           metadataChanged = true;
         }
@@ -931,7 +979,6 @@ class ProviderConfigService {
     required String apiKey,
     required String baseUrl,
     required String modelId,
-    String? thinkingLevel,
   }) {
     final providerEntry = _asStringKeyedMap(existingValue);
     if (compatibility.apiValue != null) {
@@ -942,31 +989,7 @@ class ProviderConfigService {
     providerEntry['apiKey'] = apiKey;
     providerEntry['baseUrl'] = baseUrl;
     providerEntry.remove('alias');
-
-    final rawModels = providerEntry['models'];
-    final modelTemplate =
-        rawModels is List && rawModels.isNotEmpty && rawModels.first is Map
-            ? _asStringKeyedMap(rawModels.first)
-            : _customOpenaiModelEntry(modelId);
-    modelTemplate['id'] = modelId;
-    modelTemplate['name'] = modelId;
-    modelTemplate['input'] ??= const ['text'];
-    modelTemplate['reasoning'] ??= false;
-    modelTemplate['contextWindow'] ??= _customOpenaiContextWindow;
-    modelTemplate['maxTokens'] ??= _customOpenaiMaxTokens;
-    modelTemplate['cost'] ??= const {
-      'input': 0,
-      'output': 0,
-      'cacheRead': 0,
-      'cacheWrite': 0,
-    };
-    final normalizedThinkingLevel = _normalizeThinkingLevel(thinkingLevel);
-    if (normalizedThinkingLevel == null) {
-      modelTemplate.remove('thinking');
-    } else {
-      modelTemplate['thinking'] = normalizedThinkingLevel;
-    }
-    providerEntry['models'] = [modelTemplate];
+    providerEntry['models'] = [modelId];
     return providerEntry;
   }
 
@@ -1025,7 +1048,6 @@ class ProviderConfigService {
       apiKey: apiKey.trim(),
       baseUrl: resolvedBaseUrl,
       modelId: trimmedModelId,
-      thinkingLevel: thinkingLevel,
     );
 
     final modelRef = '$resolvedProviderId/$trimmedModelId';
@@ -1035,6 +1057,11 @@ class ProviderConfigService {
       presetMetadata,
       providerId: resolvedProviderId,
       alias: trimmedAlias,
+    );
+    _setCustomPresetThinkingLevel(
+      presetMetadata,
+      providerId: resolvedProviderId,
+      thinkingLevel: thinkingLevel,
     );
 
     await _writeConfigMap(config);
