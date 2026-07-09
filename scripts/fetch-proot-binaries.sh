@@ -12,13 +12,46 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 JNILIBS_DIR="$SCRIPT_DIR/../flutter_app/android/app/src/main/jniLibs"
 TMP_DIR=$(mktemp -d)
+REQUIRED_LIBS=(
+    "libproot.so"
+    "libprootloader.so"
+    "libprootloader32.so"
+    "libtalloc.so"
+    "libandroid-shmem.so"
+)
 
 trap 'rm -rf "$TMP_DIR"' EXIT
 
 TERMUX_REPOS=(
-    "https://mirrors.ustc.edu.cn/termux/termux-main"
+    "https://mirrors.tuna.tsinghua.edu.cn/termux/termux-main"
+    "https://mirrors.sjtug.sjtu.edu.cn/termux/termux-main"
     "https://packages.termux.dev/apt/termux-main"
+    "https://mirrors.ustc.edu.cn/termux/termux-main"
 )
+
+curl_repo_file() {
+    local url="$1"
+    curl \
+        --fail \
+        --silent \
+        --show-error \
+        --location \
+        --connect-timeout 10 \
+        --max-time 40 \
+        --retry 2 \
+        --retry-delay 2 \
+        "$url"
+}
+
+has_required_binaries() {
+    local out_dir="$1"
+    for required in "${REQUIRED_LIBS[@]}"; do
+        if [ ! -s "$out_dir/$required" ]; then
+            return 1
+        fi
+    done
+    return 0
+}
 
 # Fetch a Termux package and extract binaries
 fetch_termux_pkg() {
@@ -32,7 +65,7 @@ fetch_termux_pkg() {
     local pkg_url=""
     local repo_base=""
     for candidate in "${TERMUX_REPOS[@]}"; do
-        pkg_url=$(curl -fsSL "${candidate}/dists/stable/main/binary-${deb_arch}/Packages" \
+        pkg_url=$(curl_repo_file "${candidate}/dists/stable/main/binary-${deb_arch}/Packages" \
             | grep -A 20 "^Package: ${pkg_name}$" \
             | grep "^Filename:" \
             | head -1 \
@@ -49,7 +82,11 @@ fetch_termux_pkg() {
     fi
 
     local deb_file="$TMP_DIR/${pkg_name}-${deb_arch}.deb"
-    curl -fsSL "${repo_base}/${pkg_url}" -o "$deb_file"
+    curl_repo_file "${repo_base}/${pkg_url}" > "$deb_file"
+    if [ ! -s "$deb_file" ]; then
+        echo "    WARN: failed to download ${pkg_name} from ${repo_base}"
+        return 1
+    fi
 
     mkdir -p "$extract_dir"
     cd "$extract_dir"
@@ -75,6 +112,12 @@ fetch_for_abi() {
 
     mkdir -p "$out_dir"
     echo "  [$jni_abi]"
+
+    if has_required_binaries "$out_dir"; then
+        echo "  [$jni_abi] Using bundled binaries from repository."
+        ls -la "$out_dir"
+        return 0
+    fi
 
     # Fetch proot package (includes proot binary + loader)
     local proot_dir="$extract_base/proot"
@@ -148,7 +191,7 @@ fetch_for_abi() {
         echo "  [$jni_abi] WARN: libandroid-shmem not found"
     fi
 
-    for required in libproot.so libprootloader.so libprootloader32.so libtalloc.so libandroid-shmem.so; do
+    for required in "${REQUIRED_LIBS[@]}"; do
         if [ ! -s "$out_dir/$required" ]; then
             echo "  [$jni_abi] ERROR: missing required native binary: $required"
             return 1
@@ -185,3 +228,7 @@ fi
 echo ""
 echo "Files:"
 ls -la "$JNILIBS_DIR"/*/lib*.so 2>/dev/null || echo "  (none)"
+
+if [ "$FAILED" -gt 0 ]; then
+    exit 1
+fi
