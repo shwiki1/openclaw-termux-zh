@@ -409,6 +409,7 @@ jobs:
           set xfer:clobber true
           mkdir -p ${REMOTE_DIR}
           cd ${REMOTE_DIR}
+          glob -a rm -f *.apk
           mput -O . artifacts/*.apk
           put -O . artifacts/latest.json
           bye

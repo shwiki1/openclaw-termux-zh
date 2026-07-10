@@ -19,6 +19,12 @@ class CliApiConfigService {
   static const _qwenSettingsPath = '/root/.qwen/settings.json';
   static const _geminiSettingsPath = '/root/.gemini/settings.json';
   static const _terminalThemePath = '/root/.openclaw/terminal-theme.sh';
+  static const _browserBridgeEnvPath = '/root/.openclaw/browser-bridge.env';
+  static const _browserMcpPath = '/root/.openclaw/browser-mcp.mjs';
+  static const _browserCodexSkillPath =
+      '/root/.codex/skills/browser-operator/SKILL.md';
+  static const _browserSkillPath =
+      '/root/.agents/skills/browser-operator/SKILL.md';
   static const _prefsKey = 'cli_api_config_json';
 
   static const configurableToolIds = {
@@ -183,6 +189,18 @@ class CliApiConfigService {
       _codexProxyEnvPath,
       _buildCodexProxyEnv(codex),
     );
+    await NativeBridge.writeRootfsFile(
+      _browserMcpPath,
+      _buildBrowserMcpScript(),
+    );
+    await NativeBridge.writeRootfsFile(
+      _browserSkillPath,
+      _buildBrowserSkill(),
+    );
+    await NativeBridge.writeRootfsFile(
+      _browserCodexSkillPath,
+      _buildBrowserSkill(),
+    );
     await NativeBridge.writeRootfsFile(_codexConfigPath, _buildCodexToml(codex));
     await NativeBridge.writeRootfsFile(
       _codeBuddyModelsPath,
@@ -203,7 +221,9 @@ class CliApiConfigService {
     await NativeBridge.runInProot(
       'chmod 0755 $_codexProxyPath 2>/dev/null || true; '
       'chmod 0755 $_codexProxyJsPath 2>/dev/null || true; '
+      'chmod 0755 $_browserMcpPath 2>/dev/null || true; '
       'chmod $codexProxyEnvMode $_codexProxyEnvPath 2>/dev/null || true; '
+      'chmod 0600 $_browserBridgeEnvPath 2>/dev/null || true; '
       'chmod 0600 $_codeBuddyModelsPath $_codeBuddySettingsPath '
       '$_qwenSettingsPath $_geminiSettingsPath 2>/dev/null || true; '
       'chmod 0644 $_terminalThemePath 2>/dev/null || true; '
@@ -857,40 +877,50 @@ export PS1='\[\e[1;32m\]\u@\h\[\e[0m\]:\[\e[1;34m\]\w\[\e[0m\]\$ '
   }
 
   static String _buildCodexToml(CliApiConfig codex) {
-    if (!_shouldManageToolRuntime(codex)) {
-      return '# OpenClaw does not manage Codex for this tool right now.\n';
-    }
     final lines = <String>[];
-    final model = codex.effectiveToolModel;
-    final baseUrl = codex.baseUrl.trim().isNotEmpty ? _codexProxyBaseUrl : '';
-    final effort = codex.reasoningEffort.trim();
-
-    if (model.isNotEmpty) {
-      lines.add('model = ${_tomlString(model)}');
-    }
     lines
       ..add('disable_response_storage = true')
-      ..add('preferred_auth_method = "apikey"')
       ..add('sandbox_mode = "danger-full-access"')
       ..add('approval_policy = "never"')
       ..add('tui.notifications = false')
       ..add('tui.terminal_title = []');
-    if (effort.isNotEmpty) {
-      lines.add('model_reasoning_effort = ${_tomlString(effort)}');
+
+    if (_shouldManageToolRuntime(codex)) {
+      final model = codex.effectiveToolModel;
+      final baseUrl =
+          codex.baseUrl.trim().isNotEmpty ? _codexProxyBaseUrl : '';
+      final effort = codex.reasoningEffort.trim();
+
+      if (model.isNotEmpty) {
+        lines.add('model = ${_tomlString(model)}');
+      }
+      lines.add('preferred_auth_method = "apikey"');
+      if (effort.isNotEmpty) {
+        lines.add('model_reasoning_effort = ${_tomlString(effort)}');
+      }
+      if (baseUrl.isNotEmpty) {
+        lines
+          ..add('model_provider = "openclaw"')
+          ..add('')
+          ..add('[model_providers.openclaw]')
+          ..add('name = "OpenClaw Codex Proxy"')
+          ..add('base_url = ${_tomlString(baseUrl)}')
+          ..add('env_key = "OPENAI_API_KEY"')
+          ..add('wire_api = "responses"')
+          ..add('stream_idle_timeout_ms = 300000')
+          ..add('request_max_retries = 2')
+          ..add('stream_max_retries = 2');
+      }
     }
-    if (baseUrl.isNotEmpty) {
-      lines
-        ..add('model_provider = "openclaw"')
-        ..add('')
-        ..add('[model_providers.openclaw]')
-        ..add('name = "OpenClaw Codex Proxy"')
-        ..add('base_url = ${_tomlString(baseUrl)}')
-        ..add('env_key = "OPENAI_API_KEY"')
-        ..add('wire_api = "responses"')
-        ..add('stream_idle_timeout_ms = 300000')
-        ..add('request_max_retries = 2')
-        ..add('stream_max_retries = 2');
-    }
+
+    lines
+      ..add('')
+      ..add('[mcp_servers.openclaw_browser]')
+      ..add('enabled = true')
+      ..add('command = "node"')
+      ..add('args = [${_tomlString(_browserMcpPath)}]')
+      ..add('startup_timeout_sec = 20')
+      ..add('tool_timeout_sec = 120');
 
     if (lines.isEmpty) {
       lines.add('# OpenClaw CLI config is empty. Configure Codex in the app.');
@@ -930,6 +960,531 @@ export PS1='\[\e[1;32m\]\u@\h\[\e[0m\]:\[\e[1;34m\]\w\[\e[0m\]\$ '
     }
     lines.add('');
     return lines.join('\n');
+  }
+
+  static String _buildBrowserMcpScript() {
+    return '''
+#!/usr/bin/env node
+
+import { readFile } from "node:fs/promises";
+import process from "node:process";
+
+const ENV_PATH = ${jsonEncode(_browserBridgeEnvPath)};
+const JSON_RPC_VERSION = "2.0";
+const PROTOCOL_VERSION = "2025-06-18";
+
+const TOOL_DEFS = [
+  {
+    name: "browser_open",
+    description:
+      "Open a URL in the OpenClaw in-app browser panel. Use this before clicking or extracting page content.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        url: {
+          type: "string",
+          description: "The absolute URL to open. If the scheme is missing, https is assumed by the app.",
+        },
+      },
+      required: ["url"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "browser_back",
+    description: "Navigate one step back in the in-app browser history.",
+    inputSchema: {
+      type: "object",
+      properties: {},
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "browser_forward",
+    description: "Navigate one step forward in the in-app browser history.",
+    inputSchema: {
+      type: "object",
+      properties: {},
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "browser_reload",
+    description: "Reload the current in-app browser page.",
+    inputSchema: {
+      type: "object",
+      properties: {},
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "browser_click",
+    description: "Click an element in the current page using a CSS selector.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        selector: {
+          type: "string",
+          description: "CSS selector for the target element.",
+        },
+      },
+      required: ["selector"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "browser_type",
+    description:
+      "Type text into a form field or editable element selected by CSS selector.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        selector: {
+          type: "string",
+          description: "CSS selector for the editable element.",
+        },
+        text: {
+          type: "string",
+          description: "Text to insert into the target element.",
+        },
+        submit: {
+          type: "boolean",
+          description: "Whether to submit after typing.",
+        },
+      },
+      required: ["selector", "text"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "browser_wait_for_text",
+    description:
+      "Wait until specific text appears on the current page, useful after navigation or form submission.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        text: {
+          type: "string",
+          description: "Text that must appear on the page.",
+        },
+        timeoutMs: {
+          type: "integer",
+          description: "Maximum wait time in milliseconds.",
+          minimum: 500,
+          maximum: 120000,
+        },
+      },
+      required: ["text"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "browser_extract",
+    description:
+      "Extract readable text, HTML, and top links from the current page or from a CSS-selected subtree.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        selector: {
+          type: "string",
+          description: "Optional CSS selector limiting extraction to one subtree.",
+        },
+        prompt: {
+          type: "string",
+          description: "Optional note describing what should be extracted.",
+        },
+        maxLength: {
+          type: "integer",
+          description: "Maximum number of characters to return for text and HTML.",
+          minimum: 256,
+          maximum: 16000,
+        },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "browser_list_links",
+    description:
+      "List visible links on the current page so Codex can choose a target before clicking.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        filter: {
+          type: "string",
+          description: "Optional text filter applied to link text, href, and aria-label.",
+        },
+        maxItems: {
+          type: "integer",
+          description: "Maximum number of links to return.",
+          minimum: 1,
+          maximum: 40,
+        },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "browser_list_interactables",
+    description:
+      "List visible buttons, inputs, links, and other interactable elements together with suggested selectors.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        filter: {
+          type: "string",
+          description: "Optional text filter applied to tag, role, type, text, aria, placeholder, and selector.",
+        },
+        maxItems: {
+          type: "integer",
+          description: "Maximum number of interactable elements to return.",
+          minimum: 1,
+          maximum: 60,
+        },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "browser_highlight",
+    description:
+      "Temporarily highlight a target element in the in-app browser so the user can visually confirm the selector.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        selector: {
+          type: "string",
+          description: "CSS selector for the element that should be highlighted.",
+        },
+      },
+      required: ["selector"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "browser_capture_snapshot",
+    description:
+      "Capture a structured page snapshot including title, URL, text, HTML, and top links.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        selector: {
+          type: "string",
+          description: "Optional CSS selector limiting the snapshot to one subtree.",
+        },
+        maxLength: {
+          type: "integer",
+          description: "Maximum number of characters returned for text and HTML.",
+          minimum: 512,
+          maximum: 32000,
+        },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "browser_eval",
+    description:
+      "Run a small JavaScript snippet inside the current page and return its serialized result.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        script: {
+          type: "string",
+          description: "JavaScript source code executed inside an IIFE.",
+        },
+      },
+      required: ["script"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "browser_get_state",
+    description:
+      "Return the current browser state including title, URL, loading flag, and the last bridge error.",
+    inputSchema: {
+      type: "object",
+      properties: {},
+      additionalProperties: false,
+    },
+  },
+];
+
+const TOOL_TO_ACTION = {
+  browser_open: "open",
+  browser_back: "back",
+  browser_forward: "forward",
+  browser_reload: "reload",
+  browser_click: "click",
+  browser_type: "type",
+  browser_wait_for_text: "wait_for_text",
+  browser_extract: "extract",
+  browser_list_links: "list_links",
+  browser_list_interactables: "list_interactables",
+  browser_highlight: "highlight",
+  browser_capture_snapshot: "capture_snapshot",
+  browser_eval: "eval",
+  browser_get_state: "get_state",
+};
+
+const HEADER_DELIMITER = Buffer.from("\\r\\n\\r\\n");
+let stdinBuffer = Buffer.alloc(0);
+
+function write(message) {
+  const payload = Buffer.from(JSON.stringify(message), "utf8");
+  const header = Buffer.from(
+    `Content-Length: \${payload.length}\\r\\nContent-Type: application/json\\r\\n\\r\\n`,
+    "utf8",
+  );
+  process.stdout.write(Buffer.concat([header, payload]));
+}
+
+function reply(id, result) {
+  write({ jsonrpc: JSON_RPC_VERSION, id, result });
+}
+
+function fail(id, code, message, data = undefined) {
+  write({
+    jsonrpc: JSON_RPC_VERSION,
+    id,
+    error: { code, message, ...(data === undefined ? {} : { data }) },
+  });
+}
+
+async function readBridgeEnv() {
+  const content = await readFile(ENV_PATH, "utf8");
+  const values = {};
+  for (const rawLine of content.split(/\\r?\\n/)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith("#")) {
+      continue;
+    }
+    const splitIndex = line.indexOf("=");
+    if (splitIndex <= 0) {
+      continue;
+    }
+    const key = line.slice(0, splitIndex).trim();
+    let value = line.slice(splitIndex + 1).trim();
+    if (
+      (value.startsWith("'") && value.endsWith("'")) ||
+      (value.startsWith('"') && value.endsWith('"'))
+    ) {
+      value = value.slice(1, -1);
+    }
+    values[key] = value;
+  }
+  return values;
+}
+
+async function callBridge(action, payload) {
+  const env = await readBridgeEnv();
+  const baseUrl = (env.OPENCLAW_BROWSER_BRIDGE_URL || "").trim();
+  const token = (env.OPENCLAW_BROWSER_BRIDGE_TOKEN || "").trim();
+  if (!baseUrl || !token) {
+    throw new Error(
+      "OpenClaw browser bridge is not ready. Open the browser panel in the app first.",
+    );
+  }
+
+  const response = await fetch(`\${baseUrl}/\${action}`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      authorization: `Bearer \${token}`,
+    },
+    body: JSON.stringify(payload || {}),
+  });
+  const text = await response.text();
+  let decoded = {};
+  if (text.trim().length > 0) {
+    decoded = JSON.parse(text);
+  }
+  if (!response.ok) {
+    throw new Error(decoded.message || `Bridge request failed: HTTP \${response.status}`);
+  }
+  return decoded;
+}
+
+function asToolContent(result) {
+  return [
+    {
+      type: "text",
+      text: JSON.stringify(result, null, 2),
+    },
+  ];
+}
+
+async function onRequest(message) {
+  const id = message.id ?? null;
+  const method = (message.method || "").trim();
+
+  if (method === "initialize") {
+    reply(id, {
+      protocolVersion: PROTOCOL_VERSION,
+      capabilities: {
+        tools: {
+          listChanged: false,
+        },
+      },
+      serverInfo: {
+        name: "openclaw-browser",
+        version: "1.0.0",
+      },
+      instructions:
+        "Use the OpenClaw browser tools for deterministic page navigation, clicking, typing, waiting, and extraction inside the in-app browser panel.",
+    });
+    return;
+  }
+
+  if (method === "notifications/initialized") {
+    return;
+  }
+
+  if (method === "ping") {
+    reply(id, {});
+    return;
+  }
+
+  if (method === "tools/list") {
+    reply(id, { tools: TOOL_DEFS });
+    return;
+  }
+
+  if (method === "tools/call") {
+    const params = message.params || {};
+    const toolName = (params.name || "").trim();
+    const action = TOOL_TO_ACTION[toolName];
+    if (!action) {
+      reply(id, {
+        content: asToolContent({
+          ok: false,
+          message: `Unsupported browser tool: \${toolName}`,
+        }),
+        isError: true,
+      });
+      return;
+    }
+    try {
+      const result = await callBridge(action, params.arguments || {});
+      reply(id, {
+        content: asToolContent(result),
+        structuredContent: result,
+        isError: result.ok === false,
+      });
+    } catch (error) {
+      const result = {
+        ok: false,
+        message: error instanceof Error ? error.message : String(error),
+      };
+      reply(id, {
+        content: asToolContent(result),
+        structuredContent: result,
+        isError: true,
+      });
+    }
+    return;
+  }
+
+  fail(id, -32601, `Method not found: \${method}`);
+}
+
+function parseHeaders(text) {
+  const headers = {};
+  for (const line of text.split("\\r\\n")) {
+    if (!line.trim()) continue;
+    const index = line.indexOf(":");
+    if (index <= 0) continue;
+    headers[line.slice(0, index).trim().toLowerCase()] = line
+      .slice(index + 1)
+      .trim();
+  }
+  return headers;
+}
+
+function pumpStdin() {
+  while (true) {
+    const headerEnd = stdinBuffer.indexOf(HEADER_DELIMITER);
+    if (headerEnd < 0) {
+      return;
+    }
+
+    const headerText = stdinBuffer.slice(0, headerEnd).toString("utf8");
+    const headers = parseHeaders(headerText);
+    const contentLength = Number.parseInt(headers["content-length"] || "", 10);
+    if (!Number.isFinite(contentLength) || contentLength < 0) {
+      fail(null, -32700, "Missing or invalid Content-Length in browser MCP adapter input");
+      stdinBuffer = Buffer.alloc(0);
+      return;
+    }
+
+    const frameStart = headerEnd + HEADER_DELIMITER.length;
+    const frameEnd = frameStart + contentLength;
+    if (stdinBuffer.length < frameEnd) {
+      return;
+    }
+
+    const payloadText = stdinBuffer.slice(frameStart, frameEnd).toString("utf8");
+    stdinBuffer = stdinBuffer.slice(frameEnd);
+
+    let message;
+    try {
+      message = JSON.parse(payloadText);
+    } catch (error) {
+      fail(null, -32700, "Invalid JSON received by browser MCP adapter", {
+        detail: error instanceof Error ? error.message : String(error),
+      });
+      continue;
+    }
+
+    onRequest(message).catch((error) => {
+      fail(message?.id ?? null, -32000, "Unhandled browser MCP adapter error", {
+        detail: error instanceof Error ? error.message : String(error),
+      });
+    });
+  }
+}
+
+process.stdin.on("data", (chunk) => {
+  const bufferChunk = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+  stdinBuffer = Buffer.concat([stdinBuffer, bufferChunk]);
+  pumpStdin();
+});
+
+process.stdin.on("end", () => {
+  process.exit(0);
+});
+''';
+  }
+
+  static String _buildBrowserSkill() {
+    return '''
+---
+name: browser-operator
+description: Control the OpenClaw in-app browser panel from Codex CLI using deterministic browser tools.
+---
+
+Use this skill when the user asks you to inspect a webpage, click through a flow, fill a web form, or extract page content from OpenClaw's in-app browser.
+
+Rules:
+1. Start with `browser_get_state` so you know whether the browser panel is attached.
+2. If the tool reports that the browser panel is unavailable, stop and tell the user to open the browser panel from the terminal screen.
+3. Prefer `browser_open`, `browser_wait_for_text`, `browser_list_interactables`, `browser_highlight`, `browser_click`, `browser_type`, and `browser_extract` over `browser_eval`.
+4. Use stable CSS selectors. Avoid fragile positional selectors unless there is no better choice.
+5. Before any action that could submit a form, log in, send a message, spend money, or change user data, ask for confirmation.
+6. After a navigation or form submit, wait with `browser_wait_for_text` before assuming the page is ready.
+7. When extracting content, keep the result focused. Use `selector` whenever possible instead of dumping the whole page.
+8. If the next selector is unclear, call `browser_list_interactables` or `browser_list_links` first and choose from the returned candidates.
+9. If a selector is risky, call `browser_highlight` before clicking so the user can visually confirm the target.
+
+Typical flow:
+1. `browser_open`
+2. `browser_wait_for_text`
+3. `browser_list_interactables`
+4. `browser_highlight`
+5. `browser_click` or `browser_type`
+6. `browser_capture_snapshot` or `browser_extract`
+7. Fall back to `browser_eval` only if the built-in actions are insufficient.
+''';
   }
 
   static String _trimTrailingSlash(String value) {
