@@ -397,7 +397,7 @@ jobs:
             echo "FTP secrets are missing. Skipping FTP upload."
             exit 0
           fi
-          REMOTE_DIR="${UPDATE_FTP_REMOTE_DIR:-openclaw}"
+          REMOTE_DIR="${UPDATE_FTP_REMOTE_DIR:-wwwroot/openclaw}"
           lftp -u "${UPDATE_FTP_USERNAME}","${UPDATE_FTP_PASSWORD}" "${FTP_HOST}" <<EOF
           set ssl:verify-certificate no
           set ftp:ssl-allow no
