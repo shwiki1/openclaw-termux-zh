@@ -168,7 +168,8 @@ jobs:
           if [ "$PUBSPEC_VERSION_CODE" = "$APP_VERSION" ] || [ -z "$PUBSPEC_VERSION_CODE" ]; then
             PUBSPEC_VERSION_CODE="1"
           fi
-          VERSION_CODE="${GITHUB_RUN_NUMBER:-$PUBSPEC_VERSION_CODE}"
+          GENERATED_VERSION_CODE="$(date -u +%s)"
+          VERSION_CODE="$GENERATED_VERSION_CODE"
           if [ "${VERSION_CODE}" -lt "${PUBSPEC_VERSION_CODE}" ]; then
             VERSION_CODE="${PUBSPEC_VERSION_CODE}"
           fi

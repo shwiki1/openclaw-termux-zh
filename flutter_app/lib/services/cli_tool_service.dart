@@ -4,6 +4,10 @@ import '../models/cli_tool.dart';
 import 'native_bridge.dart';
 
 class CliToolService {
+  static const _statusCacheTtl = Duration(seconds: 20);
+  static List<CliToolStatus> _statusCache = const [];
+  static DateTime? _statusCacheAt;
+
   static const shellTool = CliToolDefinition(
     id: 'shell',
     name: 'Ubuntu Shell',
@@ -466,7 +470,17 @@ echo ">>> QWEN_CODE_CLI_INSTALL_COMPLETE"
       r'''
 echo ">>> Installing Gemini CLI from npm..."
 install_cli_package gemini @google/gemini-cli gemini
-write_node_wrapper gemini gemini /opt/openclaw-cli/gemini/node_modules/@google/gemini-cli/bundle/gemini.js
+GEMINI_ENTRY="$(node -e 'const pkg=require("/opt/openclaw-cli/gemini/node_modules/@google/gemini-cli/package.json"); const entry=(pkg.bin && (typeof pkg.bin === "string" ? pkg.bin : pkg.bin.gemini)) || pkg.main || "dist/index.js"; process.stdout.write(entry);')"
+case "$GEMINI_ENTRY" in
+  /*) GEMINI_REAL="$GEMINI_ENTRY" ;;
+  *) GEMINI_REAL="/opt/openclaw-cli/gemini/node_modules/@google/gemini-cli/$GEMINI_ENTRY" ;;
+esac
+if [ ! -f "$GEMINI_REAL" ]; then
+  echo "Gemini CLI entrypoint not found: $GEMINI_REAL" >&2
+  find /opt/openclaw-cli/gemini/node_modules/@google/gemini-cli -maxdepth 3 -type f 2>/dev/null | sort >&2 || true
+  exit 1
+fi
+write_node_wrapper gemini gemini "$GEMINI_REAL"
 write_generic_agent gemini-openai-agent gemini generic-agent "Gemini OpenAI Agent"
 hash -r
 /usr/local/bin/gemini --version || true
@@ -491,20 +505,45 @@ hash -r
 echo ">>> GENERIC_AGENT_INSTALL_COMPLETE"
 ''';
 
-  static Future<List<CliToolStatus>> checkAllStatuses() async {
-    final statuses = <CliToolStatus>[];
-    for (final tool in allTools) {
-      statuses.add(await checkStatus(tool));
+  static List<CliToolStatus> get cachedStatuses =>
+      List<CliToolStatus>.unmodifiable(_statusCache);
+
+  static Future<List<CliToolStatus>> checkAllStatuses({
+    bool includeVersionDetails = true,
+    bool forceRefresh = false,
+  }) async {
+    if (!forceRefresh &&
+        includeVersionDetails &&
+        _statusCache.isNotEmpty &&
+        _statusCacheAt != null &&
+        DateTime.now().difference(_statusCacheAt!) <= _statusCacheTtl) {
+      return cachedStatuses;
     }
-    return statuses;
+
+    final statuses = await Future.wait(
+      allTools.map(
+        (tool) => checkStatus(
+          tool,
+          includeVersionDetails: includeVersionDetails,
+        ),
+      ),
+    );
+    final mergedStatuses = _mergeStatusesWithCache(statuses);
+    _statusCache = mergedStatuses;
+    _statusCacheAt = DateTime.now();
+    return List<CliToolStatus>.unmodifiable(mergedStatuses);
   }
 
-  static Future<CliToolStatus> checkStatus(CliToolDefinition tool) async {
+  static Future<CliToolStatus> checkStatus(
+    CliToolDefinition tool, {
+    bool includeVersionDetails = true,
+  }) async {
     if (tool.id == shellTool.id) {
-      return _checkShellStatus();
+      return _checkShellStatus(includeVersionDetails: includeVersionDetails);
     }
 
-    final command = '''
+    final command = includeVersionDetails
+        ? '''
 set +e
 set -o pipefail
 if command -v ${tool.executable} >/dev/null 2>&1; then
@@ -517,6 +556,14 @@ if command -v ${tool.executable} >/dev/null 2>&1; then
     echo "__OPENCLAW_CLI_BROKEN__"
     echo "\$version_output"
   fi
+else
+  echo "__OPENCLAW_CLI_NOT_INSTALLED__"
+fi
+'''
+        : '''
+set +e
+if command -v ${tool.executable} >/dev/null 2>&1; then
+  echo "__OPENCLAW_CLI_INSTALLED__"
 else
   echo "__OPENCLAW_CLI_NOT_INSTALLED__"
 fi
@@ -533,11 +580,12 @@ fi
       final broken = lines.contains('__OPENCLAW_CLI_BROKEN__');
       final markerIndex =
           lines.indexWhere((line) => line.startsWith('__OPENCLAW_CLI_'));
-      final version = installed
+      final cached = _cachedStatusFor(tool.id);
+      final version = installed && includeVersionDetails
           ? lines
               .skip(markerIndex + 1)
               .firstWhere((line) => !line.startsWith('__'), orElse: () => '')
-          : '';
+          : (cached?.version ?? '');
       final error = broken
           ? lines
               .skip(markerIndex + 1)
@@ -559,16 +607,19 @@ fi
     }
   }
 
-  static Future<CliToolStatus> _checkShellStatus() async {
+  static Future<CliToolStatus> _checkShellStatus({
+    bool includeVersionDetails = true,
+  }) async {
     try {
-      final output = await NativeBridge.runInProot(
-        'bash --version | head -n 1',
-        timeout: 20,
-      );
-      final version = output
-          .split('\n')
-          .map((line) => line.trim())
-          .firstWhere((line) => line.isNotEmpty, orElse: () => 'bash');
+      final version = includeVersionDetails
+          ? (await NativeBridge.runInProot(
+              'bash --version | head -n 1',
+              timeout: 20,
+            ))
+              .split('\n')
+              .map((line) => line.trim())
+              .firstWhere((line) => line.isNotEmpty, orElse: () => 'bash')
+          : (_cachedStatusFor(shellTool.id)?.version ?? 'bash');
       return CliToolStatus(
         tool: shellTool,
         installed: true,
@@ -584,4 +635,27 @@ fi
   }
 
   static Future<void> prepareInstallAssets(CliToolDefinition _) async {}
+
+  static CliToolStatus? _cachedStatusFor(String toolId) {
+    for (final status in _statusCache) {
+      if (status.tool.id == toolId) {
+        return status;
+      }
+    }
+    return null;
+  }
+
+  static List<CliToolStatus> _mergeStatusesWithCache(
+    List<CliToolStatus> statuses,
+  ) {
+    return statuses.map((status) {
+      final cached = _cachedStatusFor(status.tool.id);
+      return CliToolStatus(
+        tool: status.tool,
+        installed: status.installed,
+        version: status.version ?? cached?.version,
+        error: status.error,
+      );
+    }).toList(growable: false);
+  }
 }

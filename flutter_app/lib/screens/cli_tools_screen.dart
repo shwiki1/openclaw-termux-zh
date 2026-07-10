@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../app.dart';
@@ -24,20 +26,34 @@ class _CliToolsScreenState extends State<CliToolsScreen> {
   @override
   void initState() {
     super.initState();
-    _refresh();
+    final cachedStatuses = CliToolService.cachedStatuses;
+    if (cachedStatuses.isNotEmpty) {
+      _statuses = cachedStatuses;
+      _loading = false;
+      unawaited(
+        _refresh(
+          showLoader: false,
+          forceStatusRefresh: true,
+        ),
+      );
+      return;
+    }
+    unawaited(_refresh());
   }
 
-  Future<void> _refresh() async {
-    if (mounted) {
+  Future<void> _refresh({
+    bool showLoader = true,
+    bool forceStatusRefresh = true,
+  }) async {
+    if (mounted && showLoader) {
       setState(() => _loading = true);
     }
-    try {
-      await CliApiConfigService.regenerateRuntimeFiles();
-    } catch (_) {
-      // The Ubuntu rootfs may not exist yet; status checks below surface that.
-    }
-    final statuses = await CliToolService.checkAllStatuses();
-    final sharedProfiles = await CliApiConfigService.loadSharedProfiles();
+    final results = await Future.wait<dynamic>([
+      CliToolService.checkAllStatuses(forceRefresh: forceStatusRefresh),
+      CliApiConfigService.loadSharedProfiles(),
+    ]);
+    final statuses = results[0] as List<CliToolStatus>;
+    final sharedProfiles = results[1] as List<CliApiConfig>;
     if (!mounted) return;
     setState(() {
       _statuses = statuses;
@@ -65,7 +81,12 @@ class _CliToolsScreenState extends State<CliToolsScreen> {
       ),
     );
     if (mounted) {
-      await _refresh();
+      unawaited(
+        _refresh(
+          showLoader: false,
+          forceStatusRefresh: true,
+        ),
+      );
     }
   }
 
@@ -88,21 +109,21 @@ class _CliToolsScreenState extends State<CliToolsScreen> {
       ),
     );
     if (mounted) {
-      await _refresh();
+      await _refresh(forceStatusRefresh: true);
     }
   }
 
   Future<void> _configureTool(CliToolDefinition tool) async {
     final saved = await CliApiConfigDialog.show(context, tool: tool);
     if (saved && mounted) {
-      await _refresh();
+      await _refresh(showLoader: false, forceStatusRefresh: true);
     }
   }
 
   Future<void> _manageSharedApis() async {
     final saved = await CliApiProfilesDialog.show(context);
     if (saved && mounted) {
-      await _refresh();
+      await _refresh(showLoader: false, forceStatusRefresh: true);
     }
   }
 
@@ -117,14 +138,14 @@ class _CliToolsScreenState extends State<CliToolsScreen> {
           IconButton(
             icon: const Icon(Icons.refresh),
             tooltip: 'Refresh',
-            onPressed: _loading ? null : _refresh,
+            onPressed: _loading ? null : () => _refresh(forceStatusRefresh: true),
           ),
         ],
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
-              onRefresh: _refresh,
+              onRefresh: () => _refresh(showLoader: false, forceStatusRefresh: true),
               child: ListView(
                 padding: const EdgeInsets.all(16),
                 children: [

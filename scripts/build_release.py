@@ -9,6 +9,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 
@@ -50,6 +51,14 @@ def next_build_number(value: str) -> str:
         return str(int(value) + 1)
     except ValueError:
         return value
+
+
+def default_build_number(value: str) -> str:
+    try:
+        pubspec_build = int(value)
+    except ValueError:
+        return next_build_number(value)
+    return str(max(pubspec_build + 1, int(time.time())))
 
 
 def normalize_version(value: str) -> str:
@@ -264,7 +273,7 @@ def collect_artifacts(version: str, build_number: str, output_dir: Path) -> list
     apk_root = FLUTTER_DIR / "build" / "app" / "outputs" / "flutter-apk"
 
     arm64_source = apk_root / ARM64_APK
-    arm64_target = output_dir / f"OpenClaw-v{version}+{build_number}-arm64-v8a.apk"
+    arm64_target = output_dir / f"OpenClaw-v{version}-{build_number}-arm64-v8a.apk"
     copy_if_exists(arm64_source, arm64_target, copied_files)
 
     doc_source = DOCS_DIR / f"release-v{version}.zh.md"
@@ -309,7 +318,7 @@ def main() -> int:
 
     pubspec_version, pubspec_build_number = read_pubspec_version()
     default_version = normalize_version(pubspec_version)
-    default_build_number = next_build_number(pubspec_build_number)
+    default_build_number_value = default_build_number(pubspec_build_number)
 
     current_version_text = f"{pubspec_version}+{pubspec_build_number}"
 
@@ -322,8 +331,8 @@ def main() -> int:
         )
     )
     build_number = args.build_number or ask(
-        f"请输入构建号（当前 pubspec 构建号: {pubspec_build_number}，默认自动 +1）",
-        default_build_number,
+        f"请输入构建号（当前 pubspec 构建号: {pubspec_build_number}，默认自动递增）",
+        default_build_number_value,
         args.non_interactive,
     )
 

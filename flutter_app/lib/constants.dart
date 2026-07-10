@@ -3,7 +3,7 @@ class AppConstants {
   static const String version =
       String.fromEnvironment('APP_VERSION_NAME', defaultValue: '2.0.48');
   static const String buildNumber =
-      String.fromEnvironment('APP_VERSION_CODE', defaultValue: '124');
+      String.fromEnvironment('APP_VERSION_CODE', defaultValue: '1');
   static const String fullVersion = '$version+$buildNumber';
   static const String packageName = 'com.agent.cyx';
 

@@ -32,6 +32,14 @@ VERSION_CODE="${APP_VERSION#*+}"
 if [ "$VERSION_CODE" = "$APP_VERSION" ] || [ -z "$VERSION_CODE" ]; then
     VERSION_CODE=1
 fi
+if [ -n "${BUILD_VERSION_CODE:-}" ]; then
+    VERSION_CODE="$BUILD_VERSION_CODE"
+else
+    GENERATED_VERSION_CODE="$(date -u +%s)"
+    if [ "$GENERATED_VERSION_CODE" -gt "$VERSION_CODE" ]; then
+        VERSION_CODE="$GENERATED_VERSION_CODE"
+    fi
+fi
 flutter build apk --release \
     --split-per-abi \
     --target-platform android-arm64 \
