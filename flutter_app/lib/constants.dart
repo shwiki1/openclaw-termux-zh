@@ -16,7 +16,7 @@ class AppConstants {
       'https://github.com/JunWan666/openclaw-termux-zh';
   static const String license = 'MIT';
 
-  static const String appUpdateBaseUrl = 'https://api.lziyu.cn/openclaw';
+  static const String appUpdateBaseUrl = 'http://api.lziyu.cn/openclaw';
   static const String appUpdateManifestUrl = '$appUpdateBaseUrl/latest.json';
 
   // NextGenX

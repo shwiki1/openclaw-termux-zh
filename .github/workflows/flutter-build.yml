@@ -349,7 +349,7 @@ jobs:
           VERSION_CODE="${{ steps.collect.outputs.version_code }}"
           APK_PATH="$(find artifacts -maxdepth 1 -type f -name '*.apk' | head -n 1)"
           APK_FILE="$(basename "$APK_PATH")"
-          BASE_URL="https://api.lziyu.cn/openclaw"
+          BASE_URL="http://api.lziyu.cn/openclaw"
           export VERSION VERSION_CODE APK_FILE BASE_URL
           python3 - <<'PY'
           import json
@@ -381,7 +381,7 @@ jobs:
         env:
           VERSION: ${{ steps.collect.outputs.version }}
           VERSION_CODE: ${{ steps.collect.outputs.version_code }}
-          BASE_URL: https://api.lziyu.cn/openclaw
+          BASE_URL: http://api.lziyu.cn/openclaw
 
       - name: Upload update package to FTP
         if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
