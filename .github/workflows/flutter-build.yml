@@ -399,16 +399,23 @@ jobs:
             exit 0
           fi
           REMOTE_DIR="${UPDATE_FTP_REMOTE_DIR:-wwwroot/openclaw}"
-          lftp -u "${UPDATE_FTP_USERNAME}","${UPDATE_FTP_PASSWORD}" "${FTP_HOST}" <<EOF
+          if ! timeout 180 lftp -u "${UPDATE_FTP_USERNAME}","${UPDATE_FTP_PASSWORD}" "${FTP_HOST}" <<EOF
           set ssl:verify-certificate no
           set ftp:ssl-allow no
           set net:max-retries 2
+          set net:timeout 20
+          set net:reconnect-interval-base 5
+          set net:reconnect-interval-max 15
+          set xfer:clobber true
           mkdir -p ${REMOTE_DIR}
           cd ${REMOTE_DIR}
           mput -O . artifacts/*.apk
           put -O . artifacts/latest.json
           bye
           EOF
+          then
+            echo "FTP upload failed or timed out after 180 seconds; keeping GitHub artifact as the primary output."
+          fi
 
       - name: Comment on PR
         if: github.event_name == 'pull_request'
