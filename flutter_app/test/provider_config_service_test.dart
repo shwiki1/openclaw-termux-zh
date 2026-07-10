@@ -101,14 +101,21 @@ void main() {
       expect(preset.thinkingLevel, 'high');
       expect(localProvider.containsKey('alias'), isFalse);
       expect(
-        ((localProvider['models'] as List).first as Map<String, dynamic>)[
-            'thinking'],
-        'high',
+        ((localProvider['models'] as List).first as Map<String, dynamic>)
+            .containsKey('thinking'),
+        isFalse,
       );
       expect(
         ((savedConfig['agents'] as Map<String, dynamic>)['defaults']
             as Map<String, dynamic>)['model'] as Map<String, dynamic>,
         containsPair('primary', 'local-llama-cpp/qwen2-0.5b-local'),
+      );
+      expect(
+        (((savedConfig['agents'] as Map<String, dynamic>)['defaults']
+                    as Map<String, dynamic>)['models']
+                as Map<String, dynamic>)['local-llama-cpp/qwen2-0.5b-local']
+            as Map<String, dynamic>,
+        containsPair('params', containsPair('thinking', 'high')),
       );
       expect(
         (localProvider['baseUrl'] as String),
@@ -284,6 +291,52 @@ void main() {
 
       expect(firstModel['id'], 'agnes-2.0-flash');
       expect(firstModel['name'], 'agnes-2.0-flash');
+    });
+
+    test('repairGatewayStartupConfigIfNeeded migrates legacy model thinking',
+        () async {
+      rootfsFiles[configPath] = jsonEncode(<String, dynamic>{
+        'agents': {
+          'defaults': {
+            'model': {
+              'primary': 'custom-openai/agnes-2.0-flash',
+            },
+            'models': <String, dynamic>{},
+          },
+        },
+        'models': {
+          'providers': {
+            'custom-openai': {
+              'baseUrl': 'https://api.example.com/v1',
+              'api': 'openai-completions',
+              'apiKey': 'sk-test',
+              'models': [
+                {
+                  'id': 'agnes-2.0-flash',
+                  'name': 'agnes-2.0-flash',
+                  'thinking': 'medium',
+                },
+              ],
+            },
+          },
+        },
+      });
+
+      await ProviderConfigService.repairGatewayStartupConfigIfNeeded();
+
+      final savedConfig =
+          jsonDecode(rootfsFiles[configPath]!) as Map<String, dynamic>;
+      final customOpenai = ((((savedConfig['models'] as Map<String, dynamic>)[
+                  'providers'] as Map<String, dynamic>)['custom-openai']
+              as Map<String, dynamic>)['models'] as List)
+          .first as Map<String, dynamic>;
+      final enabledModel = ((((savedConfig['agents'] as Map<String, dynamic>)[
+                  'defaults'] as Map<String, dynamic>)['models']
+              as Map<String, dynamic>)['custom-openai/agnes-2.0-flash']
+          as Map<String, dynamic>);
+
+      expect(customOpenai.containsKey('thinking'), isFalse);
+      expect(enabledModel, containsPair('params', containsPair('thinking', 'medium')));
     });
   });
 

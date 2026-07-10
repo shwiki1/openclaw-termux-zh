@@ -320,7 +320,7 @@ jobs:
           mkdir -p artifacts
 
           cp flutter_app/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk \
-            "artifacts/OpenClaw-v${VERSION}+${VERSION_CODE}-arm64-v8a.apk"
+            "artifacts/OpenClaw-v${VERSION}-${VERSION_CODE}-arm64-v8a.apk"
 
           echo "### Build Artifacts" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
@@ -427,7 +427,7 @@ jobs:
               ``,
               `| Architecture | Download |`,
               `|---|---|`,
-              `| arm64-v8a | [OpenClaw-v${version}+${versionCode}-arm64-v8a.apk](${runUrl}#artifacts) |`,
+              `| arm64-v8a | [OpenClaw-v${version}-${versionCode}-arm64-v8a.apk](${runUrl}#artifacts) |`,
               ``,
               `> Download from [**Actions Artifacts**](${runUrl}#artifacts)`,
               ``,

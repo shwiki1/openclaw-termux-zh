@@ -493,14 +493,14 @@ class ProviderConfigService {
         _isNonEmptyString(displayName) ? displayName!.trim() : normalizedId;
 
     final normalizedThinkingLevel = _normalizeThinkingLevel(thinkingLevel);
-    if (normalizedThinkingLevel != null) {
-      entry['thinking'] = normalizedThinkingLevel;
-    } else if (entry.containsKey('thinking') &&
-        _normalizeThinkingLevel(entry['thinking']) == null) {
-      entry.remove('thinking');
+    if (normalizedThinkingLevel != null &&
+        normalizedThinkingLevel != 'off' &&
+        entry['reasoning'] != true) {
+      entry['reasoning'] = true;
     }
 
     for (final legacyKey in const [
+      'thinking',
       'effort',
       'reasoning_effort',
       'thought_level',
@@ -859,6 +859,7 @@ class ProviderConfigService {
     final thinkingLevel = _normalizeThinkingLevel(
           _customPresetMetadataThinkingLevel(presetMetadata, providerId),
         ) ??
+        _extractThinkingLevelFromAllowListEntry(allowListEntry) ??
         _extractThinkingLevel(providerConfig);
 
     return CustomProviderPreset(
@@ -896,6 +897,67 @@ class ProviderConfigService {
       allowList[modelRef] = existingEntry;
     }
     return removedAlias;
+  }
+
+  static String? _extractThinkingLevelFromAllowListEntry(dynamic value) {
+    if (value is! Map) {
+      return null;
+    }
+    final params = _asStringKeyedMap(value['params']);
+    final normalized = _normalizeThinkingLevel(params['thinking']);
+    if (normalized != null) {
+      return normalized;
+    }
+    return _normalizeThinkingLevel(value['thinking']);
+  }
+
+  static bool _setModelThinkingInAllowList(
+    Map<String, dynamic> config, {
+    required String modelRef,
+    required String? thinkingLevel,
+  }) {
+    final defaults = _ensureDefaultsSection(config);
+    final allowList = _asStringKeyedMap(defaults['models']);
+    defaults['models'] = allowList;
+
+    final entry = _asStringKeyedMap(allowList[modelRef]);
+    allowList[modelRef] = entry;
+    final params = _asStringKeyedMap(entry['params']);
+    final normalized = _normalizeThinkingLevel(thinkingLevel);
+    final current = _normalizeThinkingLevel(params['thinking']);
+    var changed = false;
+
+    if (entry.remove('thinking') != null) {
+      changed = true;
+    }
+
+    if (normalized == current) {
+      if (params.isNotEmpty) {
+        entry['params'] = params;
+      } else {
+        entry.remove('params');
+      }
+      allowList[modelRef] = entry;
+      return changed;
+    }
+
+    if (normalized == null) {
+      if (params.remove('thinking') != null) {
+        changed = true;
+      }
+      if (params.isNotEmpty) {
+        entry['params'] = params;
+      } else {
+        entry.remove('params');
+      }
+      allowList[modelRef] = entry;
+      return true;
+    }
+
+    params['thinking'] = normalized;
+    entry['params'] = params;
+    allowList[modelRef] = entry;
+    return true;
   }
 
   static Future<void> migrateCustomProviderConfigIfNeeded() async {
@@ -954,6 +1016,14 @@ class ProviderConfigService {
         }
 
         if (_clearLegacyAliasInAllowList(config, modelRef: normalizedPrimary)) {
+          configChanged = true;
+        }
+
+        if (_setModelThinkingInAllowList(
+          config,
+          modelRef: normalizedPrimary,
+          thinkingLevel: preset.thinkingLevel,
+        )) {
           configChanged = true;
         }
 
@@ -1235,9 +1305,15 @@ class ProviderConfigService {
         previousProviderId != resolvedProviderId) {
       providers.remove(previousProviderId);
       if (_isNonEmptyString(previousModelId)) {
+        final previousModelRef = '$previousProviderId/${previousModelId!.trim()}';
         _clearLegacyAliasInAllowList(
           config,
-          modelRef: '$previousProviderId/${previousModelId!.trim()}',
+          modelRef: previousModelRef,
+        );
+        _setModelThinkingInAllowList(
+          config,
+          modelRef: previousModelRef,
+          thinkingLevel: null,
         );
       }
       _removeCustomPresetMetadataEntry(
@@ -1246,9 +1322,15 @@ class ProviderConfigService {
       );
     } else if (_isNonEmptyString(previousModelId) &&
         previousModelId != trimmedModelId) {
+      final previousModelRef = '$resolvedProviderId/${previousModelId!.trim()}';
       _clearLegacyAliasInAllowList(
         config,
-        modelRef: '$resolvedProviderId/${previousModelId!.trim()}',
+        modelRef: previousModelRef,
+      );
+      _setModelThinkingInAllowList(
+        config,
+        modelRef: previousModelRef,
+        thinkingLevel: null,
       );
     }
 
@@ -1264,6 +1346,11 @@ class ProviderConfigService {
     final modelRef = '$resolvedProviderId/$trimmedModelId';
     _ensureDefaultModelSection(config)['primary'] = modelRef;
     _ensureModelEnabled(config, modelRef: modelRef);
+    _setModelThinkingInAllowList(
+      config,
+      modelRef: modelRef,
+      thinkingLevel: thinkingLevel,
+    );
     _clearLegacyAliasInAllowList(config, modelRef: modelRef);
     _setCustomPresetAlias(
       presetMetadata,
@@ -1345,6 +1432,11 @@ class ProviderConfigService {
     if (_isNonEmptyString(modelId)) {
       final modelRef = '$providerId/${modelId!.trim()}';
       _clearLegacyAliasInAllowList(config, modelRef: modelRef);
+      _setModelThinkingInAllowList(
+        config,
+        modelRef: modelRef,
+        thinkingLevel: null,
+      );
 
       final activeModel = _readActiveModel(config);
       if (activeModel == modelRef || activeModel == modelId) {
