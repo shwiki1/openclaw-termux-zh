@@ -648,7 +648,7 @@ class _TerminalBrowserPanelState extends State<TerminalBrowserPanel>
     if (window.CSS && typeof window.CSS.escape === 'function') {
       return window.CSS.escape(value);
     }
-    return String(value).replace(/["\\\\]/g, '\\\\$&');
+    return String(value).replace(/["\\\\]/g, '\\\\\\$&');
   };
   const selectorFor = (el) => {
     if (el.id) return `#\${cssEscape(el.id)}`;
