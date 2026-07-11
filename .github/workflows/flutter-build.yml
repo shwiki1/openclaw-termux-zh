@@ -65,7 +65,7 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends binutils curl gzip lftp qemu-user-static unzip xz-utils zstd
+          sudo apt-get install -y --no-install-recommends binutils curl gzip qemu-user-static unzip xz-utils zstd
 
       - name: Restore bundled OpenClaw rootfs
         id: restore_rootfs
@@ -344,115 +344,6 @@ jobs:
           name: openclaw-apks
           path: artifacts/*.apk
           retention-days: 30
-
-      - name: Build update manifest
-        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
-        run: |
-          set -euo pipefail
-          VERSION="${{ steps.collect.outputs.version }}"
-          VERSION_CODE="${{ steps.collect.outputs.version_code }}"
-          APK_PATH="$(find artifacts -maxdepth 1 -type f -name '*.apk' | head -n 1)"
-          APK_FILE="$(basename "$APK_PATH")"
-          BASE_URL="http://api.lziyu.cn/openclaw"
-          export VERSION VERSION_CODE APK_FILE BASE_URL
-          python3 - <<'PY'
-          import json
-          import os
-          from pathlib import Path
-
-          version = os.environ["VERSION"]
-          version_code = int(os.environ["VERSION_CODE"])
-          apk_file = os.environ["APK_FILE"]
-          base_url = os.environ["BASE_URL"].rstrip("/")
-          manifest = {
-              "version": version,
-              "buildNumber": version_code,
-              "fileName": apk_file,
-              "url": f"{base_url}/{apk_file}",
-              "pageUrl": base_url,
-              "assets": [
-                  {
-                      "name": apk_file,
-                      "downloadUrl": f"{base_url}/{apk_file}",
-                  }
-              ],
-          }
-          Path("artifacts/latest.json").write_text(
-              json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
-              encoding="utf-8",
-          )
-          PY
-        env:
-          VERSION: ${{ steps.collect.outputs.version }}
-          VERSION_CODE: ${{ steps.collect.outputs.version_code }}
-          BASE_URL: http://api.lziyu.cn/openclaw
-
-      - name: Upload update package to FTP
-        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
-        env:
-          UPDATE_FTP_HOST: ${{ secrets.UPDATE_FTP_HOST }}
-          UPDATE_FTP_USERNAME: ${{ secrets.UPDATE_FTP_USERNAME }}
-          UPDATE_FTP_PASSWORD: ${{ secrets.UPDATE_FTP_PASSWORD }}
-          UPDATE_FTP_REMOTE_DIR: ${{ secrets.UPDATE_FTP_REMOTE_DIR }}
-        run: |
-          set -euo pipefail
-          FTP_HOST="${UPDATE_FTP_HOST:-dns025.idc-icp.com}"
-          if [ -z "${UPDATE_FTP_USERNAME:-}" ] || [ -z "${UPDATE_FTP_PASSWORD:-}" ]; then
-            echo "FTP secrets are missing. Skipping FTP upload."
-            exit 0
-          fi
-          REMOTE_DIR="${UPDATE_FTP_REMOTE_DIR:-wwwroot/openclaw}"
-          APK_FILE="$(find artifacts -maxdepth 1 -type f -name '*.apk' -printf '%f\n' | head -n 1)"
-          if [ -z "${APK_FILE}" ] || [ ! -s "artifacts/${APK_FILE}" ]; then
-            echo "ERROR: APK artifact is missing before FTP upload."
-            exit 1
-          fi
-          test -s artifacts/latest.json
-          echo "Uploading ${APK_FILE} to ${FTP_HOST}/${REMOTE_DIR}"
-          if ! timeout 1200 lftp -u "${UPDATE_FTP_USERNAME}","${UPDATE_FTP_PASSWORD}" "${FTP_HOST}" <<EOF
-          set ssl:verify-certificate no
-          set ftp:ssl-allow no
-          set cmd:fail-exit true
-          set net:max-retries 5
-          set net:timeout 60
-          set net:reconnect-interval-base 5
-          set net:reconnect-interval-max 30
-          set xfer:clobber true
-          set xfer:verify true
-          mkdir -pf ${REMOTE_DIR}
-          cd ${REMOTE_DIR}
-          glob -a rm *.apk
-          put -O . artifacts/${APK_FILE}
-          put -O . artifacts/latest.json
-          cls -l
-          bye
-          EOF
-          then
-            echo "ERROR: FTP upload failed or timed out after 1200 seconds."
-            exit 1
-          fi
-
-          curl --fail --location --retry 3 --retry-delay 5 \
-            "http://api.lziyu.cn/openclaw/latest.json" \
-            --output /tmp/latest.json
-          python3 - <<'PY'
-          import json
-          from pathlib import Path
-
-          local = json.loads(Path("artifacts/latest.json").read_text(encoding="utf-8"))
-          remote = json.loads(Path("/tmp/latest.json").read_text(encoding="utf-8"))
-          if local.get("buildNumber") != remote.get("buildNumber"):
-              raise SystemExit(
-                  f"remote latest.json buildNumber mismatch: "
-                  f"{remote.get('buildNumber')} != {local.get('buildNumber')}"
-              )
-          if local.get("fileName") != remote.get("fileName"):
-              raise SystemExit(
-                  f"remote latest.json fileName mismatch: "
-                  f"{remote.get('fileName')} != {local.get('fileName')}"
-              )
-          print("Remote latest.json verified.")
-          PY
 
       - name: Comment on PR
         if: github.event_name == 'pull_request'
