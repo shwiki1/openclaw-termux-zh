@@ -1,4 +1,5 @@
 import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -111,7 +112,9 @@ class _SettingsScreenState extends State<SettingsScreen>
         final versionName = appPackageInfo['versionName']?.toString().trim();
         _appVersionName =
             versionName != null && versionName.isNotEmpty
-                ? versionName
+                ? (appPackageInfo['versionCode'] != null
+                    ? '$versionName (${appPackageInfo['versionCode']})'
+                    : versionName)
                 : AppConstants.displayVersion;
         _status = status;
         _goInstalled = goInstalled;

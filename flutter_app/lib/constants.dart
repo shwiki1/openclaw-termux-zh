@@ -5,7 +5,8 @@ class AppConstants {
   static const String buildNumber =
       String.fromEnvironment('APP_VERSION_CODE', defaultValue: '1');
   static const String fullVersion = '$version+$buildNumber';
-  static const String displayVersion = version;
+  static const String displayVersion =
+      buildNumber == '1' ? version : '$version ($buildNumber)';
   static const String packageName = 'com.agent.cyx';
 
   /// Matches ANSI escape sequences (e.g. color codes in terminal output).

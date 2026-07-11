@@ -49,6 +49,11 @@ class _CliToolsScreenState extends State<CliToolsScreen> {
     if (mounted && showLoader) {
       setState(() => _loading = true);
     }
+    try {
+      await CliApiConfigService.regenerateRuntimeFiles();
+    } catch (_) {
+      // Status probing should still proceed when the rootfs is not ready yet.
+    }
     final results = await Future.wait<dynamic>([
       CliToolService.checkAllStatuses(forceRefresh: forceStatusRefresh),
       CliApiConfigService.loadSharedProfiles(),

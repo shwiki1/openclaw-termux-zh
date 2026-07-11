@@ -35,10 +35,7 @@ fi
 if [ -n "${BUILD_VERSION_CODE:-}" ]; then
     VERSION_CODE="$BUILD_VERSION_CODE"
 else
-    GENERATED_VERSION_CODE="$(date -u +%s)"
-    if [ "$GENERATED_VERSION_CODE" -gt "$VERSION_CODE" ]; then
-        VERSION_CODE="$GENERATED_VERSION_CODE"
-    fi
+    VERSION_CODE="$((VERSION_CODE + 1))"
 fi
 flutter build apk --release \
     --split-per-abi \

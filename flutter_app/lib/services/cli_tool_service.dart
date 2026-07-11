@@ -8,6 +8,18 @@ class CliToolService {
   static const _statusCacheTtl = Duration(seconds: 20);
   static List<CliToolStatus> _statusCache = const [];
   static DateTime? _statusCacheAt;
+  static const _codexVersionCommand =
+      r'''node -e "process.stdout.write(require('/opt/openclaw-cli/codex/node_modules/@openai/codex/package.json').version)"''';
+  static const _codeBuddyVersionCommand =
+      r'''node -e "process.stdout.write(require('/opt/openclaw-cli/codebuddy/node_modules/@tencent-ai/codebuddy-code/package.json').version)"''';
+  static const _qwenVersionCommand =
+      r'''node -e "process.stdout.write(require('/opt/openclaw-cli/qwen-code/node_modules/@qwen-code/qwen-code/package.json').version)"''';
+  static const _geminiVersionCommand =
+      r'''node -e "process.stdout.write(require('/opt/openclaw-cli/gemini/node_modules/@google/gemini-cli/package.json').version)"''';
+  static const _genericVersionCommand =
+      r'''node -e "process.stdout.write(require('/opt/openclaw-cli/generic-agent/node_modules/@gen-cli/gen-cli/package.json').version)"''';
+  static const _hermesVersionCommand =
+      r'''/opt/openclaw-cli/hermes-agent/venv/bin/python -c "import importlib.metadata as m; print(m.version('hermes-agent'), end='')"''';
 
   static const shellTool = CliToolDefinition(
     id: 'shell',
@@ -37,7 +49,7 @@ exec bash -li
     color: Colors.green,
     installCommand: _codexInstallCommand,
     launchCommand: 'exec /usr/local/bin/codex --openclaw-cli-mode',
-    versionCommand: '/usr/local/bin/codex --version',
+    versionCommand: _codexVersionCommand,
   );
 
   static const codeBuddyTool = CliToolDefinition(
@@ -50,7 +62,7 @@ exec bash -li
     color: Colors.lightBlue,
     installCommand: _codeBuddyInstallCommand,
     launchCommand: 'exec /usr/local/bin/codebuddy',
-    versionCommand: '/usr/local/bin/codebuddy --version',
+    versionCommand: _codeBuddyVersionCommand,
   );
 
   static const qwenTool = CliToolDefinition(
@@ -63,7 +75,7 @@ exec bash -li
     color: Colors.orange,
     installCommand: _qwenInstallCommand,
     launchCommand: 'exec /usr/local/bin/qwen',
-    versionCommand: '/usr/local/bin/qwen --version',
+    versionCommand: _qwenVersionCommand,
   );
 
   static const hermesTool = CliToolDefinition(
@@ -76,7 +88,7 @@ exec bash -li
     color: Colors.amber,
     installCommand: _hermesInstallCommand,
     launchCommand: 'exec /usr/local/bin/hermes',
-    versionCommand: '/usr/local/bin/hermes --version',
+    versionCommand: _hermesVersionCommand,
   );
 
   static const genericTool = CliToolDefinition(
@@ -89,7 +101,7 @@ exec bash -li
     color: Colors.teal,
     installCommand: _genericInstallCommand,
     launchCommand: 'exec /usr/local/bin/generic-agent',
-    versionCommand: '/usr/local/bin/generic-agent --version',
+    versionCommand: _genericVersionCommand,
   );
 
   static const geminiTool = CliToolDefinition(
@@ -102,7 +114,7 @@ exec bash -li
     color: Colors.indigo,
     installCommand: _geminiInstallCommand,
     launchCommand: 'exec /usr/local/bin/gemini',
-    versionCommand: '/usr/local/bin/gemini --version',
+    versionCommand: _geminiVersionCommand,
   );
 
   static const allTools = [
@@ -117,6 +129,12 @@ exec bash -li
 
   static const _commonInstallPrefix = r'''
 set -eu
+export HOME=/root
+export USER=root
+export LOGNAME=root
+export XDG_CONFIG_HOME=/root/.config
+export CODEX_HOME=/root/.codex
+export GEMINI_CONFIG_DIR=/root/.gemini
 export npm_config_audit=false
 export npm_config_fund=false
 export npm_config_progress=false
@@ -145,10 +163,10 @@ if [ "$(uname -m)" != "aarch64" ] && [ "$(uname -m)" != "arm64" ]; then
 fi
 
 export PIP_DISABLE_PIP_VERSION_CHECK=1
-export PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
-export PIP_TRUSTED_HOST=pypi.tuna.tsinghua.edu.cn
+export PIP_INDEX_URL=https://mirrors.aliyun.com/pypi/simple/
+export PIP_TRUSTED_HOST=mirrors.aliyun.com
 
-mkdir -p /root/.openclaw /root/.npm /tmp/npm-cache /tmp/npm-tmp /opt/openclaw-cli /usr/local/bin /usr/local/lib /root/.gen-cli
+mkdir -p /root/.openclaw /root/.openclaw/bin /root/.npm /tmp/npm-cache /tmp/npm-tmp /opt/openclaw-cli /usr/local/bin /usr/local/lib /root/.gen-cli
 npm config set audit false --global >/dev/null 2>&1 || true
 npm config set fund false --global >/dev/null 2>&1 || true
 npm config set update-notifier false --global >/dev/null 2>&1 || true
@@ -164,6 +182,32 @@ ensure_cli_workspace() {
     "${OPENCLAW_CLI_WORKSPACE:-/root/openclaw-cli-workspace}/.gen-cli" \
     "${OPENCLAW_CLI_WORKSPACE:-/root/openclaw-cli-workspace}/.agents/skills" \
     2>/dev/null || true
+}
+
+python_pip_mirror_candidates() {
+  printf '%s\n' \
+    https://mirrors.aliyun.com/pypi/simple/ \
+    https://mirrors.cloud.tencent.com/pypi/simple/ \
+    https://pypi.tuna.tsinghua.edu.cn/simple/ \
+    https://pypi.org/simple
+}
+
+pip_install_with_fallback() {
+  py_bin="$1"
+  shift
+  for mirror in $(python_pip_mirror_candidates); do
+    host="$(echo "$mirror" | awk -F/ '{print $3}')"
+    echo ">>> Trying PyPI mirror: $mirror"
+    if "$py_bin" -m pip install \
+      --disable-pip-version-check \
+      --no-cache-dir \
+      --index-url "$mirror" \
+      --trusted-host "$host" \
+      "$@"; then
+      return 0
+    fi
+  done
+  return 1
 }
 
 ubuntu_apt_mirror_candidates() {
@@ -284,6 +328,12 @@ OPENCLAW_TERMINAL_THEME
 
 write_wrapper_header() {
   cat <<'OPENCLAW_WRAPPER_HEADER'
+export HOME="${HOME:-/root}"
+export USER="${USER:-root}"
+export LOGNAME="${LOGNAME:-root}"
+export XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-/root/.config}"
+export CODEX_HOME="${CODEX_HOME:-/root/.codex}"
+export GEMINI_CONFIG_DIR="${GEMINI_CONFIG_DIR:-/root/.gemini}"
 export NODE_OPTIONS="${NODE_OPTIONS:---require /root/.openclaw/bionic-bypass.js}"
 export NODE_EXTRA_CA_CERTS="${NODE_EXTRA_CA_CERTS:-/etc/ssl/certs/ca-certificates.crt}"
 export TMPDIR="${TMPDIR:-/tmp}"
@@ -327,15 +377,12 @@ case "$target" in
     fi
     ;;
   gemini)
-    if [ "\$openclaw_skip_model_injection" != true ] && [ "\${OPENCLAW_API_PROTOCOL:-gemini}" != "gemini" ]; then
-      if [ -x /usr/local/bin/gemini-openai-agent ]; then
-        exec /usr/local/bin/gemini-openai-agent "\$@"
+    if [ "\$openclaw_skip_model_injection" != true ]; then
+      if [ -n "\${OPENCLAW_GEMINI_MODEL_ALIAS:-}" ]; then
+        set -- --model "\$OPENCLAW_GEMINI_MODEL_ALIAS" "\$@"
+      elif [ -n "\${OPENCLAW_MODEL:-}" ]; then
+        set -- --model "\$OPENCLAW_MODEL" "\$@"
       fi
-      echo "Gemini CLI only supports Gemini protocol directly. Reinstall Gemini CLI to enable the OpenAI-compatible fallback agent, or switch this tool's API protocol to Gemini." >&2
-      exit 2
-    fi
-    if [ "\$openclaw_skip_model_injection" != true ] && [ -n "\${OPENCLAW_MODEL:-}" ]; then
-      set -- --model "\$OPENCLAW_MODEL" "\$@"
     fi
     ;;
 esac
@@ -525,6 +572,12 @@ echo ">>> Installing OpenAI Codex CLI from npm..."
 install_cli_package codex @openai/codex codex
 cat > /usr/local/bin/codex <<'OPENCLAW_CODEX_WRAPPER'
 #!/bin/sh
+export HOME="${HOME:-/root}"
+export USER="${USER:-root}"
+export LOGNAME="${LOGNAME:-root}"
+export XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-/root/.config}"
+export CODEX_HOME="${CODEX_HOME:-/root/.codex}"
+export GEMINI_CONFIG_DIR="${GEMINI_CONFIG_DIR:-/root/.gemini}"
 export NODE_OPTIONS="${NODE_OPTIONS:---require /root/.openclaw/bionic-bypass.js}"
 export NODE_EXTRA_CA_CERTS="${NODE_EXTRA_CA_CERTS:-/etc/ssl/certs/ca-certificates.crt}"
 export TMPDIR="${TMPDIR:-/tmp}"
@@ -627,7 +680,7 @@ if [ ! -f "$GEMINI_REAL" ]; then
   exit 1
 fi
 write_node_wrapper gemini gemini "$GEMINI_REAL"
-write_openai_compatible_agent gemini-openai-agent gemini "Gemini OpenAI Bridge"
+rm -f /usr/local/bin/gemini-openai-agent /usr/local/lib/openclaw-cli-gemini-openai-agent.js
 hash -r
 /usr/local/bin/gemini --version || true
 echo ">>> GEMINI_CLI_INSTALL_COMPLETE"
@@ -646,8 +699,7 @@ HERMES_STAGING="$HERMES_TARGET.tmp"
 HERMES_PREVIOUS="$HERMES_TARGET.prev"
 rm -rf "$HERMES_STAGING" "$HERMES_PREVIOUS"
 python3 -m venv "$HERMES_STAGING/venv"
-"$HERMES_STAGING/venv/bin/python" -m pip install -U pip setuptools wheel
-"$HERMES_STAGING/venv/bin/python" -m pip install -U hermes-agent
+pip_install_with_fallback "$HERMES_STAGING/venv/bin/python" hermes-agent
 if [ -d "$HERMES_TARGET" ]; then
   mv "$HERMES_TARGET" "$HERMES_PREVIOUS"
 fi
@@ -712,11 +764,12 @@ echo ">>> GENERIC_AGENT_INSTALL_COMPLETE"
       return _checkShellStatus(includeVersionDetails: includeVersionDetails);
     }
 
+    final installProbe = _installProbeCommand(tool);
     final command = includeVersionDetails
         ? '''
 set +e
 set -o pipefail
-if command -v ${tool.executable} >/dev/null 2>&1; then
+if ${installProbe}; then
   version_output="\$(${tool.versionCommand} 2>&1 | head -n 1)"
   version_status=\$?
   if [ \$version_status -eq 0 ]; then
@@ -732,7 +785,7 @@ fi
 '''
         : '''
 set +e
-if command -v ${tool.executable} >/dev/null 2>&1; then
+if ${installProbe}; then
   echo "__OPENCLAW_CLI_INSTALLED__"
 else
   echo "__OPENCLAW_CLI_NOT_INSTALLED__"
@@ -806,6 +859,20 @@ fi
 
   static Future<void> prepareInstallAssets(CliToolDefinition _) async {
     await CliApiConfigService.regenerateRuntimeFiles();
+  }
+
+  static String _installProbeCommand(CliToolDefinition tool) {
+    return switch (tool.id) {
+      'codex' =>
+        '[ -f /opt/openclaw-cli/codex/node_modules/@openai/codex/bin/codex.js ]',
+      'gemini' =>
+        '[ -d /opt/openclaw-cli/gemini/node_modules/@google/gemini-cli ]',
+      'generic-agent' =>
+        '[ -d /opt/openclaw-cli/generic-agent/node_modules/@gen-cli/gen-cli ]',
+      'hermes-agent' =>
+        '[ -x /opt/openclaw-cli/hermes-agent/venv/bin/hermes ]',
+      _ => 'command -v ${tool.executable} >/dev/null 2>&1',
+    };
   }
 
   static CliToolStatus? _cachedStatusFor(String toolId) {
