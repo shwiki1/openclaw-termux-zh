@@ -136,9 +136,6 @@ class UpdateService {
       );
     }
 
-    final latest = latestBuildNumber > 0
-        ? '$latestVersion+$latestBuildNumber'
-        : latestVersion;
     final available = _isRemoteNewer(
       remoteVersion: latestVersion,
       remoteBuildNumber: latestBuildNumber,
@@ -150,7 +147,7 @@ class UpdateService {
         : (apkUrl.isNotEmpty ? apkUrl : AppConstants.appUpdateBaseUrl);
 
     return UpdateResult(
-      latest: latest,
+      latest: latestVersion,
       latestVersion: latestVersion,
       latestBuildNumber: latestBuildNumber,
       url: landingUrl,

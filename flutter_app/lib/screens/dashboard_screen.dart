@@ -226,9 +226,9 @@ class _DashboardScreenState extends State<DashboardScreen>
   }
 
   Widget _buildAppVersionBadge(ThemeData theme) {
-    final versionLabel = AppConstants.fullVersion.startsWith('v')
-        ? AppConstants.fullVersion
-        : 'v${AppConstants.fullVersion}';
+    final versionLabel = AppConstants.displayVersion.startsWith('v')
+        ? AppConstants.displayVersion
+        : 'v${AppConstants.displayVersion}';
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -406,7 +406,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                   Text(
                     l10n.t(
                       'dashboardVersionLabel',
-                      {'version': AppConstants.fullVersion},
+                      {'version': AppConstants.displayVersion},
                     ),
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: theme.colorScheme.onSurfaceVariant,

@@ -35,7 +35,7 @@ class _SettingsScreenState extends State<SettingsScreen>
   bool _batteryOptimized = true;
   String _arch = '';
   String _prootPath = '';
-  String _appVersionName = AppConstants.fullVersion;
+  String _appVersionName = AppConstants.displayVersion;
   Map<String, dynamic> _status = {};
   bool _loading = true;
   bool _goInstalled = false;
@@ -109,13 +109,10 @@ class _SettingsScreenState extends State<SettingsScreen>
         _arch = arch;
         _prootPath = prootPath;
         final versionName = appPackageInfo['versionName']?.toString().trim();
-        final versionCode = appPackageInfo['versionCode']?.toString().trim();
         _appVersionName =
             versionName != null && versionName.isNotEmpty
-                ? (versionCode != null && versionCode.isNotEmpty
-                    ? '$versionName+$versionCode'
-                    : versionName)
-                : AppConstants.fullVersion;
+                ? versionName
+                : AppConstants.displayVersion;
         _status = status;
         _goInstalled = goInstalled;
         _brewInstalled = brewInstalled;

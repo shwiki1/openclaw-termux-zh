@@ -399,24 +399,57 @@ jobs:
             exit 0
           fi
           REMOTE_DIR="${UPDATE_FTP_REMOTE_DIR:-wwwroot/openclaw}"
-          if ! timeout 180 lftp -u "${UPDATE_FTP_USERNAME}","${UPDATE_FTP_PASSWORD}" "${FTP_HOST}" <<EOF
+          APK_FILE="$(find artifacts -maxdepth 1 -type f -name '*.apk' -printf '%f\n' | head -n 1)"
+          if [ -z "${APK_FILE}" ] || [ ! -s "artifacts/${APK_FILE}" ]; then
+            echo "ERROR: APK artifact is missing before FTP upload."
+            exit 1
+          fi
+          test -s artifacts/latest.json
+          echo "Uploading ${APK_FILE} to ${FTP_HOST}/${REMOTE_DIR}"
+          if ! timeout 1200 lftp -u "${UPDATE_FTP_USERNAME}","${UPDATE_FTP_PASSWORD}" "${FTP_HOST}" <<EOF
           set ssl:verify-certificate no
           set ftp:ssl-allow no
-          set net:max-retries 2
-          set net:timeout 20
+          set cmd:fail-exit true
+          set net:max-retries 5
+          set net:timeout 60
           set net:reconnect-interval-base 5
-          set net:reconnect-interval-max 15
+          set net:reconnect-interval-max 30
           set xfer:clobber true
+          set xfer:verify true
           mkdir -p ${REMOTE_DIR}
           cd ${REMOTE_DIR}
           glob -a rm -f *.apk
-          mput -O . artifacts/*.apk
+          put -O . artifacts/${APK_FILE}
           put -O . artifacts/latest.json
+          cls -l
           bye
           EOF
           then
-            echo "FTP upload failed or timed out after 180 seconds; keeping GitHub artifact as the primary output."
+            echo "ERROR: FTP upload failed or timed out after 1200 seconds."
+            exit 1
           fi
+
+          curl --fail --location --retry 3 --retry-delay 5 \
+            "http://api.lziyu.cn/openclaw/latest.json" \
+            --output /tmp/latest.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          local = json.loads(Path("artifacts/latest.json").read_text(encoding="utf-8"))
+          remote = json.loads(Path("/tmp/latest.json").read_text(encoding="utf-8"))
+          if local.get("buildNumber") != remote.get("buildNumber"):
+              raise SystemExit(
+                  f"remote latest.json buildNumber mismatch: "
+                  f"{remote.get('buildNumber')} != {local.get('buildNumber')}"
+              )
+          if local.get("fileName") != remote.get("fileName"):
+              raise SystemExit(
+                  f"remote latest.json fileName mismatch: "
+                  f"{remote.get('fileName')} != {local.get('fileName')}"
+              )
+          print("Remote latest.json verified.")
+          PY
 
       - name: Comment on PR
         if: github.event_name == 'pull_request'

@@ -102,6 +102,9 @@ class BrowserAutomationService extends ChangeNotifier {
   String _lastToolName = '';
   int _activeToolCalls = 0;
   DateTime? _lastToolCallAt;
+  int _panelRequestNonce = 0;
+  String _pendingOpenUrl = '';
+  Completer<void>? _delegateReadyCompleter;
   final List<BrowserActionLogEntry> _recentActions = [];
 
   bool get isRunning => _server != null;
@@ -114,6 +117,9 @@ class BrowserAutomationService extends ChangeNotifier {
   String get lastError => _lastError;
   String get bridgeUrl => 'http://$_host:$_port';
   String get sessionLabel => _delegate?.sessionLabel ?? '';
+  int get panelRequestNonce => _panelRequestNonce;
+  bool get hasPendingPanelRequest => _panelRequestNonce > 0;
+  String get pendingOpenUrl => _pendingOpenUrl;
   List<BrowserActionLogEntry> get recentActions =>
       List<BrowserActionLogEntry>.unmodifiable(_recentActions);
 
@@ -134,6 +140,10 @@ class BrowserAutomationService extends ChangeNotifier {
 
   void bindDelegate(BrowserAutomationDelegate delegate) {
     _delegate = delegate;
+    final completer = _delegateReadyCompleter;
+    if (completer != null && !completer.isCompleted) {
+      completer.complete();
+    }
     notifyListeners();
     unawaited(_refreshStateFromDelegate());
   }
@@ -173,6 +183,12 @@ class BrowserAutomationService extends ChangeNotifier {
     if (changed) {
       notifyListeners();
     }
+  }
+
+  String takePendingOpenUrl() {
+    final pending = _pendingOpenUrl;
+    _pendingOpenUrl = '';
+    return pending;
   }
 
   Future<void> _startServer() async {
@@ -337,11 +353,16 @@ class BrowserAutomationService extends ChangeNotifier {
     String action,
     Map<String, dynamic> payload,
   ) async {
-    final delegate = _delegate;
+    final delegate = await _ensureDelegateForAction(
+      action: action,
+      payload: payload,
+    );
     if (delegate == null) {
       return {
         'ok': false,
-        'message': 'Browser panel is not attached. Open the browser panel first.',
+        'message': hasPendingPanelRequest
+            ? 'Browser panel is being opened. Keep the app in foreground and try again in a moment.'
+            : 'Browser panel is not attached. Open the browser panel first.',
         'state': _snapshot(),
       };
     }
@@ -466,6 +487,42 @@ class BrowserAutomationService extends ChangeNotifier {
       }
       notifyListeners();
     }
+  }
+
+  Future<BrowserAutomationDelegate?> _ensureDelegateForAction({
+    required String action,
+    required Map<String, dynamic> payload,
+  }) async {
+    final existing = _delegate;
+    if (existing != null) {
+      return existing;
+    }
+
+    final preferredUrl = action == 'open' ? _string(payload['url']) : '';
+    _requestBrowserPanel(initialUrl: preferredUrl);
+
+    final completer = _delegateReadyCompleter;
+    if (completer == null || completer.isCompleted) {
+      _delegateReadyCompleter = Completer<void>();
+    }
+
+    try {
+      await _delegateReadyCompleter!.future.timeout(
+        const Duration(seconds: 8),
+      );
+    } catch (_) {
+      return _delegate;
+    }
+    return _delegate;
+  }
+
+  void _requestBrowserPanel({String initialUrl = ''}) {
+    final normalizedUrl = initialUrl.trim();
+    if (normalizedUrl.isNotEmpty) {
+      _pendingOpenUrl = normalizedUrl;
+    }
+    _panelRequestNonce += 1;
+    notifyListeners();
   }
 
   void _mergeState(Map<String, dynamic> state) {

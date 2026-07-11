@@ -396,7 +396,12 @@ export TMPDIR="${TMPDIR:-/tmp}"
 [ -r /root/.openclaw/terminal-theme.sh ] && . /root/.openclaw/terminal-theme.sh
 [ -r /root/.openclaw/cli-env.sh ] && . /root/.openclaw/cli-env.sh
 [ -r /root/.openclaw/cli-env-codex.sh ] && . /root/.openclaw/cli-env-codex.sh
-if [ -r /root/.openclaw/codex-proxy.env ]; then
+openclaw_managed_auth=false
+openclaw_toml_quote() {
+  printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
+}
+if [ -r /root/.openclaw/codex-proxy.env ] && grep -q '^OPENCLAW_CODEX_PROXY_ENABLED=1$' /root/.openclaw/codex-proxy.env 2>/dev/null; then
+  openclaw_managed_auth=true
   pkill -f "/root/.openclaw/codex-proxy.py" >/dev/null 2>&1 || true
   pkill -f "/root/.openclaw/codex-proxy.js" >/dev/null 2>&1 || true
   if command -v python3 >/dev/null 2>&1 && [ -r /root/.openclaw/codex-proxy.py ]; then
@@ -429,6 +434,17 @@ if [ "$openclaw_passthrough" != true ] && [ "$openclaw_has_sandbox_arg" != true 
 fi
 if [ "$openclaw_passthrough" != true ] && [ "$openclaw_cli_mode" = true ]; then
   set -- --no-alt-screen "$@"
+fi
+if [ "$openclaw_passthrough" != true ] && [ "$openclaw_managed_auth" = true ]; then
+  set -- -c 'openai_base_url="http://127.0.0.1:8787/v1"' "$@"
+  if [ -n "${OPENAI_MODEL:-}" ]; then
+    openclaw_model="$(openclaw_toml_quote "$OPENAI_MODEL")"
+    set -- -c "model=\"$openclaw_model\"" "$@"
+  fi
+  if [ -n "${OPENAI_REASONING_EFFORT:-}" ]; then
+    openclaw_effort="$(openclaw_toml_quote "$OPENAI_REASONING_EFFORT")"
+    set -- -c "model_reasoning_effort=\"$openclaw_effort\"" "$@"
+  fi
 fi
 exec node /opt/openclaw-cli/codex/node_modules/@openai/codex/bin/codex.js "$@"
 OPENCLAW_CODEX_WRAPPER

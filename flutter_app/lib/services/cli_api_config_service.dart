@@ -887,30 +887,15 @@ export PS1='\[\e[1;32m\]\u@\h\[\e[0m\]:\[\e[1;34m\]\w\[\e[0m\]\$ '
 
     if (_shouldManageToolRuntime(codex)) {
       final model = codex.effectiveToolModel;
-      final baseUrl =
-          codex.baseUrl.trim().isNotEmpty ? _codexProxyBaseUrl : '';
       final effort = codex.reasoningEffort.trim();
 
       if (model.isNotEmpty) {
         lines.add('model = ${_tomlString(model)}');
       }
-      lines.add('preferred_auth_method = "apikey"');
       if (effort.isNotEmpty) {
         lines.add('model_reasoning_effort = ${_tomlString(effort)}');
       }
-      if (baseUrl.isNotEmpty) {
-        lines
-          ..add('model_provider = "openclaw"')
-          ..add('')
-          ..add('[model_providers.openclaw]')
-          ..add('name = "OpenClaw Codex Proxy"')
-          ..add('base_url = ${_tomlString(baseUrl)}')
-          ..add('env_key = "OPENAI_API_KEY"')
-          ..add('wire_api = "responses"')
-          ..add('stream_idle_timeout_ms = 300000')
-          ..add('request_max_retries = 2')
-          ..add('stream_max_retries = 2');
-      }
+      lines.add('openai_base_url = ${_tomlString(_codexProxyBaseUrl)}');
     }
 
     lines
@@ -938,13 +923,17 @@ export PS1='\[\e[1;32m\]\u@\h\[\e[0m\]:\[\e[1;34m\]\w\[\e[0m\]\$ '
   }
 
   static String _buildCodexProxyEnv(CliApiConfig codex) {
-    if (!_shouldManageToolRuntime(codex)) {
-      return '# OpenClaw Codex proxy is disabled until a shared API is selected.\n';
-    }
     final lines = <String>[
       'OPENCLAW_CODEX_PROXY_HOST=127.0.0.1',
       'OPENCLAW_CODEX_PROXY_PORT=8787',
     ];
+    if (!_shouldManageToolRuntime(codex)) {
+      lines
+        ..add('OPENCLAW_CODEX_PROXY_ENABLED=0')
+        ..add('');
+      return lines.join('\n');
+    }
+    lines.add('OPENCLAW_CODEX_PROXY_ENABLED=1');
     final upstream = codex.baseUrl.trim();
     if (upstream.isNotEmpty) {
       lines.add(

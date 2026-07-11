@@ -32,12 +32,15 @@ class _TerminalScreenState extends State<TerminalScreen> {
   static final Map<String, int> _savedActiveIndexes = {};
 
   var _terminalKey = GlobalKey<NativeTerminalViewState>();
+  final _browserService = BrowserAutomationService.instance;
   late final TerminalInputController _terminalInput;
   late Future<_NativeTerminalConfig> _configFuture;
   late final List<_TerminalSessionTab> _sessions;
   var _activeIndex = 0;
   var _restartOnCreate = false;
   var _closedAllSessions = false;
+  var _browserPanelOpen = false;
+  var _lastBrowserPanelRequestNonce = 0;
 
   _TerminalSessionTab get _activeSession => _sessions[_activeIndex];
 
@@ -45,7 +48,8 @@ class _TerminalScreenState extends State<TerminalScreen> {
   void initState() {
     super.initState();
     NativeBridge.startTerminalService().catchError((_) => false);
-    BrowserAutomationService.instance.ensureStarted().catchError((_) => false);
+    _browserService.ensureStarted().catchError((_) => false);
+    _browserService.addListener(_handleBrowserAutomationUpdate);
     if (widget.restartOnOpen) {
       _savedSessions.remove(widget.sessionId);
       _savedActiveIndexes.remove(widget.sessionId);
@@ -84,8 +88,30 @@ class _TerminalScreenState extends State<TerminalScreen> {
     if (!_closedAllSessions) {
       _persistSessionTabs();
     }
+    _browserService.removeListener(_handleBrowserAutomationUpdate);
     _terminalInput.dispose();
     super.dispose();
+  }
+
+  void _handleBrowserAutomationUpdate() {
+    if (!mounted) {
+      return;
+    }
+    final requestNonce = _browserService.panelRequestNonce;
+    if (requestNonce == 0 || requestNonce == _lastBrowserPanelRequestNonce) {
+      return;
+    }
+    _lastBrowserPanelRequestNonce = requestNonce;
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    if (screenWidth >= 960 || _browserPanelOpen) {
+      return;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _browserPanelOpen) {
+        return;
+      }
+      _openBrowserPanel(autoRequested: true);
+    });
   }
 
   void _persistSessionTabs() {
@@ -426,22 +452,29 @@ class _TerminalScreenState extends State<TerminalScreen> {
     );
   }
 
-  void _openBrowserPanel() {
+  void _openBrowserPanel({bool autoRequested = false}) {
     final screenWidth = MediaQuery.sizeOf(context).width;
     if (screenWidth >= 960) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Browser panel is already visible on the right side.'),
-        ),
-      );
+      if (!autoRequested) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Browser panel is already visible on the right side.'),
+          ),
+        );
+      }
       return;
     }
 
-    Navigator.of(context).push(
+    _browserPanelOpen = true;
+    Navigator.of(context)
+        .push(
       MaterialPageRoute(
         builder: (_) => const _TerminalBrowserPage(),
       ),
-    );
+    )
+        .whenComplete(() {
+          _browserPanelOpen = false;
+        });
   }
 
   Widget _buildBrowserStatusBanner(double screenWidth) {

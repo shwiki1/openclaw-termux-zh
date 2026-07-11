@@ -111,6 +111,11 @@ class _TerminalBrowserPanelState extends State<TerminalBrowserPanel>
   }
 
   Future<void> _initializeBrowser() async {
+    final pendingUrl = _service.takePendingOpenUrl().trim();
+    if (pendingUrl.isNotEmpty) {
+      await _loadUrl(pendingUrl);
+      return;
+    }
     final prefs = PreferencesService();
     await prefs.init();
     final initialUrl = prefs.dashboardUrl?.trim() ?? '';
