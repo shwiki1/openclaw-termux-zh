@@ -2025,7 +2025,7 @@ exec node "\$CODEX_JS" "\$@"
 
   static String _buildGenericAgentLauncherSh() {
     return '''${_buildCliLauncherHeader('/root/.openclaw/cli-env-generic-agent.sh')}
-GEN_REAL="$(node -e 'const path=require("node:path"); const pkg=require("/opt/openclaw-cli/generic-agent/node_modules/@gen-cli/gen-cli/package.json"); const entry=(pkg.bin && (typeof pkg.bin === "string" ? pkg.bin : pkg.bin.gen)) || pkg.main || "dist/index.js"; process.stdout.write(path.isAbsolute(entry) ? entry : `/opt/openclaw-cli/generic-agent/node_modules/@gen-cli/gen-cli/\${entry}`);' 2>/dev/null)"
+GEN_REAL="\$(node -e 'const path=require("node:path"); const pkg=require("/opt/openclaw-cli/generic-agent/node_modules/@gen-cli/gen-cli/package.json"); const entry=(pkg.bin && (typeof pkg.bin === "string" ? pkg.bin : pkg.bin.gen)) || pkg.main || "dist/index.js"; process.stdout.write(path.isAbsolute(entry) ? entry : `/opt/openclaw-cli/generic-agent/node_modules/@gen-cli/gen-cli/\${entry}`);' 2>/dev/null)"
 [ -n "\$GEN_REAL" ] && [ -f "\$GEN_REAL" ] || {
   echo "Gen CLI entrypoint not found." >&2
   exit 1
@@ -2052,7 +2052,7 @@ exec node "\$GEN_REAL" "\$@"
 
   static String _buildGeminiLauncherSh() {
     return '''${_buildCliLauncherHeader('/root/.openclaw/cli-env-gemini.sh')}
-GEMINI_REAL="$(node -e 'const path=require("node:path"); const pkg=require("/opt/openclaw-cli/gemini/node_modules/@google/gemini-cli/package.json"); const entry=(pkg.bin && (typeof pkg.bin === "string" ? pkg.bin : pkg.bin.gemini)) || pkg.main || "dist/index.js"; process.stdout.write(path.isAbsolute(entry) ? entry : `/opt/openclaw-cli/gemini/node_modules/@google/gemini-cli/\${entry}`);' 2>/dev/null)"
+GEMINI_REAL="\$(node -e 'const path=require("node:path"); const pkg=require("/opt/openclaw-cli/gemini/node_modules/@google/gemini-cli/package.json"); const entry=(pkg.bin && (typeof pkg.bin === "string" ? pkg.bin : pkg.bin.gemini)) || pkg.main || "dist/index.js"; process.stdout.write(path.isAbsolute(entry) ? entry : `/opt/openclaw-cli/gemini/node_modules/@google/gemini-cli/\${entry}`);' 2>/dev/null)"
 [ -n "\$GEMINI_REAL" ] && [ -f "\$GEMINI_REAL" ] || {
   echo "Gemini CLI entrypoint not found." >&2
   exit 1
