@@ -416,7 +416,7 @@ jobs:
           set net:reconnect-interval-max 30
           set xfer:clobber true
           set xfer:verify true
-          mkdir -p ${REMOTE_DIR}
+          mkdir -pf ${REMOTE_DIR}
           cd ${REMOTE_DIR}
           glob -a rm -f *.apk
           put -O . artifacts/${APK_FILE}
