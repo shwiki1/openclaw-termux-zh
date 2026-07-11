@@ -5,7 +5,8 @@ class AppConstants {
   static const String buildNumber =
       String.fromEnvironment('APP_VERSION_CODE', defaultValue: '1');
   static const String fullVersion = '$version+$buildNumber';
-  static const String displayVersion = version;
+  static const String displayVersion =
+      buildNumber == '1' ? version : '$version ($buildNumber)';
   static const String packageName = 'com.agent.cyx';
 
   /// Matches ANSI escape sequences (e.g. color codes in terminal output).
@@ -157,16 +158,16 @@ class AppConstants {
     final isPorts = isUbuntuPortsArch(arch);
     final paths = isPorts
         ? <String>[
-            'http://mirrors.ustc.edu.cn/ubuntu-ports',
-            'http://mirrors.tuna.tsinghua.edu.cn/ubuntu-ports',
-            'http://mirrors.aliyun.com/ubuntu-ports',
-            'http://ports.ubuntu.com/ubuntu-ports',
+            'https://mirrors.ustc.edu.cn/ubuntu-ports',
+            'https://mirrors.aliyun.com/ubuntu-ports',
+            'https://mirrors.tuna.tsinghua.edu.cn/ubuntu-ports',
+            'https://ports.ubuntu.com/ubuntu-ports',
           ]
         : <String>[
-            'http://mirrors.ustc.edu.cn/ubuntu',
-            'http://mirrors.tuna.tsinghua.edu.cn/ubuntu',
-            'http://mirrors.aliyun.com/ubuntu',
-            'http://archive.ubuntu.com/ubuntu',
+            'https://mirrors.ustc.edu.cn/ubuntu',
+            'https://mirrors.aliyun.com/ubuntu',
+            'https://mirrors.tuna.tsinghua.edu.cn/ubuntu',
+            'https://archive.ubuntu.com/ubuntu',
           ];
     return paths;
   }

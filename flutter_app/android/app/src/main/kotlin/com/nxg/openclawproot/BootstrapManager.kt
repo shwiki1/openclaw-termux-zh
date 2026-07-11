@@ -1571,9 +1571,30 @@ _cp.spawnSync = function(cmd, args, options) {
 // Also patch exec/execFile which are wrappers around spawn
 const _origExecFile = _cp.execFile;
 _cp.execFile = function(file, args, options, cb) {
-  if (typeof args === 'function') { cb = args; args = []; options = {}; }
-  if (typeof options === 'function') { cb = options; options = {}; }
-  try { return _origExecFile.call(_cp, file, args, options, cb); }
+  if (typeof args === 'function') {
+    cb = args;
+    args = [];
+    options = undefined;
+  } else if (args == null) {
+    args = [];
+  } else if (!Array.isArray(args) && typeof args === 'object') {
+    cb = typeof options === 'function' ? options : cb;
+    options = args;
+    args = [];
+  }
+  if (typeof options === 'function') {
+    cb = options;
+    options = undefined;
+  }
+  if (options == null || typeof options !== 'object') {
+    options = {};
+  }
+  try {
+    if (typeof cb === 'function') {
+      return _origExecFile.call(_cp, file, args, options, cb);
+    }
+    return _origExecFile.call(_cp, file, args, options);
+  }
   catch(e) {
     if (_shouldMock(e.code, file)) {
       const code = _isSideEffectCmd(file) ? 128 : 0;
@@ -1585,6 +1606,15 @@ _cp.execFile = function(file, args, options, cb) {
 };
 const _origExecFileSync = _cp.execFileSync;
 _cp.execFileSync = function(file, args, options) {
+  if (args == null) {
+    args = [];
+  } else if (!Array.isArray(args) && typeof args === 'object') {
+    options = args;
+    args = [];
+  }
+  if (options == null || typeof options !== 'object') {
+    options = {};
+  }
   try { return _origExecFileSync.call(_cp, file, args, options); }
   catch(e) {
     if (_shouldMock(e.code, file)) {

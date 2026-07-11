@@ -9,16 +9,39 @@ import 'native_bridge.dart';
 class CliApiConfigService {
   static const _configPath = '/root/.openclaw/app/cli-api-config.json';
   static const _envPath = '/root/.openclaw/cli-env.sh';
+  static const cliWorkspacePath = '/root/openclaw-cli-workspace';
+  static const _cliWorkspaceProjectsPath = '$cliWorkspacePath/projects';
+  static const _cliWorkspaceScratchPath = '$cliWorkspacePath/scratch';
+  static const _cliWorkspaceAgentsPath = '$cliWorkspacePath/AGENTS.md';
+  static const _cliWorkspaceGeminiPath = '$cliWorkspacePath/GEMINI.md';
+  static const _cliWorkspaceContextPath = '$cliWorkspacePath/CONTEXT.md';
+  static const _cliWorkspaceGeminiSettingsPath =
+      '$cliWorkspacePath/.gemini/settings.json';
+  static const _cliWorkspaceGeminiCustomModelsPath =
+      '$cliWorkspacePath/.gemini/custom-models.json';
+  static const _cliWorkspaceGenCliSettingsPath =
+      '$cliWorkspacePath/.gen-cli/settings.json';
+  static const _cliWorkspaceSkillPath =
+      '$cliWorkspacePath/.agents/skills/openclaw-android-runtime/SKILL.md';
+  static const _managedCliBinDir = '/root/.openclaw/bin';
+  static const _codexLauncherPath = '$_managedCliBinDir/codex';
+  static const _genericAgentLauncherPath =
+      '$_managedCliBinDir/generic-agent';
+  static const _geminiLauncherPath = '$_managedCliBinDir/gemini';
+  static const _hermesLauncherPath = '$_managedCliBinDir/hermes';
   static const _codexProxyPath = '/root/.openclaw/codex-proxy.py';
   static const _codexProxyJsPath = '/root/.openclaw/codex-proxy.js';
   static const _codexProxyEnvPath = '/root/.openclaw/codex-proxy.env';
   static const _codexConfigPath = '/root/.codex/config.toml';
   static const _codexProxyBaseUrl = 'http://127.0.0.1:8787/v1';
-  static const _codexProviderId = 'openclaw';
   static const _codeBuddyModelsPath = '/root/.codebuddy/models.json';
   static const _codeBuddySettingsPath = '/root/.codebuddy/settings.json';
   static const _qwenSettingsPath = '/root/.qwen/settings.json';
   static const _geminiSettingsPath = '/root/.gemini/settings.json';
+  static const _geminiCustomModelsPath = '/root/.gemini/custom-models.json';
+  static const _genCliSettingsPath = '/root/.gen-cli/settings.json';
+  static const _hermesConfigPath = '/root/.hermes/config.yaml';
+  static const _hermesEnvPath = '/root/.hermes/.env';
   static const _terminalThemePath = '/root/.openclaw/terminal-theme.sh';
   static const _browserBridgeEnvPath = '/root/.openclaw/browser-bridge.env';
   static const _browserMcpPath = '/root/.openclaw/browser-mcp.mjs';
@@ -162,6 +185,8 @@ class CliApiConfigService {
         toolId: _resolvedToolConfig(toolId, allConfigs),
     };
     final codex = activeConfigs['codex'] ?? const CliApiConfig(toolId: 'codex');
+    final gemini =
+        activeConfigs['gemini'] ?? const CliApiConfig(toolId: 'gemini');
     final codexProxyEnvMode =
         _shouldManageToolRuntime(codex) ? '0600' : '0000';
 
@@ -174,6 +199,38 @@ class CliApiConfigService {
     await NativeBridge.writeRootfsFile(
       _terminalThemePath,
       _buildTerminalThemeSh(),
+    );
+    await NativeBridge.writeRootfsFile(
+      _cliWorkspaceAgentsPath,
+      _buildCliWorkspaceAgentsMd(),
+    );
+    await NativeBridge.writeRootfsFile(
+      _cliWorkspaceGeminiPath,
+      _buildCliWorkspaceGeminiMd(),
+    );
+    await NativeBridge.writeRootfsFile(
+      _cliWorkspaceContextPath,
+      _buildCliWorkspaceContextMd(),
+    );
+    await NativeBridge.writeRootfsFile(
+      _cliWorkspaceGeminiSettingsPath,
+      _buildCliWorkspaceGeminiSettingsJson(gemini),
+    );
+    await NativeBridge.writeRootfsFile(
+      _cliWorkspaceGeminiCustomModelsPath,
+      _buildGeminiCustomModelsJson(gemini),
+    );
+    await NativeBridge.writeRootfsFile(
+      _cliWorkspaceGenCliSettingsPath,
+      _buildGenCliSettingsJson(activeConfigs['generic-agent']!),
+    );
+    await NativeBridge.writeRootfsFile(
+      _genCliSettingsPath,
+      _buildGenCliSettingsJson(activeConfigs['generic-agent']!),
+    );
+    await NativeBridge.writeRootfsFile(
+      _cliWorkspaceSkillPath,
+      _buildCliWorkspaceSkill(),
     );
     for (final entry in activeConfigs.entries) {
       await NativeBridge.writeRootfsFile(
@@ -202,6 +259,22 @@ class CliApiConfigService {
       _browserCodexSkillPath,
       _buildBrowserSkill(),
     );
+    await NativeBridge.writeRootfsFile(
+      _codexLauncherPath,
+      _buildCodexLauncherSh(),
+    );
+    await NativeBridge.writeRootfsFile(
+      _genericAgentLauncherPath,
+      _buildGenericAgentLauncherSh(),
+    );
+    await NativeBridge.writeRootfsFile(
+      _geminiLauncherPath,
+      _buildGeminiLauncherSh(),
+    );
+    await NativeBridge.writeRootfsFile(
+      _hermesLauncherPath,
+      _buildHermesLauncherSh(),
+    );
     await NativeBridge.writeRootfsFile(_codexConfigPath, _buildCodexToml(codex));
     await NativeBridge.writeRootfsFile(
       _codeBuddyModelsPath,
@@ -217,17 +290,46 @@ class CliApiConfigService {
     );
     await NativeBridge.writeRootfsFile(
       _geminiSettingsPath,
-      _buildGeminiSettingsJson(activeConfigs['gemini']!),
+      _buildGeminiSettingsJson(gemini),
+    );
+    await NativeBridge.writeRootfsFile(
+      _geminiCustomModelsPath,
+      _buildGeminiCustomModelsJson(gemini),
+    );
+    await NativeBridge.writeRootfsFile(
+      _hermesConfigPath,
+      _buildHermesConfigYaml(activeConfigs['hermes-agent']!),
+    );
+    await NativeBridge.writeRootfsFile(
+      _hermesEnvPath,
+      _buildHermesEnvFile(activeConfigs['hermes-agent']!),
     );
     await NativeBridge.runInProot(
+      'mkdir -p $cliWorkspacePath $_cliWorkspaceProjectsPath '
+      '$_cliWorkspaceScratchPath "$cliWorkspacePath/.gemini" '
+      '"$cliWorkspacePath/.gen-cli" '
+      '"$cliWorkspacePath/.agents/skills/openclaw-android-runtime" '
+      '$_managedCliBinDir '
+      '/root/.codex /root/.gemini /root/.codebuddy /root/.qwen '
+      '/root/.gen-cli /root/.hermes /root/.config 2>/dev/null || true; '
       'chmod 0755 $_codexProxyPath 2>/dev/null || true; '
       'chmod 0755 $_codexProxyJsPath 2>/dev/null || true; '
       'chmod 0755 $_browserMcpPath 2>/dev/null || true; '
+      'chmod 0755 $_codexLauncherPath $_genericAgentLauncherPath '
+      '$_geminiLauncherPath $_hermesLauncherPath 2>/dev/null || true; '
       'chmod $codexProxyEnvMode $_codexProxyEnvPath 2>/dev/null || true; '
       'chmod 0600 $_browserBridgeEnvPath 2>/dev/null || true; '
-      'chmod 0600 $_codeBuddyModelsPath $_codeBuddySettingsPath '
-      '$_qwenSettingsPath $_geminiSettingsPath 2>/dev/null || true; '
+      'chmod 0600 $_codexConfigPath $_codeBuddyModelsPath '
+      '$_codeBuddySettingsPath $_qwenSettingsPath $_geminiSettingsPath '
+      '$_geminiCustomModelsPath $_cliWorkspaceGeminiCustomModelsPath '
+      '$_genCliSettingsPath $_hermesConfigPath '
+      '$_hermesEnvPath 2>/dev/null || true; '
       'chmod 0644 $_terminalThemePath 2>/dev/null || true; '
+      'chmod 0644 $_cliWorkspaceAgentsPath $_cliWorkspaceGeminiPath '
+      '$_cliWorkspaceContextPath $_cliWorkspaceGeminiSettingsPath '
+      '$_cliWorkspaceGenCliSettingsPath '
+      '$_cliWorkspaceSkillPath '
+      '2>/dev/null || true; '
       'grep -q "openclaw/terminal-theme.sh" /root/.bashrc 2>/dev/null || '
       'printf "\\n[ -r /root/.openclaw/terminal-theme.sh ] && . /root/.openclaw/terminal-theme.sh\\n" >> /root/.bashrc; '
       'chmod 0600 /root/.openclaw/cli-env*.sh 2>/dev/null || true',
@@ -450,7 +552,9 @@ class CliApiConfigService {
     return CliApiConfig(
       toolId: toolId,
       sharedProfileId: toolSettings.sharedProfileId,
-      profileName: toolSettings.profileName,
+      profileName: toolSettings.profileName.trim().isNotEmpty
+          ? toolSettings.profileName
+          : (profile?.profileName ?? ''),
       apiProtocol: profile?.effectiveApiProtocol ?? toolSettings.apiProtocol,
       baseUrl: profile?.baseUrl ?? '',
       apiKey: profile?.apiKey ?? '',
@@ -621,11 +725,33 @@ class CliApiConfigService {
   static String _buildGlobalEnvFile() {
     return [
       '# Generated by OpenClaw app. Safe to source from CLI wrappers.',
+      'export HOME=${_shQuote('/root')}',
+      'export USER=${_shQuote('root')}',
+      'export LOGNAME=${_shQuote('root')}',
+      'export XDG_CONFIG_HOME=${_shQuote('/root/.config')}',
+      'export CODEX_HOME=${_shQuote('/root/.codex')}',
+      'export GEMINI_CONFIG_DIR=${_shQuote('/root/.gemini')}',
       'export OPENCLAW_CLI_ENV_LOADED=1',
+      'export OPENCLAW_CLI_WORKSPACE=${_shQuote(cliWorkspacePath)}',
+      'export OPENCLAW_CLI_PROJECTS=${_shQuote(_cliWorkspaceProjectsPath)}',
+      'export OPENCLAW_CLI_SCRATCH=${_shQuote(_cliWorkspaceScratchPath)}',
+      'export OPENCLAW_RUNTIME_PLATFORM=${_shQuote('android-ubuntu-proot')}',
+      'export OPENCLAW_RUNTIME_DESCRIPTION='
+          '${_shQuote('Ubuntu rootfs running inside an Android app through PRoot')}',
       'export TERM="\${TERM:-xterm-256color}"',
       'export COLORTERM="\${COLORTERM:-truecolor}"',
       'export FORCE_COLOR=1',
       'export TMPDIR="\${TMPDIR:-/tmp}"',
+      'mkdir -p "\${OPENCLAW_CLI_WORKSPACE:-$cliWorkspacePath}" '
+      '"\${OPENCLAW_CLI_PROJECTS:-$_cliWorkspaceProjectsPath}" '
+      '"\${OPENCLAW_CLI_SCRATCH:-$_cliWorkspaceScratchPath}" '
+      '"\${OPENCLAW_CLI_WORKSPACE:-$cliWorkspacePath}/.gemini" '
+      '"\${OPENCLAW_CLI_WORKSPACE:-$cliWorkspacePath}/.gen-cli" '
+      '"\${OPENCLAW_CLI_WORKSPACE:-$cliWorkspacePath}/.agents/skills" '
+      '"\${CODEX_HOME:-/root/.codex}" '
+      '"\${GEMINI_CONFIG_DIR:-/root/.gemini}" '
+      '"\${XDG_CONFIG_HOME:-/root/.config}" '
+      '2>/dev/null || true',
       '',
     ].join('\n');
   }
@@ -676,17 +802,22 @@ export PS1='\[\e[1;32m\]\u@\h\[\e[0m\]:\[\e[1;34m\]\w\[\e[0m\]\$ '
     final toolModel = config.effectiveToolModel;
     final effort = config.reasoningEffort.trim();
     final openAiBaseUrl = _trimTrailingSlash(baseUrl);
+    final protocol = _normalizedProtocol(config.effectiveApiProtocol);
 
     if (apiKey.isNotEmpty) {
       lines
         ..add('export OPENAI_API_KEY=${_shQuote(apiKey)}')
         ..add('export ANTHROPIC_API_KEY=${_shQuote(apiKey)}')
-        ..add('export GEMINI_API_KEY=${_shQuote(apiKey)}')
-        ..add('export GOOGLE_API_KEY=${_shQuote(apiKey)}')
+        ..add('export SILICONFLOW_API_KEY=${_shQuote(apiKey)}')
         ..add('export QWEN_API_KEY=${_shQuote(apiKey)}')
         ..add('export DASHSCOPE_API_KEY=${_shQuote(apiKey)}')
         ..add('export CODEBUDDY_API_KEY=${_shQuote(apiKey)}')
         ..add('export CHINESE_LLM_API_KEY=${_shQuote(apiKey)}');
+      if (protocol == 'gemini') {
+        lines
+          ..add('export GEMINI_API_KEY=${_shQuote(apiKey)}')
+          ..add('export GOOGLE_API_KEY=${_shQuote(apiKey)}');
+      }
     }
     if (toolId != 'codex' && openAiBaseUrl.isNotEmpty) {
       lines
@@ -730,7 +861,33 @@ export PS1='\[\e[1;32m\]\u@\h\[\e[0m\]:\[\e[1;34m\]\w\[\e[0m\]\$ '
     if (toolId == 'gemini') {
       lines
         ..add('export GOOGLE_GENAI_USE_VERTEXAI=false')
+        ..add(
+          'export GEMINI_DEFAULT_AUTH_TYPE=${_shQuote(_geminiAuthType(config))}',
+        )
         ..add('export GEMINI_CLI_NO_BROWSER=1');
+      if (protocol != 'gemini') {
+        lines.add('unset GEMINI_API_KEY GOOGLE_API_KEY 2>/dev/null || true');
+      }
+      final customAlias = _geminiCustomModelAlias(config);
+      if (customAlias.isNotEmpty) {
+        lines.add(
+          'export OPENCLAW_GEMINI_MODEL_ALIAS=${_shQuote(customAlias)}',
+        );
+      }
+    }
+    if (toolId == 'generic-agent') {
+      if (config.effectiveApiProtocol == 'gemini') {
+        lines.add(
+          'export GEMINI_DEFAULT_AUTH_TYPE=${_shQuote('gemini-api-key')}',
+        );
+      } else {
+        lines.add(
+          'export GEMINI_DEFAULT_AUTH_TYPE=${_shQuote('siliconflow-api-key')}',
+        );
+        if (openAiBaseUrl.isNotEmpty) {
+          lines.add('export SILICONFLOW_BASE_URL=${_shQuote(openAiBaseUrl)}');
+        }
+      }
     }
     if (toolId == 'codebuddy' && config.baseUrl.trim().isEmpty) {
       lines.add('export CODEBUDDY_INTERNET_ENVIRONMENT=internal');
@@ -857,16 +1014,16 @@ export PS1='\[\e[1;32m\]\u@\h\[\e[0m\]:\[\e[1;34m\]\w\[\e[0m\]\$ '
             },
           })}\n';
     }
-    final model = config.effectiveToolModel;
+    final selectedModel = _geminiSelectedModel(config);
     final payload = <String, dynamic>{
       'security': {
         'auth': {
-          'selectedType': 'gemini-api-key',
+          'selectedType': _geminiAuthType(config),
         },
       },
-      if (model.isNotEmpty)
+      if (selectedModel.isNotEmpty)
         'model': {
-          'name': model,
+          'name': selectedModel,
         },
       'telemetry': {
         'enabled': false,
@@ -875,8 +1032,114 @@ export PS1='\[\e[1;32m\]\u@\h\[\e[0m\]:\[\e[1;34m\]\w\[\e[0m\]\$ '
     return '${const JsonEncoder.withIndent('  ').convert(payload)}\n';
   }
 
+  static String _buildGeminiCustomModelsJson(CliApiConfig config) {
+    if (!_geminiUsesCustomModelRouting(config)) {
+      return '${const JsonEncoder.withIndent('  ').convert(<String, dynamic>{
+            'version': 1,
+            'models': const <Map<String, dynamic>>[],
+          })}\n';
+    }
+    final alias = _geminiCustomModelAlias(config);
+    final effectiveModel = config.effectiveToolModel.trim();
+    final baseUrl = _trimTrailingSlash(config.baseUrl);
+    final displayName = config.profileName.trim().isNotEmpty
+        ? config.profileName.trim()
+        : alias;
+    final payload = <String, dynamic>{
+      'version': 1,
+      'models': [
+        {
+          'name': alias,
+          'baseUrl': baseUrl,
+          'apiKey': config.apiKey.trim(),
+          'defaultModel': effectiveModel,
+          'displayName': displayName,
+          'description': 'OpenClaw configured model - $baseUrl',
+          'createdAt': '1970-01-01T00:00:00.000Z',
+        },
+      ],
+      'defaultModel': alias,
+    };
+    return '${const JsonEncoder.withIndent('  ').convert(payload)}\n';
+  }
+
+  static String _buildGenCliSettingsJson(CliApiConfig config) {
+    String? selectedAuthType;
+    if (_shouldManageToolRuntime(config)) {
+      if (_normalizedProtocol(config.effectiveApiProtocol) == 'gemini') {
+        selectedAuthType = 'gemini-api-key';
+      } else {
+        selectedAuthType = 'siliconflow-api-key';
+      }
+    }
+    final payload = <String, dynamic>{
+      if (selectedAuthType != null) 'selectedAuthType': selectedAuthType,
+      'contextFileName': ['AGENTS.md', 'GEMINI.md', 'CONTEXT.md'],
+      'telemetry': {
+        'enabled': false,
+      },
+      'usageStatisticsEnabled': false,
+    };
+    return '${const JsonEncoder.withIndent('  ').convert(payload)}\n';
+  }
+
+  static String _buildHermesConfigYaml(CliApiConfig config) {
+    if (!_shouldManageToolRuntime(config)) {
+      return [
+        '# Generated by OpenClaw app.',
+        '# No shared API selected for Hermes Agent.',
+        '# Hermes will keep using its own setup flow until you bind a shared API.',
+        '',
+      ].join('\n');
+    }
+    final model = config.effectiveToolModel.trim().isEmpty
+        ? config.model.trim()
+        : config.effectiveToolModel.trim();
+    final lines = <String>[
+      '# Generated by OpenClaw app. Hermes Agent runtime config.',
+      'model:',
+      '  provider: custom',
+      '  base_url: ${_yamlString(_trimTrailingSlash(config.baseUrl))}',
+      if (model.isNotEmpty) '  default: ${_yamlString(model)}',
+    ];
+    if (config.reasoningEffort.trim().isNotEmpty) {
+      lines
+        ..add('agent:')
+        ..add(
+          '  reasoning_effort: ${_yamlString(config.reasoningEffort.trim())}',
+        );
+    }
+    lines.add('');
+    return lines.join('\n');
+  }
+
+  static String _buildHermesEnvFile(CliApiConfig config) {
+    if (!_shouldManageToolRuntime(config)) {
+      return [
+        '# Generated by OpenClaw app.',
+        '# Hermes Agent is currently using its own runtime state.',
+        '',
+      ].join('\n');
+    }
+    final lines = <String>[
+      '# Generated by OpenClaw app. Hermes Agent environment.',
+      if (config.apiKey.trim().isNotEmpty)
+        'OPENAI_API_KEY=${_shQuote(config.apiKey.trim())}',
+      if (config.baseUrl.trim().isNotEmpty)
+        'OPENAI_BASE_URL=${_shQuote(_trimTrailingSlash(config.baseUrl))}',
+      if (config.effectiveToolModel.trim().isNotEmpty)
+        'OPENAI_MODEL=${_shQuote(config.effectiveToolModel.trim())}',
+      if (config.reasoningEffort.trim().isNotEmpty)
+        'OPENAI_REASONING_EFFORT=${_shQuote(config.reasoningEffort.trim())}',
+      '',
+    ];
+    return lines.join('\n');
+  }
+
   static String _buildCodexToml(CliApiConfig codex) {
     final lines = <String>[];
+    final providerId = _codexProviderIdFor(codex);
+    final providerName = _codexProviderNameFor(codex);
     lines
       ..add('disable_response_storage = true')
       ..add('sandbox_mode = "danger-full-access"')
@@ -888,7 +1151,8 @@ export PS1='\[\e[1;32m\]\u@\h\[\e[0m\]:\[\e[1;34m\]\w\[\e[0m\]\$ '
       final model = codex.effectiveToolModel;
       final effort = codex.reasoningEffort.trim();
 
-      lines.add('model_provider = ${_tomlString(_codexProviderId)}');
+      lines.add('preferred_auth_method = "apikey"');
+      lines.add('model_provider = ${_tomlString(providerId)}');
       if (model.isNotEmpty) {
         lines.add('model = ${_tomlString(model)}');
       }
@@ -897,8 +1161,8 @@ export PS1='\[\e[1;32m\]\u@\h\[\e[0m\]:\[\e[1;34m\]\w\[\e[0m\]\$ '
       }
       lines
         ..add('')
-        ..add('[model_providers.$_codexProviderId]')
-        ..add('name = ${_tomlString('OpenClaw')}')
+        ..add('[model_providers.$providerId]')
+        ..add('name = ${_tomlString(providerName)}')
         ..add('base_url = ${_tomlString(_codexProxyBaseUrl)}')
         ..add('wire_api = "responses"')
         ..add('env_key = "OPENAI_API_KEY"')
@@ -914,7 +1178,19 @@ export PS1='\[\e[1;32m\]\u@\h\[\e[0m\]:\[\e[1;34m\]\w\[\e[0m\]\$ '
       ..add('command = "node"')
       ..add('args = [${_tomlString(_browserMcpPath)}]')
       ..add('startup_timeout_sec = 20')
-      ..add('tool_timeout_sec = 120');
+      ..add('tool_timeout_sec = 120')
+      ..add('')
+      ..add('[projects.${_tomlString(cliWorkspacePath)}]')
+      ..add('trust_level = "trusted"')
+      ..add('')
+      ..add('[projects.${_tomlString(_cliWorkspaceProjectsPath)}]')
+      ..add('trust_level = "trusted"')
+      ..add('')
+      ..add('[projects.${_tomlString(_cliWorkspaceScratchPath)}]')
+      ..add('trust_level = "trusted"')
+      ..add('')
+      ..add('[projects."/root"]')
+      ..add('trust_level = "trusted"');
 
     if (lines.isEmpty) {
       lines.add('# OpenClaw CLI config is empty. Configure Codex in the app.');
@@ -928,6 +1204,10 @@ export PS1='\[\e[1;32m\]\u@\h\[\e[0m\]:\[\e[1;34m\]\w\[\e[0m\]\$ '
   }
 
   static String _tomlString(String value) {
+    return jsonEncode(value);
+  }
+
+  static String _yamlString(String value) {
     return jsonEncode(value);
   }
 
@@ -1486,6 +1766,111 @@ Typical flow:
 ''';
   }
 
+  static String _buildCliWorkspaceAgentsMd() {
+    return '''
+# OpenClaw CLI Workspace
+
+- 当前运行环境是 Android 应用中的 Ubuntu rootfs，通过 PRoot 提供 Linux 用户空间。
+- 默认开发目录是 `${cliWorkspacePath}`，生成的项目、代码、脚本和临时文件优先放在这里。
+- 如需新建工程，请优先使用 `./projects`；临时文件和实验内容请优先使用 `./scratch`。
+- `/storage/emulated/0` 和 `/sdcard` 映射到 Android 共享存储，但权限、性能和路径行为通常不如当前工作区稳定。
+- 不要默认假设这里有 systemd、Docker、KVM、桌面会话或完整内核能力；需要时先自行检测。
+''';
+  }
+
+  static String _buildCliWorkspaceGeminiMd() {
+    return '''
+# OpenClaw Android Ubuntu Context
+
+- This CLI session runs inside an Ubuntu rootfs hosted by an Android app through PRoot.
+- Use `${cliWorkspacePath}` as the default working directory for generated code and project files.
+- Prefer `./projects` for long-lived repositories and `./scratch` for throwaway experiments.
+- Android shared storage may be available at `/storage/emulated/0` and `/sdcard`, but it is slower and more permission-sensitive than the workspace.
+- Verify assumptions before relying on systemd, Docker, kernel modules, or full desktop integrations.
+''';
+  }
+
+  static String _buildCliWorkspaceContextMd() {
+    return '''
+# OpenClaw CLI Context
+
+- Runtime: Ubuntu rootfs hosted inside an Android app through PRoot.
+- Primary workspace: `${cliWorkspacePath}`.
+- Put persistent projects under `./projects`.
+- Put short-lived tests and generated scratch files under `./scratch`.
+- Shared Android storage may exist at `/storage/emulated/0` and `/sdcard`, but it is slower and less predictable than the workspace.
+- Confirm support before depending on systemd, Docker, kernel modules, nested virtualization, or desktop-only integrations.
+''';
+  }
+
+  static String _buildCliWorkspaceGeminiSettingsJson(CliApiConfig config) {
+    final payload = <String, dynamic>{
+      if (_shouldManageToolRuntime(config))
+        'security': {
+          'auth': {
+            'selectedType': _geminiAuthType(config),
+          },
+        },
+      if (_shouldManageToolRuntime(config) &&
+          _geminiSelectedModel(config).isNotEmpty)
+        'model': {
+          'name': _geminiSelectedModel(config),
+        },
+      'context': {
+        'fileName': ['AGENTS.md', 'GEMINI.md', 'CONTEXT.md'],
+      },
+      'skills': {
+        'enabled': true,
+      },
+      'experimental': {
+        'enableAgents': true,
+      },
+    };
+    return '${const JsonEncoder.withIndent('  ').convert(payload)}\n';
+  }
+
+  static String _geminiSelectedModel(CliApiConfig config) {
+    if (_geminiUsesCustomModelRouting(config)) {
+      final alias = _geminiCustomModelAlias(config);
+      if (alias.isNotEmpty) {
+        return alias;
+      }
+    }
+    return config.effectiveToolModel.trim();
+  }
+
+  static String _geminiCustomModelAlias(CliApiConfig config) {
+    if (!_geminiUsesCustomModelRouting(config)) {
+      return '';
+    }
+    final preferred = config.profileName.trim();
+    final source = preferred.isNotEmpty
+        ? preferred
+        : _trimTrailingSlash(config.baseUrl);
+    final normalized = source
+        .toLowerCase()
+        .replaceAll(RegExp(r'^https?://'), '')
+        .replaceAll(RegExp(r'[^a-z0-9]+'), '-')
+        .replaceAll(RegExp(r'^-+|-+$'), '');
+    return normalized.isNotEmpty ? normalized : 'openclaw';
+  }
+
+  static String _buildCliWorkspaceSkill() {
+    return '''
+---
+name: openclaw-android-runtime
+description: Use when environment assumptions matter. Explains that the CLI runs inside Android-hosted Ubuntu via PRoot and that `${cliWorkspacePath}` is the default development workspace.
+---
+
+Rules:
+1. Treat the runtime as Ubuntu in PRoot on Android, not as a full VM or desktop Linux machine.
+2. Default working directory: `${cliWorkspacePath}`.
+3. Put generated projects under `./projects` and short-lived experiments under `./scratch` unless the user asks for another path.
+4. Android shared storage mounts (`/storage/emulated/0`, `/sdcard`) can be slower and more permission-sensitive than the workspace.
+5. Verify support before relying on systemd, Docker, nested virtualization, kernel modules, or GUI-only tooling.
+''';
+  }
+
   static String _trimTrailingSlash(String value) {
     var result = value.trim();
     while (result.endsWith('/')) {
@@ -1517,6 +1902,187 @@ Typical flow:
       'gemini' => 'GEMINI_API_KEY',
       _ => 'OPENAI_API_KEY',
     };
+  }
+
+  static bool _geminiUsesCustomModelRouting(CliApiConfig config) {
+    return _shouldManageToolRuntime(config) &&
+        _normalizedProtocol(config.effectiveApiProtocol) != 'gemini';
+  }
+
+  static String _geminiAuthType(CliApiConfig config) {
+    return _geminiUsesCustomModelRouting(config)
+        ? 'chinese-llm'
+        : 'gemini-api-key';
+  }
+
+  static String _codexProviderIdFor(CliApiConfig config) {
+    if (_shouldManageToolRuntime(config)) {
+      return 'hhhl';
+    }
+    final raw = config.profileName.trim().toLowerCase();
+    final normalized = raw
+        .replaceAll(RegExp(r'[^a-z0-9_-]+'), '-')
+        .replaceAll(RegExp(r'-{2,}'), '-')
+        .replaceAll(RegExp(r'^-+|-+$'), '');
+    if (normalized.isEmpty) {
+      return 'openclaw';
+    }
+    if (RegExp(r'^[0-9]').hasMatch(normalized)) {
+      return 'provider-$normalized';
+    }
+    return normalized;
+  }
+
+  static String _codexProviderNameFor(CliApiConfig config) {
+    if (_shouldManageToolRuntime(config)) {
+      return 'hhhl';
+    }
+    final name = config.profileName.trim();
+    return name.isEmpty ? 'OpenClaw' : name;
+  }
+
+  static String _buildCliLauncherHeader(String toolEnvPath) {
+    return '''
+#!/bin/sh
+export HOME="/root"
+export USER="root"
+export LOGNAME="root"
+export XDG_CONFIG_HOME="/root/.config"
+export CODEX_HOME="/root/.codex"
+export GEMINI_CONFIG_DIR="/root/.gemini"
+export NODE_OPTIONS="\${NODE_OPTIONS:---require /root/.openclaw/bionic-bypass.js}"
+export NODE_EXTRA_CA_CERTS="\${NODE_EXTRA_CA_CERTS:-/etc/ssl/certs/ca-certificates.crt}"
+export TMPDIR="\${TMPDIR:-/tmp}"
+[ -r /root/.openclaw/terminal-theme.sh ] && . /root/.openclaw/terminal-theme.sh
+[ -r /root/.openclaw/cli-env.sh ] && . /root/.openclaw/cli-env.sh
+[ -r $toolEnvPath ] && . $toolEnvPath
+mkdir -p \
+  "\${OPENCLAW_CLI_WORKSPACE:-$cliWorkspacePath}" \
+  "\${OPENCLAW_CLI_PROJECTS:-$_cliWorkspaceProjectsPath}" \
+  "\${OPENCLAW_CLI_SCRATCH:-$_cliWorkspaceScratchPath}" \
+  "\${OPENCLAW_CLI_WORKSPACE:-$cliWorkspacePath}/.gemini" \
+  "\${OPENCLAW_CLI_WORKSPACE:-$cliWorkspacePath}/.gen-cli" \
+  "\${OPENCLAW_CLI_WORKSPACE:-$cliWorkspacePath}/.agents/skills" \
+  "\${CODEX_HOME:-/root/.codex}" \
+  "\${GEMINI_CONFIG_DIR:-/root/.gemini}" \
+  "\${XDG_CONFIG_HOME:-/root/.config}" \
+  2>/dev/null || true
+cd "\${OPENCLAW_CLI_WORKSPACE:-$cliWorkspacePath}" 2>/dev/null || cd /root
+''';
+  }
+
+  static String _buildCodexLauncherSh() {
+    return '''${_buildCliLauncherHeader('/root/.openclaw/cli-env-codex.sh')}
+openclaw_managed_auth=false
+if [ -r /root/.openclaw/codex-proxy.env ] && grep -q '^OPENCLAW_CODEX_PROXY_ENABLED=1\$' /root/.openclaw/codex-proxy.env 2>/dev/null; then
+  openclaw_managed_auth=true
+  pkill -f "/root/.openclaw/codex-proxy.py" >/dev/null 2>&1 || true
+  pkill -f "/root/.openclaw/codex-proxy.js" >/dev/null 2>&1 || true
+  if command -v python3 >/dev/null 2>&1 && [ -r /root/.openclaw/codex-proxy.py ]; then
+    nohup python3 /root/.openclaw/codex-proxy.py >/tmp/openclaw-codex-proxy.log 2>&1 &
+  elif command -v node >/dev/null 2>&1 && [ -r /root/.openclaw/codex-proxy.js ]; then
+    nohup node /root/.openclaw/codex-proxy.js >/tmp/openclaw-codex-proxy.log 2>&1 &
+  fi
+  sleep 0.5
+fi
+
+CODEX_JS="/opt/openclaw-cli/codex/node_modules/@openai/codex/bin/codex.js"
+[ -f "\$CODEX_JS" ] || {
+  echo "Codex CLI entrypoint not found: \$CODEX_JS" >&2
+  exit 1
+}
+
+openclaw_passthrough=false
+openclaw_has_sandbox_arg=false
+openclaw_has_no_alt_screen=false
+openclaw_cli_mode=false
+if [ "\${1:-}" = "--openclaw-cli-mode" ]; then
+  openclaw_cli_mode=true
+  shift
+fi
+for arg in "\$@"; do
+  case "\$arg" in
+    --help|-h|--version|-V|version|help|login|logout|mcp|plugin|update|doctor|completion|sandbox|debug|apply|resume|archive|delete|unarchive|fork|cloud|features)
+      openclaw_passthrough=true
+      ;;
+    --sandbox|-s|--ask-for-approval|-a|--dangerously-bypass-approvals-and-sandbox)
+      openclaw_has_sandbox_arg=true
+      ;;
+    --no-alt-screen)
+      openclaw_has_no_alt_screen=true
+      ;;
+  esac
+done
+if [ "\$openclaw_passthrough" != true ] && [ "\$openclaw_has_sandbox_arg" != true ]; then
+  set -- --dangerously-bypass-approvals-and-sandbox "\$@"
+fi
+if [ "\$openclaw_passthrough" != true ] && [ "\$openclaw_cli_mode" = true ] && [ "\$openclaw_has_no_alt_screen" != true ]; then
+  set -- --no-alt-screen "\$@"
+fi
+exec node "\$CODEX_JS" "\$@"
+''';
+  }
+
+  static String _buildGenericAgentLauncherSh() {
+    return '''${_buildCliLauncherHeader('/root/.openclaw/cli-env-generic-agent.sh')}
+GEN_REAL="$(node -e 'const path=require("node:path"); const pkg=require("/opt/openclaw-cli/generic-agent/node_modules/@gen-cli/gen-cli/package.json"); const entry=(pkg.bin && (typeof pkg.bin === "string" ? pkg.bin : pkg.bin.gen)) || pkg.main || "dist/index.js"; process.stdout.write(path.isAbsolute(entry) ? entry : `/opt/openclaw-cli/generic-agent/node_modules/@gen-cli/gen-cli/\${entry}`);' 2>/dev/null)"
+[ -n "\$GEN_REAL" ] && [ -f "\$GEN_REAL" ] || {
+  echo "Gen CLI entrypoint not found." >&2
+  exit 1
+}
+openclaw_skip_model_injection=false
+case "\${1:-}" in
+  --version|-v|-V|version|help|--help|-h)
+    openclaw_skip_model_injection=true
+    ;;
+esac
+if [ "\$openclaw_skip_model_injection" != true ] && [ -n "\${OPENCLAW_API_PROTOCOL:-}" ]; then
+  if [ "\${OPENCLAW_API_PROTOCOL}" = "gemini" ]; then
+    export GEMINI_DEFAULT_AUTH_TYPE="\${GEMINI_DEFAULT_AUTH_TYPE:-gemini-api-key}"
+  else
+    export GEMINI_DEFAULT_AUTH_TYPE="\${GEMINI_DEFAULT_AUTH_TYPE:-siliconflow-api-key}"
+  fi
+fi
+if [ "\$openclaw_skip_model_injection" != true ] && [ -n "\${OPENCLAW_MODEL:-}" ]; then
+  set -- --model "\$OPENCLAW_MODEL" "\$@"
+fi
+exec node "\$GEN_REAL" "\$@"
+''';
+  }
+
+  static String _buildGeminiLauncherSh() {
+    return '''${_buildCliLauncherHeader('/root/.openclaw/cli-env-gemini.sh')}
+GEMINI_REAL="$(node -e 'const path=require("node:path"); const pkg=require("/opt/openclaw-cli/gemini/node_modules/@google/gemini-cli/package.json"); const entry=(pkg.bin && (typeof pkg.bin === "string" ? pkg.bin : pkg.bin.gemini)) || pkg.main || "dist/index.js"; process.stdout.write(path.isAbsolute(entry) ? entry : `/opt/openclaw-cli/gemini/node_modules/@google/gemini-cli/\${entry}`);' 2>/dev/null)"
+[ -n "\$GEMINI_REAL" ] && [ -f "\$GEMINI_REAL" ] || {
+  echo "Gemini CLI entrypoint not found." >&2
+  exit 1
+}
+openclaw_skip_model_injection=false
+case "\${1:-}" in
+  --version|-v|-V|version|help|--help|-h)
+    openclaw_skip_model_injection=true
+    ;;
+esac
+if [ "\$openclaw_skip_model_injection" != true ]; then
+  if [ -n "\${OPENCLAW_GEMINI_MODEL_ALIAS:-}" ]; then
+    set -- --model "\$OPENCLAW_GEMINI_MODEL_ALIAS" "\$@"
+  elif [ -n "\${OPENCLAW_MODEL:-}" ]; then
+    set -- --model "\$OPENCLAW_MODEL" "\$@"
+  fi
+fi
+exec node "\$GEMINI_REAL" "\$@"
+''';
+  }
+
+  static String _buildHermesLauncherSh() {
+    return '''${_buildCliLauncherHeader('/root/.openclaw/cli-env-hermes-agent.sh')}
+if [ -r /root/.hermes/.env ]; then
+  set -a
+  . /root/.hermes/.env
+  set +a
+fi
+exec /opt/openclaw-cli/hermes-agent/venv/bin/hermes "\$@"
+''';
   }
 
   static String _buildCodexProxyPy() {

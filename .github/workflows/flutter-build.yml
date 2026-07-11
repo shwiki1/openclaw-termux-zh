@@ -83,7 +83,7 @@ jobs:
         if: steps.restore_rootfs.outputs.restored != 'true'
         run: |
           set -euo pipefail
-          bash scripts/build-prebuilt-rootfs.sh --no-docker --arch arm64 --mirror http://mirrors.tuna.tsinghua.edu.cn/ubuntu-ports
+          bash scripts/build-prebuilt-rootfs.sh --no-docker --arch arm64 --mirror http://mirrors.ustc.edu.cn/ubuntu-ports
           ROOTFS=flutter_app/assets/bootstrap/openclaw-rootfs-noble-arm64.tar.gz
           test -s "$ROOTFS"
           gzip -t "$ROOTFS"
@@ -168,10 +168,13 @@ jobs:
           if [ "$PUBSPEC_VERSION_CODE" = "$APP_VERSION" ] || [ -z "$PUBSPEC_VERSION_CODE" ]; then
             PUBSPEC_VERSION_CODE="1"
           fi
-          GENERATED_VERSION_CODE="$(date -u +%s)"
+          GENERATED_VERSION_CODE="${GITHUB_RUN_NUMBER:-0}"
+          if ! [[ "$GENERATED_VERSION_CODE" =~ ^[0-9]+$ ]]; then
+            GENERATED_VERSION_CODE=0
+          fi
           VERSION_CODE="$GENERATED_VERSION_CODE"
-          if [ "${VERSION_CODE}" -lt "${PUBSPEC_VERSION_CODE}" ]; then
-            VERSION_CODE="${PUBSPEC_VERSION_CODE}"
+          if [ "${VERSION_CODE}" -le "${PUBSPEC_VERSION_CODE}" ]; then
+            VERSION_CODE="$((PUBSPEC_VERSION_CODE + 1))"
           fi
           VERSION_NAME="$VERSION_BASE"
           echo "APP_VERSION_NAME=${VERSION_NAME}" >> "$GITHUB_ENV"

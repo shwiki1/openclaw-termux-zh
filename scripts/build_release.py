@@ -9,7 +9,6 @@ import shlex
 import shutil
 import subprocess
 import sys
-import time
 from pathlib import Path
 
 
@@ -58,7 +57,7 @@ def default_build_number(value: str) -> str:
         pubspec_build = int(value)
     except ValueError:
         return next_build_number(value)
-    return str(max(pubspec_build + 1, int(time.time())))
+    return str(pubspec_build + 1)
 
 
 def normalize_version(value: str) -> str:

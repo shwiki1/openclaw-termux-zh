@@ -9,6 +9,7 @@ import '../services/cli_api_config_service.dart';
 import '../services/cli_tool_service.dart';
 import '../widgets/cli_api_config_dialog.dart';
 import '../widgets/cli_api_profiles_dialog.dart';
+import 'cli_tool_install_screen.dart';
 import 'terminal_screen.dart';
 
 class CliToolsScreen extends StatefulWidget {
@@ -48,6 +49,11 @@ class _CliToolsScreenState extends State<CliToolsScreen> {
     if (mounted && showLoader) {
       setState(() => _loading = true);
     }
+    try {
+      await CliApiConfigService.regenerateRuntimeFiles();
+    } catch (_) {
+      // Status probing should still proceed when the rootfs is not ready yet.
+    }
     final results = await Future.wait<dynamic>([
       CliToolService.checkAllStatuses(forceRefresh: forceStatusRefresh),
       CliApiConfigService.loadSharedProfiles(),
@@ -63,8 +69,7 @@ class _CliToolsScreenState extends State<CliToolsScreen> {
   }
 
   Future<void> _openTool(CliToolDefinition tool) async {
-    final isShell = tool.id == CliToolService.shellTool.id;
-    if (!isShell) {
+    if (tool.id != CliToolService.shellTool.id) {
       try {
         await CliApiConfigService.regenerateRuntimeFiles();
       } catch (_) {
@@ -76,7 +81,9 @@ class _CliToolsScreenState extends State<CliToolsScreen> {
         builder: (_) => TerminalScreen(
           sessionId: tool.id,
           title: tool.name,
-          initialCommand: isShell ? null : tool.launchCommand,
+          initialCommand: tool.launchCommand.trim().isEmpty
+              ? null
+              : tool.launchCommand,
         ),
       ),
     );
@@ -98,18 +105,16 @@ class _CliToolsScreenState extends State<CliToolsScreen> {
       // surface any real failures in the terminal.
     }
 
-    await Navigator.of(context).push(
+    final result = await Navigator.of(context).push<CliToolInstallResult>(
       MaterialPageRoute(
-        builder: (_) => TerminalScreen(
-          sessionId: 'install-${tool.id}',
-          title: 'Install ${tool.name}',
-          initialCommand: tool.installCommand,
-          restartOnOpen: true,
-        ),
+        builder: (_) => CliToolInstallScreen(tool: tool),
       ),
     );
     if (mounted) {
       await _refresh(forceStatusRefresh: true);
+      if (result != null) {
+        await _showInstallResultDialog(result);
+      }
     }
   }
 
@@ -125,6 +130,43 @@ class _CliToolsScreenState extends State<CliToolsScreen> {
     if (saved && mounted) {
       await _refresh(showLoader: false, forceStatusRefresh: true);
     }
+  }
+
+  CliToolStatus? _statusForTool(String toolId) {
+    for (final status in _statuses) {
+      if (status.tool.id == toolId) {
+        return status;
+      }
+    }
+    return null;
+  }
+
+  Future<void> _showInstallResultDialog(CliToolInstallResult result) async {
+    if (!mounted) return;
+    final status = _statusForTool(result.tool.id);
+    final effectiveSuccess = result.success && (status?.installed ?? false);
+    final version = status?.version?.trim() ?? '';
+    final detail = status?.error?.trim().isNotEmpty == true
+        ? status!.error!.trim()
+        : result.outputTail.trim();
+    final message = effectiveSuccess
+        ? (version.isEmpty ? '安装完成。' : '安装完成，当前版本：$version')
+        : (detail.isEmpty ? '安装失败，请重新安装并检查日志。' : detail);
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(effectiveSuccess ? '${result.tool.name} 已安装' : '${result.tool.name} 安装失败'),
+        content: SingleChildScrollView(
+          child: SelectableText(message),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('关闭'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override

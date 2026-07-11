@@ -82,17 +82,17 @@ case "$ARCH" in
   arm64)
     ROOTFS_ARCH="arm64"
     QEMU_BIN="qemu-aarch64-static"
-    DEFAULT_MIRROR="http://mirrors.tuna.tsinghua.edu.cn/ubuntu-ports"
+    DEFAULT_MIRROR="http://mirrors.ustc.edu.cn/ubuntu-ports"
     ;;
   armhf)
     ROOTFS_ARCH="armhf"
     QEMU_BIN="qemu-arm-static"
-    DEFAULT_MIRROR="http://mirrors.tuna.tsinghua.edu.cn/ubuntu-ports"
+    DEFAULT_MIRROR="http://mirrors.ustc.edu.cn/ubuntu-ports"
     ;;
   amd64)
     ROOTFS_ARCH="amd64"
     QEMU_BIN="qemu-x86_64-static"
-    DEFAULT_MIRROR="http://mirrors.tuna.tsinghua.edu.cn/ubuntu"
+    DEFAULT_MIRROR="http://mirrors.ustc.edu.cn/ubuntu"
     ;;
   *)
     echo "Unsupported arch: $ARCH" >&2
@@ -101,11 +101,12 @@ case "$ARCH" in
 esac
 
 MIRROR="${MIRROR:-$DEFAULT_MIRROR}"
+BOOTSTRAP_MIRROR="${MIRROR/https:\/\//http://}"
 BASE_NAME="ubuntu-base-${UBUNTU_VERSION}-base-${ROOTFS_ARCH}.tar.gz"
 BASE_URLS=(
-  "https://mirrors.tuna.tsinghua.edu.cn/ubuntu-cdimage/ubuntu-base/releases/24.04/release/$BASE_NAME"
   "https://mirrors.ustc.edu.cn/ubuntu-cdimage/ubuntu-base/releases/24.04/release/$BASE_NAME"
   "https://mirrors.aliyun.com/ubuntu-cdimage/ubuntu-base/releases/24.04/release/$BASE_NAME"
+  "https://mirrors.tuna.tsinghua.edu.cn/ubuntu-cdimage/ubuntu-base/releases/24.04/release/$BASE_NAME"
   "https://cdimage.ubuntu.com/ubuntu-base/releases/24.04/release/$BASE_NAME"
 )
 OUTPUT_NAME="openclaw-rootfs-${CODENAME}-${ROOTFS_ARCH}.tar.gz"
@@ -256,6 +257,7 @@ shell_quote() {
 echo "==> Building prebuilt rootfs: $OUTPUT_NAME"
 echo "    Ubuntu base: ${BASE_URLS[0]}"
 echo "    Mirror:      $MIRROR"
+echo "    Bootstrap apt mirror: $BOOTSTRAP_MIRROR"
 
 mkdir -p "$CACHE_DIR" "$ASSET_DIR" "$WORK_DIR"
 if [[ ! -s "$BASE_TARBALL" ]]; then
@@ -302,10 +304,10 @@ run_root mkdir -p \
 
 run_root rm -f "$ROOTFS_DIR/etc/apt/sources.list.d/ubuntu.sources"
 run_root tee "$ROOTFS_DIR/etc/apt/sources.list" >/dev/null <<EOF
-deb $MIRROR $CODENAME main restricted universe multiverse
-deb $MIRROR ${CODENAME}-updates main restricted universe multiverse
-deb $MIRROR ${CODENAME}-backports main restricted universe multiverse
-deb $MIRROR ${CODENAME}-security main restricted universe multiverse
+deb $BOOTSTRAP_MIRROR $CODENAME main restricted universe multiverse
+deb $BOOTSTRAP_MIRROR ${CODENAME}-updates main restricted universe multiverse
+deb $BOOTSTRAP_MIRROR ${CODENAME}-backports main restricted universe multiverse
+deb $BOOTSTRAP_MIRROR ${CODENAME}-security main restricted universe multiverse
 EOF
 
 run_root tee "$ROOTFS_DIR/etc/apt/apt.conf.d/01-openclaw-proot" >/dev/null <<'EOF'
