@@ -1,9 +1,14 @@
 import 'package:flutter/material.dart';
 
 import '../models/cli_tool.dart';
+import 'cli_api_config_service.dart';
 import 'native_bridge.dart';
 
 class CliToolService {
+  static const _statusCacheTtl = Duration(seconds: 20);
+  static List<CliToolStatus> _statusCache = const [];
+  static DateTime? _statusCacheAt;
+
   static const shellTool = CliToolDefinition(
     id: 'shell',
     name: 'Ubuntu Shell',
@@ -13,7 +18,12 @@ class CliToolService {
     icon: Icons.terminal,
     color: Colors.blueGrey,
     installCommand: '',
-    launchCommand: '',
+    launchCommand: r'''
+[ -r /root/.openclaw/cli-env.sh ] && . /root/.openclaw/cli-env.sh
+mkdir -p "${OPENCLAW_CLI_WORKSPACE:-/root/openclaw-cli-workspace}" "${OPENCLAW_CLI_PROJECTS:-/root/openclaw-cli-workspace/projects}" "${OPENCLAW_CLI_SCRATCH:-/root/openclaw-cli-workspace/scratch}" 2>/dev/null || true
+cd "${OPENCLAW_CLI_WORKSPACE:-/root/openclaw-cli-workspace}" 2>/dev/null || cd /root
+exec bash -li
+''',
     versionCommand: 'bash --version | head -n 1',
   );
 
@@ -39,14 +49,7 @@ class CliToolService {
     icon: Icons.assistant,
     color: Colors.lightBlue,
     installCommand: _codeBuddyInstallCommand,
-    launchCommand: r'''
-[ -r /root/.openclaw/cli-env.sh ] && . /root/.openclaw/cli-env.sh
-[ -r /root/.openclaw/cli-env-codebuddy.sh ] && . /root/.openclaw/cli-env-codebuddy.sh
-if [ -n "${OPENCLAW_MODEL:-}" ]; then
-  exec /usr/local/bin/codebuddy --model "$OPENCLAW_MODEL"
-fi
-exec /usr/local/bin/codebuddy
-''',
+    launchCommand: 'exec /usr/local/bin/codebuddy',
     versionCommand: '/usr/local/bin/codebuddy --version',
   );
 
@@ -59,48 +62,33 @@ exec /usr/local/bin/codebuddy
     icon: Icons.hub,
     color: Colors.orange,
     installCommand: _qwenInstallCommand,
-    launchCommand: r'''
-[ -r /root/.openclaw/cli-env.sh ] && . /root/.openclaw/cli-env.sh
-[ -r /root/.openclaw/cli-env-qwen-code.sh ] && . /root/.openclaw/cli-env-qwen-code.sh
-if [ -n "${OPENCLAW_MODEL:-}" ]; then
-  exec /usr/local/bin/qwen --model "$OPENCLAW_MODEL"
-fi
-exec /usr/local/bin/qwen
-''',
+    launchCommand: 'exec /usr/local/bin/qwen',
     versionCommand: '/usr/local/bin/qwen --version',
   );
 
   static const hermesTool = CliToolDefinition(
     id: 'hermes-agent',
     name: 'Hermes Agent',
-    packageName: 'openclaw-hermes-agent',
+    packageName: 'hermes-agent',
     executable: 'hermes',
-    description: '内置轻量级终端 Agent，面向快速问答、代码解释和命令行任务规划，使用统一 API 配置。',
+    description: 'Nous Research 官方 Hermes Agent CLI，支持在终端内进行多步开发协作，并复用统一 API 配置。',
     icon: Icons.bolt,
     color: Colors.amber,
     installCommand: _hermesInstallCommand,
-    launchCommand: r'''
-[ -r /root/.openclaw/cli-env.sh ] && . /root/.openclaw/cli-env.sh
-[ -r /root/.openclaw/cli-env-hermes-agent.sh ] && . /root/.openclaw/cli-env-hermes-agent.sh
-exec /usr/local/bin/hermes
-''',
+    launchCommand: 'exec /usr/local/bin/hermes',
     versionCommand: '/usr/local/bin/hermes --version',
   );
 
   static const genericTool = CliToolDefinition(
     id: 'generic-agent',
-    name: 'Generic Agent',
-    packageName: 'openclaw-generic-agent',
+    name: 'Gen CLI (Generic Agent)',
+    packageName: '@gen-cli/gen-cli',
     executable: 'generic-agent',
-    description: '通用 OpenAI 兼容 Agent，可直接连接任意中转 API，用于普通对话、代码生成和脚本辅助。',
+    description: '官方 Gen CLI，优先走原生 Gemini 或 SiliconFlow 模式；遇到 OpenAI 兼容接口时自动切换到内置兼容桥。',
     icon: Icons.smart_toy,
     color: Colors.teal,
     installCommand: _genericInstallCommand,
-    launchCommand: r'''
-[ -r /root/.openclaw/cli-env.sh ] && . /root/.openclaw/cli-env.sh
-[ -r /root/.openclaw/cli-env-generic-agent.sh ] && . /root/.openclaw/cli-env-generic-agent.sh
-exec /usr/local/bin/generic-agent
-''',
+    launchCommand: 'exec /usr/local/bin/generic-agent',
     versionCommand: '/usr/local/bin/generic-agent --version',
   );
 
@@ -113,21 +101,7 @@ exec /usr/local/bin/generic-agent
     icon: Icons.diamond,
     color: Colors.indigo,
     installCommand: _geminiInstallCommand,
-    launchCommand: r'''
-[ -r /root/.openclaw/cli-env.sh ] && . /root/.openclaw/cli-env.sh
-[ -r /root/.openclaw/cli-env-gemini.sh ] && . /root/.openclaw/cli-env-gemini.sh
-if [ "${OPENCLAW_API_PROTOCOL:-gemini}" != "gemini" ]; then
-  if [ -x /usr/local/bin/gemini-openai-agent ]; then
-    exec /usr/local/bin/gemini-openai-agent
-  fi
-  echo "Gemini CLI 的官方运行时只支持 Gemini 协议。OpenAI 兼容协议需要回到 CLI Tools 页面更新 Gemini CLI 以安装兜底 Agent。" >&2
-  exit 2
-fi
-if [ -n "${OPENCLAW_MODEL:-}" ]; then
-  exec /usr/local/bin/gemini --model "$OPENCLAW_MODEL"
-fi
-exec /usr/local/bin/gemini
-''',
+    launchCommand: 'exec /usr/local/bin/gemini',
     versionCommand: '/usr/local/bin/gemini --version',
   );
 
@@ -170,11 +144,27 @@ if [ "$(uname -m)" != "aarch64" ] && [ "$(uname -m)" != "arm64" ]; then
   exit 1
 fi
 
-mkdir -p /root/.openclaw /root/.npm /tmp/npm-cache /tmp/npm-tmp /opt/openclaw-cli /usr/local/bin /usr/local/lib
+export PIP_DISABLE_PIP_VERSION_CHECK=1
+export PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
+export PIP_TRUSTED_HOST=pypi.tuna.tsinghua.edu.cn
+
+mkdir -p /root/.openclaw /root/.npm /tmp/npm-cache /tmp/npm-tmp /opt/openclaw-cli /usr/local/bin /usr/local/lib /root/.gen-cli
 npm config set audit false --global >/dev/null 2>&1 || true
 npm config set fund false --global >/dev/null 2>&1 || true
 npm config set update-notifier false --global >/dev/null 2>&1 || true
 npm config set registry https://registry.npmmirror.com --global >/dev/null 2>&1 || true
+
+ensure_cli_workspace() {
+  [ -r /root/.openclaw/cli-env.sh ] && . /root/.openclaw/cli-env.sh
+  mkdir -p \
+    "${OPENCLAW_CLI_WORKSPACE:-/root/openclaw-cli-workspace}" \
+    "${OPENCLAW_CLI_PROJECTS:-/root/openclaw-cli-workspace/projects}" \
+    "${OPENCLAW_CLI_SCRATCH:-/root/openclaw-cli-workspace/scratch}" \
+    "${OPENCLAW_CLI_WORKSPACE:-/root/openclaw-cli-workspace}/.gemini" \
+    "${OPENCLAW_CLI_WORKSPACE:-/root/openclaw-cli-workspace}/.gen-cli" \
+    "${OPENCLAW_CLI_WORKSPACE:-/root/openclaw-cli-workspace}/.agents/skills" \
+    2>/dev/null || true
+}
 
 install_cli_package() {
   tool_id="$1"
@@ -200,6 +190,13 @@ install_cli_package() {
   rm -f "/usr/local/bin/$bin_name"
 }
 
+resolve_node_entry() {
+  tool_id="$1"
+  package_name="$2"
+  bin_key="$3"
+  node -e 'const path=require("node:path"); const toolId=process.argv[1]; const packageName=process.argv[2]; const binKey=process.argv[3]; const pkg=require(`/opt/openclaw-cli/${toolId}/node_modules/${packageName}/package.json`); const entry=(pkg.bin && (typeof pkg.bin === "string" ? pkg.bin : pkg.bin[binKey])) || pkg.main || "dist/index.js"; process.stdout.write(path.isAbsolute(entry) ? entry : `/opt/openclaw-cli/${toolId}/node_modules/${packageName}/${entry}`);' "$tool_id" "$package_name" "$bin_key"
+}
+
 write_cli_theme() {
   cat > /root/.openclaw/terminal-theme.sh <<'OPENCLAW_TERMINAL_THEME'
 export TERM="${TERM:-xterm-256color}"
@@ -220,33 +217,59 @@ OPENCLAW_TERMINAL_THEME
   }
 }
 
+write_wrapper_header() {
+  cat <<'OPENCLAW_WRAPPER_HEADER'
+export NODE_OPTIONS="${NODE_OPTIONS:---require /root/.openclaw/bionic-bypass.js}"
+export NODE_EXTRA_CA_CERTS="${NODE_EXTRA_CA_CERTS:-/etc/ssl/certs/ca-certificates.crt}"
+export TMPDIR="${TMPDIR:-/tmp}"
+[ -r /root/.openclaw/terminal-theme.sh ] && . /root/.openclaw/terminal-theme.sh
+[ -r /root/.openclaw/cli-env.sh ] && . /root/.openclaw/cli-env.sh
+mkdir -p \
+  "${OPENCLAW_CLI_WORKSPACE:-/root/openclaw-cli-workspace}" \
+  "${OPENCLAW_CLI_PROJECTS:-/root/openclaw-cli-workspace/projects}" \
+  "${OPENCLAW_CLI_SCRATCH:-/root/openclaw-cli-workspace/scratch}" \
+  "${OPENCLAW_CLI_WORKSPACE:-/root/openclaw-cli-workspace}/.gemini" \
+  "${OPENCLAW_CLI_WORKSPACE:-/root/openclaw-cli-workspace}/.gen-cli" \
+  "${OPENCLAW_CLI_WORKSPACE:-/root/openclaw-cli-workspace}/.agents/skills" \
+  2>/dev/null || true
+cd "${OPENCLAW_CLI_WORKSPACE:-/root/openclaw-cli-workspace}" 2>/dev/null || cd /root
+OPENCLAW_WRAPPER_HEADER
+}
+
 write_node_wrapper() {
   target="$1"
   bin_name="$2"
   real_js="$3"
   cat > "/usr/local/bin/$bin_name" <<OPENCLAW_NODE_WRAPPER
 #!/bin/sh
-export NODE_OPTIONS="\${NODE_OPTIONS:---require /root/.openclaw/bionic-bypass.js}"
-export NODE_EXTRA_CA_CERTS="\${NODE_EXTRA_CA_CERTS:-/etc/ssl/certs/ca-certificates.crt}"
-export TMPDIR="\${TMPDIR:-/tmp}"
-[ -r /root/.openclaw/terminal-theme.sh ] && . /root/.openclaw/terminal-theme.sh
-[ -r /root/.openclaw/cli-env.sh ] && . /root/.openclaw/cli-env.sh
+$(write_wrapper_header)
 [ -r /root/.openclaw/cli-env-$target.sh ] && . /root/.openclaw/cli-env-$target.sh
+openclaw_skip_model_injection=false
+case "\${1:-}" in
+  --version|-v|-V|version|help|--help|-h)
+    openclaw_skip_model_injection=true
+    ;;
+esac
 case "$target" in
   codebuddy)
-    if [ -n "\${OPENCLAW_MODEL:-}" ] && [ "\${1:-}" != "--version" ] && [ "\${1:-}" != "-v" ] && [ "\${1:-}" != "--help" ] && [ "\${1:-}" != "-h" ]; then
+    if [ "\$openclaw_skip_model_injection" != true ] && [ -n "\${OPENCLAW_MODEL:-}" ]; then
+      set -- --model "\$OPENCLAW_MODEL" "\$@"
+    fi
+    ;;
+  qwen-code)
+    if [ "\$openclaw_skip_model_injection" != true ] && [ -n "\${OPENCLAW_MODEL:-}" ]; then
       set -- --model "\$OPENCLAW_MODEL" "\$@"
     fi
     ;;
   gemini)
-    if [ "\${OPENCLAW_API_PROTOCOL:-gemini}" != "gemini" ] && [ "\${1:-}" != "--version" ] && [ "\${1:-}" != "-v" ] && [ "\${1:-}" != "--help" ] && [ "\${1:-}" != "-h" ]; then
+    if [ "\$openclaw_skip_model_injection" != true ] && [ "\${OPENCLAW_API_PROTOCOL:-gemini}" != "gemini" ]; then
       if [ -x /usr/local/bin/gemini-openai-agent ]; then
         exec /usr/local/bin/gemini-openai-agent "\$@"
       fi
       echo "Gemini CLI only supports Gemini protocol directly. Reinstall Gemini CLI to enable the OpenAI-compatible fallback agent, or switch this tool's API protocol to Gemini." >&2
       exit 2
     fi
-    if [ -n "\${OPENCLAW_MODEL:-}" ] && [ "\${1:-}" != "--version" ] && [ "\${1:-}" != "-v" ] && [ "\${1:-}" != "--help" ] && [ "\${1:-}" != "-h" ]; then
+    if [ "\$openclaw_skip_model_injection" != true ] && [ -n "\${OPENCLAW_MODEL:-}" ]; then
       set -- --model "\$OPENCLAW_MODEL" "\$@"
     fi
     ;;
@@ -256,19 +279,17 @@ OPENCLAW_NODE_WRAPPER
   chmod 0755 "/usr/local/bin/$bin_name"
 }
 
-write_generic_agent() {
+write_openai_compatible_agent() {
   bin_name="$1"
   env_tool_id="$2"
-  tool_id="$3"
-  display_name="$4"
+  display_name="$3"
   script_path="/usr/local/lib/openclaw-cli-$bin_name.js"
-  cat > "$script_path" <<'OPENCLAW_GENERIC_AGENT'
+  cat > "$script_path" <<'OPENCLAW_OPENAI_BRIDGE'
 #!/usr/bin/env node
 const readline = require("readline");
 
-const toolId = process.env.OPENCLAW_TOOL_ID || "generic-agent";
-const displayName = process.env.OPENCLAW_TOOL_NAME || "Generic Agent";
-const version = "1.0.0";
+const displayName = process.env.OPENCLAW_TOOL_NAME || "OpenClaw OpenAI Bridge";
+const version = process.env.OPENCLAW_BRIDGE_VERSION || "1.0.0";
 
 if (process.argv.includes("--version") || process.argv.includes("-v")) {
   console.log(`${displayName} ${version}`);
@@ -298,7 +319,7 @@ const rl = readline.createInterface({
 const messages = [
   {
     role: "system",
-    content: `${displayName} running inside OpenClaw. Reply concisely and help with coding or shell tasks.`,
+    content: `${displayName} runs inside Ubuntu hosted by an Android app through PRoot. Default workspace: ${env("OPENCLAW_CLI_WORKSPACE", "/root/openclaw-cli-workspace")}. Prefer ./projects for real projects and ./scratch for temporary work. Reply concisely and help with coding or shell tasks.`,
   },
 ];
 
@@ -361,23 +382,80 @@ rl.on("line", async (line) => {
   }
   rl.prompt();
 });
-OPENCLAW_GENERIC_AGENT
-  sed -i "s/Generic Agent/$display_name/g; s/generic-agent/$tool_id/g" "$script_path"
+OPENCLAW_OPENAI_BRIDGE
+  sed -i "s/OpenClaw OpenAI Bridge/$display_name/g" "$script_path"
   chmod 0755 "$script_path"
-  cat > "/usr/local/bin/$bin_name" <<OPENCLAW_GENERIC_AGENT_WRAPPER
+  cat > "/usr/local/bin/$bin_name" <<OPENCLAW_OPENAI_BRIDGE_WRAPPER
 #!/bin/sh
-export NODE_OPTIONS="\${NODE_OPTIONS:---require /root/.openclaw/bionic-bypass.js}"
-export NODE_EXTRA_CA_CERTS="\${NODE_EXTRA_CA_CERTS:-/etc/ssl/certs/ca-certificates.crt}"
-export TMPDIR="\${TMPDIR:-/tmp}"
-[ -r /root/.openclaw/terminal-theme.sh ] && . /root/.openclaw/terminal-theme.sh
-[ -r /root/.openclaw/cli-env.sh ] && . /root/.openclaw/cli-env.sh
+$(write_wrapper_header)
 [ -r /root/.openclaw/cli-env-$env_tool_id.sh ] && . /root/.openclaw/cli-env-$env_tool_id.sh
+export OPENCLAW_TOOL_NAME="$display_name"
 exec node "$script_path" "\$@"
-OPENCLAW_GENERIC_AGENT_WRAPPER
+OPENCLAW_OPENAI_BRIDGE_WRAPPER
   chmod 0755 "/usr/local/bin/$bin_name"
 }
 
+write_gen_wrapper() {
+  real_js="$1"
+  cat > /usr/local/bin/generic-agent <<OPENCLAW_GEN_WRAPPER
+#!/bin/sh
+$(write_wrapper_header)
+[ -r /root/.openclaw/cli-env-generic-agent.sh ] && . /root/.openclaw/cli-env-generic-agent.sh
+openclaw_skip_model_injection=false
+case "\${1:-}" in
+  --version|-v|-V|version|help|--help|-h)
+    openclaw_skip_model_injection=true
+    ;;
+esac
+openclaw_use_official_gen=false
+if [ -z "\${OPENCLAW_API_PROTOCOL:-}" ] || [ "\${OPENCLAW_API_PROTOCOL:-openai}" = "gemini" ] || [ "\${GEMINI_DEFAULT_AUTH_TYPE:-}" = "siliconflow-api-key" ]; then
+  openclaw_use_official_gen=true
+fi
+if [ "\$openclaw_use_official_gen" != true ] && [ "\$openclaw_skip_model_injection" != true ]; then
+  if [ -x /usr/local/bin/generic-agent-openai ]; then
+    exec /usr/local/bin/generic-agent-openai "\$@"
+  fi
+  echo "Gen CLI 当前仅直接支持 Gemini API Key 或 SiliconFlow 模式。当前配置会自动走 OpenAI 兼容桥，但兼容桥缺失。" >&2
+  exit 2
+fi
+if [ "\$openclaw_skip_model_injection" != true ] && [ -n "\${OPENCLAW_MODEL:-}" ]; then
+  set -- --model "\$OPENCLAW_MODEL" "\$@"
+fi
+exec node "$real_js" "\$@"
+OPENCLAW_GEN_WRAPPER
+  chmod 0755 /usr/local/bin/generic-agent
+  ln -sf /usr/local/bin/generic-agent /usr/local/bin/gen
+}
+
+write_hermes_wrapper() {
+  cat > /usr/local/bin/hermes <<'OPENCLAW_HERMES_WRAPPER'
+#!/bin/sh
+export NODE_EXTRA_CA_CERTS="${NODE_EXTRA_CA_CERTS:-/etc/ssl/certs/ca-certificates.crt}"
+export TMPDIR="${TMPDIR:-/tmp}"
+[ -r /root/.openclaw/terminal-theme.sh ] && . /root/.openclaw/terminal-theme.sh
+[ -r /root/.openclaw/cli-env.sh ] && . /root/.openclaw/cli-env.sh
+[ -r /root/.openclaw/cli-env-hermes-agent.sh ] && . /root/.openclaw/cli-env-hermes-agent.sh
+if [ -r /root/.hermes/.env ]; then
+  set -a
+  . /root/.hermes/.env
+  set +a
+fi
+mkdir -p \
+  "${OPENCLAW_CLI_WORKSPACE:-/root/openclaw-cli-workspace}" \
+  "${OPENCLAW_CLI_PROJECTS:-/root/openclaw-cli-workspace/projects}" \
+  "${OPENCLAW_CLI_SCRATCH:-/root/openclaw-cli-workspace/scratch}" \
+  "${OPENCLAW_CLI_WORKSPACE:-/root/openclaw-cli-workspace}/.gemini" \
+  "${OPENCLAW_CLI_WORKSPACE:-/root/openclaw-cli-workspace}/.gen-cli" \
+  "${OPENCLAW_CLI_WORKSPACE:-/root/openclaw-cli-workspace}/.agents/skills" \
+  2>/dev/null || true
+cd "${OPENCLAW_CLI_WORKSPACE:-/root/openclaw-cli-workspace}" 2>/dev/null || cd /root
+exec /opt/openclaw-cli/hermes-agent/venv/bin/hermes "$@"
+OPENCLAW_HERMES_WRAPPER
+  chmod 0755 /usr/local/bin/hermes
+}
+
 write_cli_theme
+ensure_cli_workspace
 ''';
 
   static const _codexInstallCommand = _commonInstallPrefix +
@@ -392,7 +470,21 @@ export TMPDIR="${TMPDIR:-/tmp}"
 [ -r /root/.openclaw/terminal-theme.sh ] && . /root/.openclaw/terminal-theme.sh
 [ -r /root/.openclaw/cli-env.sh ] && . /root/.openclaw/cli-env.sh
 [ -r /root/.openclaw/cli-env-codex.sh ] && . /root/.openclaw/cli-env-codex.sh
-if [ -r /root/.openclaw/codex-proxy.env ]; then
+mkdir -p \
+  "${OPENCLAW_CLI_WORKSPACE:-/root/openclaw-cli-workspace}" \
+  "${OPENCLAW_CLI_PROJECTS:-/root/openclaw-cli-workspace/projects}" \
+  "${OPENCLAW_CLI_SCRATCH:-/root/openclaw-cli-workspace/scratch}" \
+  "${OPENCLAW_CLI_WORKSPACE:-/root/openclaw-cli-workspace}/.gemini" \
+  "${OPENCLAW_CLI_WORKSPACE:-/root/openclaw-cli-workspace}/.gen-cli" \
+  "${OPENCLAW_CLI_WORKSPACE:-/root/openclaw-cli-workspace}/.agents/skills" \
+  2>/dev/null || true
+cd "${OPENCLAW_CLI_WORKSPACE:-/root/openclaw-cli-workspace}" 2>/dev/null || cd /root
+openclaw_managed_auth=false
+openclaw_toml_quote() {
+  printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
+}
+if [ -r /root/.openclaw/codex-proxy.env ] && grep -q '^OPENCLAW_CODEX_PROXY_ENABLED=1$' /root/.openclaw/codex-proxy.env 2>/dev/null; then
+  openclaw_managed_auth=true
   pkill -f "/root/.openclaw/codex-proxy.py" >/dev/null 2>&1 || true
   pkill -f "/root/.openclaw/codex-proxy.js" >/dev/null 2>&1 || true
   if command -v python3 >/dev/null 2>&1 && [ -r /root/.openclaw/codex-proxy.py ]; then
@@ -405,6 +497,7 @@ fi
 
 openclaw_passthrough=false
 openclaw_has_sandbox_arg=false
+openclaw_has_no_alt_screen=false
 openclaw_cli_mode=false
 if [ "${1:-}" = "--openclaw-cli-mode" ]; then
   openclaw_cli_mode=true
@@ -418,13 +511,32 @@ for arg in "$@"; do
     --sandbox|-s|--ask-for-approval|-a|--dangerously-bypass-approvals-and-sandbox)
       openclaw_has_sandbox_arg=true
       ;;
+    --no-alt-screen)
+      openclaw_has_no_alt_screen=true
+      ;;
   esac
 done
 if [ "$openclaw_passthrough" != true ] && [ "$openclaw_has_sandbox_arg" != true ]; then
   set -- --dangerously-bypass-approvals-and-sandbox "$@"
 fi
-if [ "$openclaw_passthrough" != true ] && [ "$openclaw_cli_mode" = true ]; then
+if [ "$openclaw_passthrough" != true ] && [ "$openclaw_cli_mode" = true ] && [ "$openclaw_has_no_alt_screen" != true ]; then
   set -- --no-alt-screen "$@"
+fi
+if [ "$openclaw_passthrough" != true ] && [ "$openclaw_managed_auth" = true ]; then
+  set -- -c 'preferred_auth_method="apikey"' "$@"
+  set -- -c 'model_provider="openclaw"' "$@"
+  set -- -c 'model_providers.openclaw.name="OpenClaw"' "$@"
+  set -- -c 'model_providers.openclaw.base_url="http://127.0.0.1:8787/v1"' "$@"
+  set -- -c 'model_providers.openclaw.wire_api="responses"' "$@"
+  set -- -c 'model_providers.openclaw.env_key="OPENAI_API_KEY"' "$@"
+  if [ -n "${OPENAI_MODEL:-}" ]; then
+    openclaw_model="$(openclaw_toml_quote "$OPENAI_MODEL")"
+    set -- -c "model=\"$openclaw_model\"" "$@"
+  fi
+  if [ -n "${OPENAI_REASONING_EFFORT:-}" ]; then
+    openclaw_effort="$(openclaw_toml_quote "$OPENAI_REASONING_EFFORT")"
+    set -- -c "model_reasoning_effort=\"$openclaw_effort\"" "$@"
+  fi
 fi
 exec node /opt/openclaw-cli/codex/node_modules/@openai/codex/bin/codex.js "$@"
 OPENCLAW_CODEX_WRAPPER
@@ -466,8 +578,14 @@ echo ">>> QWEN_CODE_CLI_INSTALL_COMPLETE"
       r'''
 echo ">>> Installing Gemini CLI from npm..."
 install_cli_package gemini @google/gemini-cli gemini
-write_node_wrapper gemini gemini /opt/openclaw-cli/gemini/node_modules/@google/gemini-cli/bundle/gemini.js
-write_generic_agent gemini-openai-agent gemini generic-agent "Gemini OpenAI Agent"
+GEMINI_REAL="$(resolve_node_entry gemini @google/gemini-cli gemini)"
+if [ ! -f "$GEMINI_REAL" ]; then
+  echo "Gemini CLI entrypoint not found: $GEMINI_REAL" >&2
+  find /opt/openclaw-cli/gemini/node_modules/@google/gemini-cli -maxdepth 3 -type f 2>/dev/null | sort >&2 || true
+  exit 1
+fi
+write_node_wrapper gemini gemini "$GEMINI_REAL"
+write_openai_compatible_agent gemini-openai-agent gemini "Gemini OpenAI Bridge"
 hash -r
 /usr/local/bin/gemini --version || true
 echo ">>> GEMINI_CLI_INSTALL_COMPLETE"
@@ -475,36 +593,89 @@ echo ">>> GEMINI_CLI_INSTALL_COMPLETE"
 
   static const _hermesInstallCommand = _commonInstallPrefix +
       r'''
-echo ">>> Installing OpenClaw Hermes Agent..."
-write_generic_agent hermes hermes-agent hermes-agent "Hermes Agent"
+echo ">>> Installing Hermes Agent from PyPI..."
+if ! command -v python3 >/dev/null 2>&1; then
+  echo "python3 is required. Run environment setup first." >&2
+  exit 1
+fi
+HERMES_TARGET=/opt/openclaw-cli/hermes-agent
+HERMES_STAGING="$HERMES_TARGET.tmp"
+HERMES_PREVIOUS="$HERMES_TARGET.prev"
+rm -rf "$HERMES_STAGING" "$HERMES_PREVIOUS"
+if ! python3 -m venv "$HERMES_STAGING/venv"; then
+  apt-get update
+  apt-get install -y python3-venv python3-pip
+  python3 -m venv "$HERMES_STAGING/venv"
+fi
+"$HERMES_STAGING/venv/bin/python" -m pip install -U pip setuptools wheel
+"$HERMES_STAGING/venv/bin/python" -m pip install -U hermes-agent
+if [ -d "$HERMES_TARGET" ]; then
+  mv "$HERMES_TARGET" "$HERMES_PREVIOUS"
+fi
+mv "$HERMES_STAGING" "$HERMES_TARGET"
+rm -rf "$HERMES_PREVIOUS"
+write_hermes_wrapper
 hash -r
-/usr/local/bin/hermes --version
+/usr/local/bin/hermes --version || true
 echo ">>> HERMES_AGENT_INSTALL_COMPLETE"
 ''';
 
   static const _genericInstallCommand = _commonInstallPrefix +
       r'''
-echo ">>> Installing OpenClaw Generic Agent..."
-write_generic_agent generic-agent generic-agent generic-agent "Generic Agent"
+echo ">>> Installing Gen CLI from npm..."
+install_cli_package generic-agent @gen-cli/gen-cli gen
+GEN_REAL="$(resolve_node_entry generic-agent @gen-cli/gen-cli gen)"
+if [ ! -f "$GEN_REAL" ]; then
+  echo "Gen CLI entrypoint not found: $GEN_REAL" >&2
+  find /opt/openclaw-cli/generic-agent/node_modules/@gen-cli/gen-cli -maxdepth 3 -type f 2>/dev/null | sort >&2 || true
+  exit 1
+fi
+write_gen_wrapper "$GEN_REAL"
+write_openai_compatible_agent generic-agent-openai generic-agent "Gen CLI OpenAI Bridge"
 hash -r
-/usr/local/bin/generic-agent --version
+/usr/local/bin/generic-agent --version || true
 echo ">>> GENERIC_AGENT_INSTALL_COMPLETE"
 ''';
 
-  static Future<List<CliToolStatus>> checkAllStatuses() async {
-    final statuses = <CliToolStatus>[];
-    for (final tool in allTools) {
-      statuses.add(await checkStatus(tool));
+  static List<CliToolStatus> get cachedStatuses =>
+      List<CliToolStatus>.unmodifiable(_statusCache);
+
+  static Future<List<CliToolStatus>> checkAllStatuses({
+    bool includeVersionDetails = true,
+    bool forceRefresh = false,
+  }) async {
+    if (!forceRefresh &&
+        includeVersionDetails &&
+        _statusCache.isNotEmpty &&
+        _statusCacheAt != null &&
+        DateTime.now().difference(_statusCacheAt!) <= _statusCacheTtl) {
+      return cachedStatuses;
     }
-    return statuses;
+
+    final statuses = await Future.wait(
+      allTools.map(
+        (tool) => checkStatus(
+          tool,
+          includeVersionDetails: includeVersionDetails,
+        ),
+      ),
+    );
+    final mergedStatuses = _mergeStatusesWithCache(statuses);
+    _statusCache = mergedStatuses;
+    _statusCacheAt = DateTime.now();
+    return List<CliToolStatus>.unmodifiable(mergedStatuses);
   }
 
-  static Future<CliToolStatus> checkStatus(CliToolDefinition tool) async {
+  static Future<CliToolStatus> checkStatus(
+    CliToolDefinition tool, {
+    bool includeVersionDetails = true,
+  }) async {
     if (tool.id == shellTool.id) {
-      return _checkShellStatus();
+      return _checkShellStatus(includeVersionDetails: includeVersionDetails);
     }
 
-    final command = '''
+    final command = includeVersionDetails
+        ? '''
 set +e
 set -o pipefail
 if command -v ${tool.executable} >/dev/null 2>&1; then
@@ -517,6 +688,14 @@ if command -v ${tool.executable} >/dev/null 2>&1; then
     echo "__OPENCLAW_CLI_BROKEN__"
     echo "\$version_output"
   fi
+else
+  echo "__OPENCLAW_CLI_NOT_INSTALLED__"
+fi
+'''
+        : '''
+set +e
+if command -v ${tool.executable} >/dev/null 2>&1; then
+  echo "__OPENCLAW_CLI_INSTALLED__"
 else
   echo "__OPENCLAW_CLI_NOT_INSTALLED__"
 fi
@@ -533,11 +712,12 @@ fi
       final broken = lines.contains('__OPENCLAW_CLI_BROKEN__');
       final markerIndex =
           lines.indexWhere((line) => line.startsWith('__OPENCLAW_CLI_'));
-      final version = installed
+      final cached = _cachedStatusFor(tool.id);
+      final version = installed && includeVersionDetails
           ? lines
               .skip(markerIndex + 1)
               .firstWhere((line) => !line.startsWith('__'), orElse: () => '')
-          : '';
+          : (cached?.version ?? '');
       final error = broken
           ? lines
               .skip(markerIndex + 1)
@@ -559,16 +739,19 @@ fi
     }
   }
 
-  static Future<CliToolStatus> _checkShellStatus() async {
+  static Future<CliToolStatus> _checkShellStatus({
+    bool includeVersionDetails = true,
+  }) async {
     try {
-      final output = await NativeBridge.runInProot(
-        'bash --version | head -n 1',
-        timeout: 20,
-      );
-      final version = output
-          .split('\n')
-          .map((line) => line.trim())
-          .firstWhere((line) => line.isNotEmpty, orElse: () => 'bash');
+      final version = includeVersionDetails
+          ? (await NativeBridge.runInProot(
+              'bash --version | head -n 1',
+              timeout: 20,
+            ))
+              .split('\n')
+              .map((line) => line.trim())
+              .firstWhere((line) => line.isNotEmpty, orElse: () => 'bash')
+          : (_cachedStatusFor(shellTool.id)?.version ?? 'bash');
       return CliToolStatus(
         tool: shellTool,
         installed: true,
@@ -583,5 +766,30 @@ fi
     }
   }
 
-  static Future<void> prepareInstallAssets(CliToolDefinition _) async {}
+  static Future<void> prepareInstallAssets(CliToolDefinition _) async {
+    await CliApiConfigService.regenerateRuntimeFiles();
+  }
+
+  static CliToolStatus? _cachedStatusFor(String toolId) {
+    for (final status in _statusCache) {
+      if (status.tool.id == toolId) {
+        return status;
+      }
+    }
+    return null;
+  }
+
+  static List<CliToolStatus> _mergeStatusesWithCache(
+    List<CliToolStatus> statuses,
+  ) {
+    return statuses.map((status) {
+      final cached = _cachedStatusFor(status.tool.id);
+      return CliToolStatus(
+        tool: status.tool,
+        installed: status.installed,
+        version: status.version ?? cached?.version,
+        error: status.error,
+      );
+    }).toList(growable: false);
+  }
 }

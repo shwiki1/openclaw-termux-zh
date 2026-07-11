@@ -35,7 +35,7 @@ class _BackupManagerScreenState extends State<BackupManagerScreen> {
       final installedOpenClawVersion =
           await _openClawVersionService.readInstalledVersion();
       final entries = await BackupLibraryService.listEntries(
-        currentAppVersion: AppConstants.version,
+        currentAppVersion: AppConstants.fullVersion,
         currentOpenClawVersion: installedOpenClawVersion,
       );
       if (!mounted) {
@@ -62,7 +62,7 @@ class _BackupManagerScreenState extends State<BackupManagerScreen> {
     setState(() => _busy = true);
     try {
       final entry = await BackupLibraryService.importBackupFromPicker(
-        currentAppVersion: AppConstants.version,
+        currentAppVersion: AppConstants.fullVersion,
         currentOpenClawVersion: _currentOpenClawVersion,
       );
       if (entry == null) {
@@ -93,7 +93,7 @@ class _BackupManagerScreenState extends State<BackupManagerScreen> {
     setState(() => _busy = true);
     try {
       final entry = await BackupLibraryService.saveCurrentConfigSnapshot(
-        currentAppVersion: AppConstants.version,
+        currentAppVersion: AppConstants.fullVersion,
         currentOpenClawVersion: _currentOpenClawVersion,
       );
       await _refresh();
@@ -122,7 +122,7 @@ class _BackupManagerScreenState extends State<BackupManagerScreen> {
     try {
       final saved = await BackupService.exportConfigBackup(
         suggestedName: _defaultConfigBackupFileName(
-          appVersion: AppConstants.version,
+          appVersion: AppConstants.fullVersion,
           openClawVersion: _currentOpenClawVersion,
         ),
       );
@@ -152,10 +152,10 @@ class _BackupManagerScreenState extends State<BackupManagerScreen> {
     try {
       final saved = await BackupService.exportWorkspaceBackup(
         suggestedName: _defaultWorkspaceBackupFileName(
-          appVersion: AppConstants.version,
+          appVersion: AppConstants.fullVersion,
           openClawVersion: _currentOpenClawVersion,
         ),
-        appVersion: AppConstants.version,
+        appVersion: AppConstants.fullVersion,
         openClawVersion: _currentOpenClawVersion,
       );
       if (saved == null || !mounted) {

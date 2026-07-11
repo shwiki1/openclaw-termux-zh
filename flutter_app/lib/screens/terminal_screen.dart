@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 
+import '../services/browser_automation_service.dart';
 import '../services/native_bridge.dart';
 import '../services/terminal_input_controller.dart';
 import '../services/terminal_service.dart';
 import '../widgets/native_terminal_view.dart';
 import '../widgets/responsive_layout.dart';
+import '../widgets/terminal_browser_panel.dart';
 import '../widgets/terminal_toolbar.dart';
 
 class TerminalScreen extends StatefulWidget {
@@ -30,12 +32,15 @@ class _TerminalScreenState extends State<TerminalScreen> {
   static final Map<String, int> _savedActiveIndexes = {};
 
   var _terminalKey = GlobalKey<NativeTerminalViewState>();
+  final _browserService = BrowserAutomationService.instance;
   late final TerminalInputController _terminalInput;
   late Future<_NativeTerminalConfig> _configFuture;
   late final List<_TerminalSessionTab> _sessions;
   var _activeIndex = 0;
   var _restartOnCreate = false;
   var _closedAllSessions = false;
+  var _browserPanelOpen = false;
+  var _lastBrowserPanelRequestNonce = 0;
 
   _TerminalSessionTab get _activeSession => _sessions[_activeIndex];
 
@@ -43,6 +48,8 @@ class _TerminalScreenState extends State<TerminalScreen> {
   void initState() {
     super.initState();
     NativeBridge.startTerminalService().catchError((_) => false);
+    _browserService.ensureStarted().catchError((_) => false);
+    _browserService.addListener(_handleBrowserAutomationUpdate);
     if (widget.restartOnOpen) {
       _savedSessions.remove(widget.sessionId);
       _savedActiveIndexes.remove(widget.sessionId);
@@ -81,8 +88,30 @@ class _TerminalScreenState extends State<TerminalScreen> {
     if (!_closedAllSessions) {
       _persistSessionTabs();
     }
+    _browserService.removeListener(_handleBrowserAutomationUpdate);
     _terminalInput.dispose();
     super.dispose();
+  }
+
+  void _handleBrowserAutomationUpdate() {
+    if (!mounted) {
+      return;
+    }
+    final requestNonce = _browserService.panelRequestNonce;
+    if (requestNonce == 0 || requestNonce == _lastBrowserPanelRequestNonce) {
+      return;
+    }
+    _lastBrowserPanelRequestNonce = requestNonce;
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    if (screenWidth >= 960 || _browserPanelOpen) {
+      return;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _browserPanelOpen) {
+        return;
+      }
+      _openBrowserPanel(autoRequested: true);
+    });
   }
 
   void _persistSessionTabs() {
@@ -233,6 +262,11 @@ class _TerminalScreenState extends State<TerminalScreen> {
   List<Widget> _buildToolbarActions() {
     return [
       IconButton(
+        icon: const Icon(Icons.language),
+        tooltip: 'Browser panel',
+        onPressed: _openBrowserPanel,
+      ),
+      IconButton(
         icon: const Icon(Icons.add),
         tooltip: 'New session',
         onPressed: _newSession,
@@ -265,6 +299,9 @@ class _TerminalScreenState extends State<TerminalScreen> {
           return;
         }
         switch (value) {
+          case 'browser':
+            _openBrowserPanel();
+            break;
           case 'new':
             _newSession();
             break;
@@ -280,6 +317,8 @@ class _TerminalScreenState extends State<TerminalScreen> {
         }
       },
       itemBuilder: (context) => [
+        const PopupMenuItem(value: 'browser', child: Text('Browser panel')),
+        const PopupMenuDivider(),
         const PopupMenuItem(value: 'new', child: Text('New session')),
         const PopupMenuDivider(),
         for (var i = 0; i < _sessions.length; i++)
@@ -372,8 +411,11 @@ class _TerminalScreenState extends State<TerminalScreen> {
   }
 
   Widget _buildTerminal(_NativeTerminalConfig config) {
-    return Column(
+    final screenWidth = MediaQuery.sizeOf(context).width;
+
+    final terminal = Column(
       children: [
+        _buildBrowserStatusBanner(screenWidth),
         Expanded(
           child: NativeTerminalView(
             key: _terminalKey,
@@ -392,6 +434,160 @@ class _TerminalScreenState extends State<TerminalScreen> {
           altNotifier: _terminalInput.altNotifier,
         ),
       ],
+    );
+
+    if (screenWidth < 960) {
+      return terminal;
+    }
+
+    final browserWidth = screenWidth >= 1320 ? 420.0 : 360.0;
+    return Row(
+      children: [
+        Expanded(child: terminal),
+        SizedBox(
+          width: browserWidth,
+          child: const TerminalBrowserPanel(),
+        ),
+      ],
+    );
+  }
+
+  void _openBrowserPanel({bool autoRequested = false}) {
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    if (screenWidth >= 960) {
+      if (!autoRequested) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Browser panel is already visible on the right side.'),
+          ),
+        );
+      }
+      return;
+    }
+
+    _browserPanelOpen = true;
+    Navigator.of(context)
+        .push(
+      MaterialPageRoute(
+        builder: (_) => const _TerminalBrowserPage(),
+      ),
+    )
+        .whenComplete(() {
+          _browserPanelOpen = false;
+        });
+  }
+
+  Widget _buildBrowserStatusBanner(double screenWidth) {
+    final service = BrowserAutomationService.instance;
+    return AnimatedBuilder(
+      animation: service,
+      builder: (context, _) {
+        final attached = service.isBrowserAttached;
+        final active = service.isToolCallActive;
+        final compact = screenWidth < 560;
+        final canOpenPanel = screenWidth < 960;
+
+        late final IconData icon;
+        late final Color color;
+        late final String title;
+        late final String subtitle;
+
+        if (active) {
+          icon = Icons.auto_awesome;
+          color = const Color(0xFFDC2626);
+          title = 'Codex 正在操作浏览器';
+          subtitle = service.lastToolName.isEmpty
+              ? '等待浏览器动作完成'
+              : '当前动作: ${service.lastToolName}';
+        } else if (attached) {
+          icon = Icons.language;
+          color = const Color(0xFF22C55E);
+          title = '浏览器已连接';
+          subtitle = service.currentUrl.isNotEmpty
+              ? service.currentUrl
+              : 'Codex 可以直接使用浏览器工具';
+        } else {
+          icon = Icons.link_off;
+          color = const Color(0xFFF59E0B);
+          title = '浏览器未连接';
+          subtitle = screenWidth >= 960
+              ? '右侧面板打开网页后，Codex 才能控制浏览器'
+              : '点右上角浏览器按钮，先打开浏览器面板';
+        }
+
+        return Container(
+          width: double.infinity,
+          padding: EdgeInsets.fromLTRB(
+            compact ? 10 : 12,
+            10,
+            compact ? 10 : 12,
+            10,
+          ),
+          decoration: BoxDecoration(
+            color: Colors.black,
+            border: Border(
+              bottom: BorderSide(color: Colors.white.withAlpha(18)),
+            ),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: compact ? 32 : 36,
+                height: compact ? 32 : 36,
+                decoration: BoxDecoration(
+                  color: color.withAlpha(30),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: color.withAlpha(120)),
+                ),
+                child: Icon(icon, color: color, size: compact ? 16 : 18),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: compact ? 12 : 13,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: Colors.white60,
+                        fontSize: compact ? 11 : 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              OutlinedButton(
+                onPressed: canOpenPanel ? _openBrowserPanel : null,
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.white,
+                  side: BorderSide(color: color.withAlpha(150)),
+                  padding: EdgeInsets.symmetric(
+                    horizontal: compact ? 10 : 12,
+                    vertical: 8,
+                  ),
+                ),
+                child: Text(
+                  canOpenPanel ? (attached ? '查看' : '打开') : '右侧已显示',
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }
@@ -416,4 +612,23 @@ class _TerminalSessionTab {
     required this.id,
     required this.title,
   });
+}
+
+class _TerminalBrowserPage extends StatelessWidget {
+  const _TerminalBrowserPage();
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.black,
+        foregroundColor: Colors.white,
+        title: const Text('Browser Panel'),
+      ),
+      body: const TerminalBrowserPanel(
+        standalone: true,
+      ),
+    );
+  }
 }

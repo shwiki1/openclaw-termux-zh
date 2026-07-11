@@ -21,7 +21,7 @@ class UpdateFlowService {
         title: Text(l10n.t('settingsUpdateAvailableTitle')),
         content: Text(
           l10n.t('settingsUpdateAvailableBody', {
-            'current': AppConstants.version,
+            'current': AppConstants.displayVersion,
             'latest': result.latest,
           }),
         ),

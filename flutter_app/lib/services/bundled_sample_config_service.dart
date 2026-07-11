@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:flutter/services.dart';
 
 import 'native_bridge.dart';
+import 'provider_config_service.dart';
 
 class BundledSampleConfig {
   const BundledSampleConfig({
@@ -221,9 +222,12 @@ class BundledSampleConfigService {
   }
 
   static Future<void> apply(BundledSampleConfig sample) async {
+    final config =
+        jsonDecode(jsonEncode(sample.config)) as Map<String, dynamic>;
+    ProviderConfigService.sanitizeConfigMapForWrite(config);
     await NativeBridge.writeRootfsFile(
       _targetConfigPath,
-      const JsonEncoder.withIndent('  ').convert(sample.config),
+      const JsonEncoder.withIndent('  ').convert(config),
     );
   }
 }

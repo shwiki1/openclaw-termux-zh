@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'native_bridge.dart';
+import 'provider_config_service.dart';
 import 'snapshot_service.dart';
 
 enum BackupImportKind {
@@ -134,9 +135,11 @@ class BackupImportBundle {
         if (value == null) {
           throw StateError('Missing config payload');
         }
+        final sanitized = jsonDecode(jsonEncode(value)) as Map<String, dynamic>;
+        ProviderConfigService.sanitizeConfigMapForWrite(sanitized);
         await NativeBridge.writeRootfsFile(
           'root/.openclaw/openclaw.json',
-          const JsonEncoder.withIndent('  ').convert(value),
+          const JsonEncoder.withIndent('  ').convert(sanitized),
         );
         break;
       case BackupImportKind.legacySnapshot:

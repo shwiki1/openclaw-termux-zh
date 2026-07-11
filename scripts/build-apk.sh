@@ -26,7 +26,27 @@ echo ""
 
 # Step 3: Build APK
 echo "[3/3] Building arm64-v8a release APK..."
-flutter build apk --release --split-per-abi --target-platform android-arm64
+APP_VERSION="$(awk '/^version:/ {print $2; exit}' pubspec.yaml)"
+VERSION_NAME="${APP_VERSION%%+*}"
+VERSION_CODE="${APP_VERSION#*+}"
+if [ "$VERSION_CODE" = "$APP_VERSION" ] || [ -z "$VERSION_CODE" ]; then
+    VERSION_CODE=1
+fi
+if [ -n "${BUILD_VERSION_CODE:-}" ]; then
+    VERSION_CODE="$BUILD_VERSION_CODE"
+else
+    GENERATED_VERSION_CODE="$(date -u +%s)"
+    if [ "$GENERATED_VERSION_CODE" -gt "$VERSION_CODE" ]; then
+        VERSION_CODE="$GENERATED_VERSION_CODE"
+    fi
+fi
+flutter build apk --release \
+    --split-per-abi \
+    --target-platform android-arm64 \
+    --build-name "$VERSION_NAME" \
+    --build-number "$VERSION_CODE" \
+    --dart-define=APP_VERSION_NAME="$VERSION_NAME" \
+    --dart-define=APP_VERSION_CODE="$VERSION_CODE"
 echo ""
 
 APK_PATH="$FLUTTER_DIR/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk"

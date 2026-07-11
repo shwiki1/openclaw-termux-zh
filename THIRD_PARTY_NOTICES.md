@@ -48,6 +48,54 @@ Direct dependencies currently declared:
 - `usb_serial`
 - `flutter_markdown_plus`
 
+## Runtime-Installed CLI Tools
+
+These tools are not bundled inside the APK itself. The app provides official
+installers that fetch them into the Ubuntu rootfs at runtime under
+`/opt/openclaw-cli/`.
+
+### Google Gemini CLI
+
+- Version: installed from the latest npm release at runtime; verified current
+  latest on 2026-07-11 as `0.50.0`.
+- License: Apache-2.0.
+- Used as: optional CLI tool installed by the app after first-run environment
+  setup.
+- Upstream: https://github.com/google-gemini/gemini-cli
+- Source for distributed binary: npm package `@google/gemini-cli`.
+- Modifications: none to upstream package contents; the app adds wrapper
+  scripts and workspace config around the installed package.
+- Required notices: preserve upstream Apache-2.0 license text when
+  redistributing the installed package outside the rootfs.
+
+### Gen CLI
+
+- Version: installed from the latest npm release at runtime; verified current
+  latest on 2026-07-11 as `0.1.13`.
+- License: Apache-2.0.
+- Used as: optional CLI tool installed by the app as the official
+  `Generic Agent` implementation.
+- Upstream: https://github.com/gen-cli/gen-cli
+- Source for distributed binary: npm package `@gen-cli/gen-cli`.
+- Modifications: none to upstream package contents; the app adds wrapper
+  scripts, workspace config, and an OpenAI-compatible fallback bridge.
+- Required notices: preserve upstream Apache-2.0 license text when
+  redistributing the installed package outside the rootfs.
+
+### Hermes Agent
+
+- Version: installed from the latest PyPI release at runtime; verified current
+  latest on 2026-07-11 as `0.18.2`.
+- License: MIT.
+- Used as: optional CLI tool installed by the app after first-run environment
+  setup.
+- Upstream: https://github.com/NousResearch/hermes-agent
+- Source for distributed binary: Python package `hermes-agent` from PyPI.
+- Modifications: none to upstream package contents; the app adds wrapper
+  scripts and generated config files around the installed package.
+- Required notices: preserve upstream MIT license text when redistributing the
+  installed package outside the rootfs.
+
 ## Termux Terminal View
 
 - Version: v0.118.0.

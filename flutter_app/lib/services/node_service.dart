@@ -216,7 +216,7 @@ class NodeService {
       'client': {
         'id': clientId,
         'displayName': 'OpenClawX Node',
-        'version': AppConstants.version,
+        'version': AppConstants.fullVersion,
         'platform': 'android',
         'deviceFamily': 'Android',
         'mode': clientMode,

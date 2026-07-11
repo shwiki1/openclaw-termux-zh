@@ -869,6 +869,194 @@ function patchTextFile(filePath) {
   return true;
 }
 
+function patchGatewayFile(filePath) {
+  if (!fs.existsSync(filePath)) return false;
+  let content;
+  try {
+    content = fs.readFileSync(filePath, "utf8");
+  } catch (_) {
+    return false;
+  }
+
+  let changed = false;
+
+  const progressHelpersNeedle = `let timeoutId = null;
+                        let toolOnlyTimeoutId = null;`;
+  const progressHelpersReplacement = `let timeoutId = null;
+                        let toolOnlyTimeoutId = null;
+                        const progressReplyIntervalMs = 3000;
+                        const maxProgressReplies = 3;
+                        let progressReplyTimer = null;
+                        let progressReplyCount = 0;
+                        let progressReplySending = false;
+                        let failureReplySent = false;
+                        const stopProgressReplies = () => {
+                            if (progressReplyTimer) {
+                                clearInterval(progressReplyTimer);
+                                progressReplyTimer = null;
+                            }
+                        };
+                        const sendProgressReply = async () => {
+                            if (hasBlockResponse || toolFallbackSent || failureReplySent || progressReplySending) {
+                                return;
+                            }
+                            if (progressReplyCount >= maxProgressReplies) {
+                                stopProgressReplies();
+                                return;
+                            }
+                            progressReplySending = true;
+                            try {
+                                const progressText = progressReplyCount === 0
+                                    ? "⏳ 正在生成中，请稍候..."
+                                    : "⏳ 仍在生成中，请稍候...";
+                                await sendErrorMessage(progressText);
+                                progressReplyCount++;
+                                if (progressReplyCount >= maxProgressReplies) {
+                                    stopProgressReplies();
+                                }
+                            }
+                            catch (progressErr) {
+                                log?.error(\`[qqbot:\${account.accountId}] Failed to send progress reply: \${progressErr}\`);
+                            }
+                            finally {
+                                progressReplySending = false;
+                            }
+                        };
+                        const startProgressReplies = () => {
+                            if (progressReplyTimer || maxProgressReplies <= 0) {
+                                return;
+                            }
+                            progressReplyTimer = setInterval(() => {
+                                void sendProgressReply();
+                            }, progressReplyIntervalMs);
+                        };
+                        const sendFailureReply = async (errorText) => {
+                            if (hasBlockResponse || toolFallbackSent || failureReplySent) {
+                                return;
+                            }
+                            failureReplySent = true;
+                            stopProgressReplies();
+                            try {
+                                await sendErrorMessage(errorText);
+                            }
+                            catch (sendErr) {
+                                log?.error(\`[qqbot:\${account.accountId}] Failed to send failure reply: \${sendErr}\`);
+                            }
+                        };`;
+  if (content.includes(progressHelpersNeedle) &&
+      !content.includes("const progressReplyIntervalMs = 3000;")) {
+    content = content.replace(progressHelpersNeedle, progressHelpersReplacement);
+    changed = true;
+  }
+
+  const progressStartNeedle = `const dispatchPromise = pluginRuntime.channel.reply.dispatchReplyWithBufferedBlockDispatcher({`;
+  if (content.includes(progressStartNeedle) &&
+      !content.includes("startProgressReplies();\n                        const dispatchPromise =")) {
+    content = content.replace(
+      progressStartNeedle,
+      `startProgressReplies();
+                        const dispatchPromise = pluginRuntime.channel.reply.dispatchReplyWithBufferedBlockDispatcher({`,
+    );
+    changed = true;
+  }
+
+  const stopOnBlockNeedle = `typing.keepAlive?.stop();`;
+  if (content.includes(stopOnBlockNeedle) &&
+      !content.includes(`typing.keepAlive?.stop();
+                                    stopProgressReplies();`)) {
+    content = content.replace(
+      stopOnBlockNeedle,
+      `typing.keepAlive?.stop();
+                                    stopProgressReplies();`,
+    );
+    changed = true;
+  }
+
+  const onErrorNeedle = `                                    if (errMsg.includes("401") || errMsg.includes("key") || errMsg.includes("auth")) {
+                                        log?.error(\`[qqbot:\${account.accountId}] AI auth error: \${errMsg}\`);
+                                    }
+                                    else {
+                                        log?.error(\`[qqbot:\${account.accountId}] AI process error: \${errMsg}\`);
+                                    }`;
+  const onErrorReplacement = `                                    if (errMsg.includes("401") || errMsg.includes("key") || errMsg.includes("auth")) {
+                                        log?.error(\`[qqbot:\${account.accountId}] AI auth error: \${errMsg}\`);
+                                        await sendFailureReply("⚠️ 本次生成失败，可能是 API 地址、Key、模型名或模型映射配置错误，请检查后重试。");
+                                    }
+                                    else {
+                                        log?.error(\`[qqbot:\${account.accountId}] AI process error: \${errMsg}\`);
+                                        await sendFailureReply("⚠️ 本次生成失败，未能返回结果。请重试，也可能是当前 API 地址、Key、模型名或模型映射配置错误。");
+                                    }`;
+  if (content.includes(onErrorNeedle) &&
+      !content.includes("await sendFailureReply(\"⚠️ 本次生成失败")) {
+    content = content.replace(onErrorNeedle, onErrorReplacement);
+    changed = true;
+  }
+
+  const dispatchCatchNeedle = `                            log?.error(\`[qqbot:\${account.accountId}] Dispatch failed: \${err}\${!hasResponse ? " (no response received)" : ""}\`);
+                        }
+                        finally {`;
+  const dispatchCatchReplacement = `                            log?.error(\`[qqbot:\${account.accountId}] Dispatch failed: \${err}\${!hasResponse ? " (no response received)" : ""}\`);
+                            if (!hasBlockResponse && !toolFallbackSent) {
+                                await sendFailureReply("⚠️ 本次生成超时或失败，未能返回结果。请重试，也可能是当前 API 地址、Key、模型名或模型映射配置错误。");
+                            }
+                        }
+                        finally {
+                            stopProgressReplies();`;
+  if (content.includes(dispatchCatchNeedle) &&
+      !content.includes("本次生成超时或失败，未能返回结果")) {
+    content = content.replace(dispatchCatchNeedle, dispatchCatchReplacement);
+    changed = true;
+  }
+
+  const outerCatchNeedle = `                        if (errStr.includes("Unable to resolve plugin runtime module") || errStr.includes("root-alias.cjs")) {
+                            try {
+                                await sendErrorMessage("⚠️ AI 服务暂时不可用：openclaw 框架运行时模块加载失败。\\n\\n请管理员执行：\\nnpm install -g openclaw@latest\\nopenclaw gateway restart\\n\\n斜杠命令（如 /bot-ping）不受影响。");
+                            }
+                            catch { /* best-effort */ }
+                        }`;
+  const outerCatchReplacement = `                        if (errStr.includes("Unable to resolve plugin runtime module") || errStr.includes("root-alias.cjs")) {
+                            try {
+                                await sendErrorMessage("⚠️ AI 服务暂时不可用：openclaw 框架运行时模块加载失败。\\n\\n请管理员执行：\\nnpm install -g openclaw@latest\\nopenclaw gateway restart\\n\\n斜杠命令（如 /bot-ping）不受影响。");
+                            }
+                            catch { /* best-effort */ }
+                        }
+                        else {
+                            await sendFailureReply("⚠️ 本次生成失败，未能返回结果。请重试，也可能是当前 API 地址、Key、模型名或模型映射配置错误。");
+                        }`;
+  if (content.includes(outerCatchNeedle) &&
+      !content.includes("else {\n                            await sendFailureReply")) {
+    content = content.replace(outerCatchNeedle, outerCatchReplacement);
+    changed = true;
+  }
+
+  const silentFinallyNeedle = `                            if (toolDeliverCount > 0 && !hasBlockResponse && !toolFallbackSent) {
+                                toolFallbackSent = true;
+                                log?.error(\`[qqbot:\${account.accountId}] Dispatch completed with \${toolDeliverCount} tool deliver(s) but no block deliver, sending fallback\`);
+                                await sendToolFallback();
+                            }
+                            // 销毁 debouncer，flush 剩余缓冲的文本`;
+  const silentFinallyReplacement = `                            if (toolDeliverCount > 0 && !hasBlockResponse && !toolFallbackSent) {
+                                toolFallbackSent = true;
+                                log?.error(\`[qqbot:\${account.accountId}] Dispatch completed with \${toolDeliverCount} tool deliver(s) but no block deliver, sending fallback\`);
+                                await sendToolFallback();
+                            }
+                            if (!hasBlockResponse && !toolFallbackSent && !failureReplySent) {
+                                await sendFailureReply("⚠️ 本次生成结束时没有返回任何可发送内容，请重试，也可能是当前 API 地址、Key、模型名或模型映射配置错误。");
+                            }
+                            // 销毁 debouncer，flush 剩余缓冲的文本`;
+  if (content.includes(silentFinallyNeedle) &&
+      !content.includes("本次生成结束时没有返回任何可发送内容")) {
+    content = content.replace(silentFinallyNeedle, silentFinallyReplacement);
+    changed = true;
+  }
+
+  if (!changed) {
+    return false;
+  }
+  fs.writeFileSync(filePath, content);
+  return true;
+}
+
 function walkAndPatchText(rootDir) {
   const stack = [rootDir];
   let patched = 0;
@@ -890,6 +1078,9 @@ function walkAndPatchText(rootDir) {
         continue;
       }
       if (patchTextFile(fullPath)) {
+        patched += 1;
+      }
+      if (entry.name === "gateway.js" && patchGatewayFile(fullPath)) {
         patched += 1;
       }
     }

@@ -9,16 +9,37 @@ import 'native_bridge.dart';
 class CliApiConfigService {
   static const _configPath = '/root/.openclaw/app/cli-api-config.json';
   static const _envPath = '/root/.openclaw/cli-env.sh';
+  static const cliWorkspacePath = '/root/openclaw-cli-workspace';
+  static const _cliWorkspaceProjectsPath = '$cliWorkspacePath/projects';
+  static const _cliWorkspaceScratchPath = '$cliWorkspacePath/scratch';
+  static const _cliWorkspaceAgentsPath = '$cliWorkspacePath/AGENTS.md';
+  static const _cliWorkspaceGeminiPath = '$cliWorkspacePath/GEMINI.md';
+  static const _cliWorkspaceContextPath = '$cliWorkspacePath/CONTEXT.md';
+  static const _cliWorkspaceGeminiSettingsPath =
+      '$cliWorkspacePath/.gemini/settings.json';
+  static const _cliWorkspaceGenCliSettingsPath =
+      '$cliWorkspacePath/.gen-cli/settings.json';
+  static const _cliWorkspaceSkillPath =
+      '$cliWorkspacePath/.agents/skills/openclaw-android-runtime/SKILL.md';
   static const _codexProxyPath = '/root/.openclaw/codex-proxy.py';
   static const _codexProxyJsPath = '/root/.openclaw/codex-proxy.js';
   static const _codexProxyEnvPath = '/root/.openclaw/codex-proxy.env';
   static const _codexConfigPath = '/root/.codex/config.toml';
   static const _codexProxyBaseUrl = 'http://127.0.0.1:8787/v1';
+  static const _codexProviderId = 'openclaw';
   static const _codeBuddyModelsPath = '/root/.codebuddy/models.json';
   static const _codeBuddySettingsPath = '/root/.codebuddy/settings.json';
   static const _qwenSettingsPath = '/root/.qwen/settings.json';
   static const _geminiSettingsPath = '/root/.gemini/settings.json';
+  static const _hermesConfigPath = '/root/.hermes/config.yaml';
+  static const _hermesEnvPath = '/root/.hermes/.env';
   static const _terminalThemePath = '/root/.openclaw/terminal-theme.sh';
+  static const _browserBridgeEnvPath = '/root/.openclaw/browser-bridge.env';
+  static const _browserMcpPath = '/root/.openclaw/browser-mcp.mjs';
+  static const _browserCodexSkillPath =
+      '/root/.codex/skills/browser-operator/SKILL.md';
+  static const _browserSkillPath =
+      '/root/.agents/skills/browser-operator/SKILL.md';
   static const _prefsKey = 'cli_api_config_json';
 
   static const configurableToolIds = {
@@ -168,6 +189,30 @@ class CliApiConfigService {
       _terminalThemePath,
       _buildTerminalThemeSh(),
     );
+    await NativeBridge.writeRootfsFile(
+      _cliWorkspaceAgentsPath,
+      _buildCliWorkspaceAgentsMd(),
+    );
+    await NativeBridge.writeRootfsFile(
+      _cliWorkspaceGeminiPath,
+      _buildCliWorkspaceGeminiMd(),
+    );
+    await NativeBridge.writeRootfsFile(
+      _cliWorkspaceContextPath,
+      _buildCliWorkspaceContextMd(),
+    );
+    await NativeBridge.writeRootfsFile(
+      _cliWorkspaceGeminiSettingsPath,
+      _buildCliWorkspaceGeminiSettingsJson(),
+    );
+    await NativeBridge.writeRootfsFile(
+      _cliWorkspaceGenCliSettingsPath,
+      _buildGenCliSettingsJson(activeConfigs['generic-agent']!),
+    );
+    await NativeBridge.writeRootfsFile(
+      _cliWorkspaceSkillPath,
+      _buildCliWorkspaceSkill(),
+    );
     for (final entry in activeConfigs.entries) {
       await NativeBridge.writeRootfsFile(
         _toolEnvPath(entry.key),
@@ -182,6 +227,18 @@ class CliApiConfigService {
     await NativeBridge.writeRootfsFile(
       _codexProxyEnvPath,
       _buildCodexProxyEnv(codex),
+    );
+    await NativeBridge.writeRootfsFile(
+      _browserMcpPath,
+      _buildBrowserMcpScript(),
+    );
+    await NativeBridge.writeRootfsFile(
+      _browserSkillPath,
+      _buildBrowserSkill(),
+    );
+    await NativeBridge.writeRootfsFile(
+      _browserCodexSkillPath,
+      _buildBrowserSkill(),
     );
     await NativeBridge.writeRootfsFile(_codexConfigPath, _buildCodexToml(codex));
     await NativeBridge.writeRootfsFile(
@@ -200,13 +257,34 @@ class CliApiConfigService {
       _geminiSettingsPath,
       _buildGeminiSettingsJson(activeConfigs['gemini']!),
     );
+    await NativeBridge.writeRootfsFile(
+      _hermesConfigPath,
+      _buildHermesConfigYaml(activeConfigs['hermes-agent']!),
+    );
+    await NativeBridge.writeRootfsFile(
+      _hermesEnvPath,
+      _buildHermesEnvFile(activeConfigs['hermes-agent']!),
+    );
     await NativeBridge.runInProot(
+      'mkdir -p $cliWorkspacePath $_cliWorkspaceProjectsPath '
+      '$_cliWorkspaceScratchPath "$cliWorkspacePath/.gemini" '
+      '"$cliWorkspacePath/.gen-cli" '
+      '"$cliWorkspacePath/.agents/skills/openclaw-android-runtime" '
+      '/root/.hermes 2>/dev/null || true; '
       'chmod 0755 $_codexProxyPath 2>/dev/null || true; '
       'chmod 0755 $_codexProxyJsPath 2>/dev/null || true; '
+      'chmod 0755 $_browserMcpPath 2>/dev/null || true; '
       'chmod $codexProxyEnvMode $_codexProxyEnvPath 2>/dev/null || true; '
+      'chmod 0600 $_browserBridgeEnvPath 2>/dev/null || true; '
       'chmod 0600 $_codeBuddyModelsPath $_codeBuddySettingsPath '
-      '$_qwenSettingsPath $_geminiSettingsPath 2>/dev/null || true; '
+      '$_qwenSettingsPath $_geminiSettingsPath $_hermesConfigPath '
+      '$_hermesEnvPath 2>/dev/null || true; '
       'chmod 0644 $_terminalThemePath 2>/dev/null || true; '
+      'chmod 0644 $_cliWorkspaceAgentsPath $_cliWorkspaceGeminiPath '
+      '$_cliWorkspaceContextPath $_cliWorkspaceGeminiSettingsPath '
+      '$_cliWorkspaceGenCliSettingsPath '
+      '$_cliWorkspaceSkillPath '
+      '2>/dev/null || true; '
       'grep -q "openclaw/terminal-theme.sh" /root/.bashrc 2>/dev/null || '
       'printf "\\n[ -r /root/.openclaw/terminal-theme.sh ] && . /root/.openclaw/terminal-theme.sh\\n" >> /root/.bashrc; '
       'chmod 0600 /root/.openclaw/cli-env*.sh 2>/dev/null || true',
@@ -601,10 +679,23 @@ class CliApiConfigService {
     return [
       '# Generated by OpenClaw app. Safe to source from CLI wrappers.',
       'export OPENCLAW_CLI_ENV_LOADED=1',
+      'export OPENCLAW_CLI_WORKSPACE=${_shQuote(cliWorkspacePath)}',
+      'export OPENCLAW_CLI_PROJECTS=${_shQuote(_cliWorkspaceProjectsPath)}',
+      'export OPENCLAW_CLI_SCRATCH=${_shQuote(_cliWorkspaceScratchPath)}',
+      'export OPENCLAW_RUNTIME_PLATFORM=${_shQuote('android-ubuntu-proot')}',
+      'export OPENCLAW_RUNTIME_DESCRIPTION='
+          '${_shQuote('Ubuntu rootfs running inside an Android app through PRoot')}',
       'export TERM="\${TERM:-xterm-256color}"',
       'export COLORTERM="\${COLORTERM:-truecolor}"',
       'export FORCE_COLOR=1',
       'export TMPDIR="\${TMPDIR:-/tmp}"',
+      'mkdir -p "\${OPENCLAW_CLI_WORKSPACE:-$cliWorkspacePath}" '
+          '"\${OPENCLAW_CLI_PROJECTS:-$_cliWorkspaceProjectsPath}" '
+          '"\${OPENCLAW_CLI_SCRATCH:-$_cliWorkspaceScratchPath}" '
+          '"\${OPENCLAW_CLI_WORKSPACE:-$cliWorkspacePath}/.gemini" '
+          '"\${OPENCLAW_CLI_WORKSPACE:-$cliWorkspacePath}/.gen-cli" '
+          '"\${OPENCLAW_CLI_WORKSPACE:-$cliWorkspacePath}/.agents/skills" '
+          '2>/dev/null || true',
       '',
     ].join('\n');
   }
@@ -654,9 +745,7 @@ export PS1='\[\e[1;32m\]\u@\h\[\e[0m\]:\[\e[1;34m\]\w\[\e[0m\]\$ '
     final serviceModel = config.model.trim();
     final toolModel = config.effectiveToolModel;
     final effort = config.reasoningEffort.trim();
-    final openAiBaseUrl = toolId == 'codex' && baseUrl.isNotEmpty
-        ? _codexProxyBaseUrl
-        : _trimTrailingSlash(baseUrl);
+    final openAiBaseUrl = _trimTrailingSlash(baseUrl);
 
     if (apiKey.isNotEmpty) {
       lines
@@ -664,12 +753,13 @@ export PS1='\[\e[1;32m\]\u@\h\[\e[0m\]:\[\e[1;34m\]\w\[\e[0m\]\$ '
         ..add('export ANTHROPIC_API_KEY=${_shQuote(apiKey)}')
         ..add('export GEMINI_API_KEY=${_shQuote(apiKey)}')
         ..add('export GOOGLE_API_KEY=${_shQuote(apiKey)}')
+        ..add('export SILICONFLOW_API_KEY=${_shQuote(apiKey)}')
         ..add('export QWEN_API_KEY=${_shQuote(apiKey)}')
         ..add('export DASHSCOPE_API_KEY=${_shQuote(apiKey)}')
         ..add('export CODEBUDDY_API_KEY=${_shQuote(apiKey)}')
         ..add('export CHINESE_LLM_API_KEY=${_shQuote(apiKey)}');
     }
-    if (openAiBaseUrl.isNotEmpty) {
+    if (toolId != 'codex' && openAiBaseUrl.isNotEmpty) {
       lines
         ..add('export OPENAI_BASE_URL=${_shQuote(openAiBaseUrl)}')
         ..add('export CODEX_BASE_URL=${_shQuote(openAiBaseUrl)}')
@@ -711,7 +801,20 @@ export PS1='\[\e[1;32m\]\u@\h\[\e[0m\]:\[\e[1;34m\]\w\[\e[0m\]\$ '
     if (toolId == 'gemini') {
       lines
         ..add('export GOOGLE_GENAI_USE_VERTEXAI=false')
+        ..add('export GEMINI_DEFAULT_AUTH_TYPE=${_shQuote('gemini-api-key')}')
         ..add('export GEMINI_CLI_NO_BROWSER=1');
+    }
+    if (toolId == 'generic-agent') {
+      if (config.effectiveApiProtocol == 'gemini') {
+        lines.add('export GEMINI_DEFAULT_AUTH_TYPE=${_shQuote('gemini-api-key')}');
+      } else if (_looksLikeSiliconFlowBaseUrl(baseUrl)) {
+        lines.add(
+          'export GEMINI_DEFAULT_AUTH_TYPE=${_shQuote('siliconflow-api-key')}',
+        );
+        if (openAiBaseUrl.isNotEmpty) {
+          lines.add('export SILICONFLOW_BASE_URL=${_shQuote(openAiBaseUrl)}');
+        }
+      }
     }
     if (toolId == 'codebuddy' && config.baseUrl.trim().isEmpty) {
       lines.add('export CODEBUDDY_INTERNET_ENVIRONMENT=internal');
@@ -856,41 +959,123 @@ export PS1='\[\e[1;32m\]\u@\h\[\e[0m\]:\[\e[1;34m\]\w\[\e[0m\]\$ '
     return '${const JsonEncoder.withIndent('  ').convert(payload)}\n';
   }
 
-  static String _buildCodexToml(CliApiConfig codex) {
-    if (!_shouldManageToolRuntime(codex)) {
-      return '# OpenClaw does not manage Codex for this tool right now.\n';
+  static String _buildGenCliSettingsJson(CliApiConfig config) {
+    String? selectedAuthType;
+    if (_shouldManageToolRuntime(config)) {
+      if (_normalizedProtocol(config.effectiveApiProtocol) == 'gemini') {
+        selectedAuthType = 'gemini-api-key';
+      } else if (_looksLikeSiliconFlowBaseUrl(config.baseUrl)) {
+        selectedAuthType = 'siliconflow-api-key';
+      }
     }
-    final lines = <String>[];
-    final model = codex.effectiveToolModel;
-    final baseUrl = codex.baseUrl.trim().isNotEmpty ? _codexProxyBaseUrl : '';
-    final effort = codex.reasoningEffort.trim();
+    final payload = <String, dynamic>{
+      if (selectedAuthType != null) 'selectedAuthType': selectedAuthType,
+      'contextFileName': ['AGENTS.md', 'GEMINI.md', 'CONTEXT.md'],
+      'telemetry': {
+        'enabled': false,
+      },
+      'usageStatisticsEnabled': false,
+    };
+    return '${const JsonEncoder.withIndent('  ').convert(payload)}\n';
+  }
 
-    if (model.isNotEmpty) {
-      lines.add('model = ${_tomlString(model)}');
+  static String _buildHermesConfigYaml(CliApiConfig config) {
+    if (!_shouldManageToolRuntime(config)) {
+      return [
+        '# Generated by OpenClaw app.',
+        '# No shared API selected for Hermes Agent.',
+        '# Hermes will keep using its own setup flow until you bind a shared API.',
+        '',
+      ].join('\n');
     }
+    final model = config.effectiveToolModel.trim().isEmpty
+        ? config.model.trim()
+        : config.effectiveToolModel.trim();
+    final lines = <String>[
+      '# Generated by OpenClaw app. Hermes Agent runtime config.',
+      'model:',
+      '  provider: custom',
+      '  base_url: ${_yamlString(_trimTrailingSlash(config.baseUrl))}',
+      if (model.isNotEmpty) '  default: ${_yamlString(model)}',
+    ];
+    if (config.reasoningEffort.trim().isNotEmpty) {
+      lines
+        ..add('agent:')
+        ..add(
+          '  reasoning_effort: ${_yamlString(config.reasoningEffort.trim())}',
+        );
+    }
+    lines.add('');
+    return lines.join('\n');
+  }
+
+  static String _buildHermesEnvFile(CliApiConfig config) {
+    if (!_shouldManageToolRuntime(config)) {
+      return [
+        '# Generated by OpenClaw app.',
+        '# Hermes Agent is currently using its own runtime state.',
+        '',
+      ].join('\n');
+    }
+    final lines = <String>[
+      '# Generated by OpenClaw app. Hermes Agent environment.',
+      if (config.apiKey.trim().isNotEmpty)
+        'OPENAI_API_KEY=${_shQuote(config.apiKey.trim())}',
+      if (config.baseUrl.trim().isNotEmpty)
+        'OPENAI_BASE_URL=${_shQuote(_trimTrailingSlash(config.baseUrl))}',
+      if (config.effectiveToolModel.trim().isNotEmpty)
+        'OPENAI_MODEL=${_shQuote(config.effectiveToolModel.trim())}',
+      if (config.reasoningEffort.trim().isNotEmpty)
+        'OPENAI_REASONING_EFFORT=${_shQuote(config.reasoningEffort.trim())}',
+      '',
+    ];
+    return lines.join('\n');
+  }
+
+  static String _buildCodexToml(CliApiConfig codex) {
+    final lines = <String>[];
     lines
       ..add('disable_response_storage = true')
-      ..add('preferred_auth_method = "apikey"')
       ..add('sandbox_mode = "danger-full-access"')
       ..add('approval_policy = "never"')
       ..add('tui.notifications = false')
       ..add('tui.terminal_title = []');
-    if (effort.isNotEmpty) {
-      lines.add('model_reasoning_effort = ${_tomlString(effort)}');
-    }
-    if (baseUrl.isNotEmpty) {
+
+    if (_shouldManageToolRuntime(codex)) {
+      final model = codex.effectiveToolModel;
+      final effort = codex.reasoningEffort.trim();
+
+      lines.add('preferred_auth_method = "apikey"');
+      lines.add('model_provider = ${_tomlString(_codexProviderId)}');
+      if (model.isNotEmpty) {
+        lines.add('model = ${_tomlString(model)}');
+      }
+      if (effort.isNotEmpty) {
+        lines.add('model_reasoning_effort = ${_tomlString(effort)}');
+      }
       lines
-        ..add('model_provider = "openclaw"')
         ..add('')
-        ..add('[model_providers.openclaw]')
-        ..add('name = "OpenClaw Codex Proxy"')
-        ..add('base_url = ${_tomlString(baseUrl)}')
-        ..add('env_key = "OPENAI_API_KEY"')
+        ..add('[model_providers.$_codexProviderId]')
+        ..add('name = ${_tomlString('OpenClaw')}')
+        ..add('base_url = ${_tomlString(_codexProxyBaseUrl)}')
         ..add('wire_api = "responses"')
+        ..add('env_key = "OPENAI_API_KEY"')
         ..add('stream_idle_timeout_ms = 300000')
         ..add('request_max_retries = 2')
         ..add('stream_max_retries = 2');
     }
+
+    lines
+      ..add('')
+      ..add('[mcp_servers.openclaw_browser]')
+      ..add('enabled = true')
+      ..add('command = "node"')
+      ..add('args = [${_tomlString(_browserMcpPath)}]')
+      ..add('startup_timeout_sec = 20')
+      ..add('tool_timeout_sec = 120')
+      ..add('')
+      ..add('[projects."/root"]')
+      ..add('trust_level = "trusted"');
 
     if (lines.isEmpty) {
       lines.add('# OpenClaw CLI config is empty. Configure Codex in the app.');
@@ -907,15 +1092,24 @@ export PS1='\[\e[1;32m\]\u@\h\[\e[0m\]:\[\e[1;34m\]\w\[\e[0m\]\$ '
     return jsonEncode(value);
   }
 
+  static String _yamlString(String value) {
+    return jsonEncode(value);
+  }
+
   static String _buildCodexProxyEnv(CliApiConfig codex) {
-    if (!_shouldManageToolRuntime(codex)) {
-      return '# OpenClaw Codex proxy is disabled until a shared API is selected.\n';
-    }
     final lines = <String>[
       'OPENCLAW_CODEX_PROXY_HOST=127.0.0.1',
       'OPENCLAW_CODEX_PROXY_PORT=8787',
     ];
+    if (!_shouldManageToolRuntime(codex)) {
+      lines
+        ..add('OPENCLAW_CODEX_PROXY_ENABLED=0')
+        ..add('');
+      return lines.join('\n');
+    }
+    lines.add('OPENCLAW_CODEX_PROXY_ENABLED=1');
     final upstream = codex.baseUrl.trim();
+    final model = codex.effectiveToolModel;
     if (upstream.isNotEmpty) {
       lines.add(
         'OPENCLAW_CODEX_PROXY_UPSTREAM='
@@ -925,11 +1119,604 @@ export PS1='\[\e[1;32m\]\u@\h\[\e[0m\]:\[\e[1;34m\]\w\[\e[0m\]\$ '
     if (codex.apiKey.trim().isNotEmpty) {
       lines.add('OPENAI_API_KEY=${_shQuote(codex.apiKey.trim())}');
     }
-    if (codex.model.trim().isNotEmpty) {
-      lines.add('OPENCLAW_CODEX_PROXY_MODEL=${_shQuote(codex.model.trim())}');
+    if (model.isNotEmpty) {
+      lines.add('OPENCLAW_CODEX_PROXY_MODEL=${_shQuote(model)}');
     }
     lines.add('');
     return lines.join('\n');
+  }
+
+  static String _buildBrowserMcpScript() {
+    return '''
+#!/usr/bin/env node
+
+import { readFile } from "node:fs/promises";
+import process from "node:process";
+
+const ENV_PATH = ${jsonEncode(_browserBridgeEnvPath)};
+const JSON_RPC_VERSION = "2.0";
+const PROTOCOL_VERSION = "2025-06-18";
+
+const TOOL_DEFS = [
+  {
+    name: "browser_open",
+    description:
+      "Open a URL in the OpenClaw in-app browser panel. Use this before clicking or extracting page content.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        url: {
+          type: "string",
+          description: "The absolute URL to open. If the scheme is missing, https is assumed by the app.",
+        },
+      },
+      required: ["url"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "browser_back",
+    description: "Navigate one step back in the in-app browser history.",
+    inputSchema: {
+      type: "object",
+      properties: {},
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "browser_forward",
+    description: "Navigate one step forward in the in-app browser history.",
+    inputSchema: {
+      type: "object",
+      properties: {},
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "browser_reload",
+    description: "Reload the current in-app browser page.",
+    inputSchema: {
+      type: "object",
+      properties: {},
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "browser_click",
+    description: "Click an element in the current page using a CSS selector.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        selector: {
+          type: "string",
+          description: "CSS selector for the target element.",
+        },
+      },
+      required: ["selector"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "browser_type",
+    description:
+      "Type text into a form field or editable element selected by CSS selector.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        selector: {
+          type: "string",
+          description: "CSS selector for the editable element.",
+        },
+        text: {
+          type: "string",
+          description: "Text to insert into the target element.",
+        },
+        submit: {
+          type: "boolean",
+          description: "Whether to submit after typing.",
+        },
+      },
+      required: ["selector", "text"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "browser_wait_for_text",
+    description:
+      "Wait until specific text appears on the current page, useful after navigation or form submission.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        text: {
+          type: "string",
+          description: "Text that must appear on the page.",
+        },
+        timeoutMs: {
+          type: "integer",
+          description: "Maximum wait time in milliseconds.",
+          minimum: 500,
+          maximum: 120000,
+        },
+      },
+      required: ["text"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "browser_extract",
+    description:
+      "Extract readable text, HTML, and top links from the current page or from a CSS-selected subtree.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        selector: {
+          type: "string",
+          description: "Optional CSS selector limiting extraction to one subtree.",
+        },
+        prompt: {
+          type: "string",
+          description: "Optional note describing what should be extracted.",
+        },
+        maxLength: {
+          type: "integer",
+          description: "Maximum number of characters to return for text and HTML.",
+          minimum: 256,
+          maximum: 16000,
+        },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "browser_list_links",
+    description:
+      "List visible links on the current page so Codex can choose a target before clicking.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        filter: {
+          type: "string",
+          description: "Optional text filter applied to link text, href, and aria-label.",
+        },
+        maxItems: {
+          type: "integer",
+          description: "Maximum number of links to return.",
+          minimum: 1,
+          maximum: 40,
+        },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "browser_list_interactables",
+    description:
+      "List visible buttons, inputs, links, and other interactable elements together with suggested selectors.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        filter: {
+          type: "string",
+          description: "Optional text filter applied to tag, role, type, text, aria, placeholder, and selector.",
+        },
+        maxItems: {
+          type: "integer",
+          description: "Maximum number of interactable elements to return.",
+          minimum: 1,
+          maximum: 60,
+        },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "browser_highlight",
+    description:
+      "Temporarily highlight a target element in the in-app browser so the user can visually confirm the selector.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        selector: {
+          type: "string",
+          description: "CSS selector for the element that should be highlighted.",
+        },
+      },
+      required: ["selector"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "browser_capture_snapshot",
+    description:
+      "Capture a structured page snapshot including title, URL, text, HTML, and top links.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        selector: {
+          type: "string",
+          description: "Optional CSS selector limiting the snapshot to one subtree.",
+        },
+        maxLength: {
+          type: "integer",
+          description: "Maximum number of characters returned for text and HTML.",
+          minimum: 512,
+          maximum: 32000,
+        },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "browser_eval",
+    description:
+      "Run a small JavaScript snippet inside the current page and return its serialized result.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        script: {
+          type: "string",
+          description: "JavaScript source code executed inside an IIFE.",
+        },
+      },
+      required: ["script"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "browser_get_state",
+    description:
+      "Return the current browser state including title, URL, loading flag, and the last bridge error.",
+    inputSchema: {
+      type: "object",
+      properties: {},
+      additionalProperties: false,
+    },
+  },
+];
+
+const TOOL_TO_ACTION = {
+  browser_open: "open",
+  browser_back: "back",
+  browser_forward: "forward",
+  browser_reload: "reload",
+  browser_click: "click",
+  browser_type: "type",
+  browser_wait_for_text: "wait_for_text",
+  browser_extract: "extract",
+  browser_list_links: "list_links",
+  browser_list_interactables: "list_interactables",
+  browser_highlight: "highlight",
+  browser_capture_snapshot: "capture_snapshot",
+  browser_eval: "eval",
+  browser_get_state: "get_state",
+};
+
+const HEADER_DELIMITER = Buffer.from("\\r\\n\\r\\n");
+let stdinBuffer = Buffer.alloc(0);
+
+function write(message) {
+  const payload = Buffer.from(JSON.stringify(message), "utf8");
+  const header = Buffer.from(
+    `Content-Length: \${payload.length}\\r\\nContent-Type: application/json\\r\\n\\r\\n`,
+    "utf8",
+  );
+  process.stdout.write(Buffer.concat([header, payload]));
+}
+
+function reply(id, result) {
+  write({ jsonrpc: JSON_RPC_VERSION, id, result });
+}
+
+function fail(id, code, message, data = undefined) {
+  write({
+    jsonrpc: JSON_RPC_VERSION,
+    id,
+    error: { code, message, ...(data === undefined ? {} : { data }) },
+  });
+}
+
+async function readBridgeEnv() {
+  const content = await readFile(ENV_PATH, "utf8");
+  const values = {};
+  for (const rawLine of content.split(/\\r?\\n/)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith("#")) {
+      continue;
+    }
+    const splitIndex = line.indexOf("=");
+    if (splitIndex <= 0) {
+      continue;
+    }
+    const key = line.slice(0, splitIndex).trim();
+    let value = line.slice(splitIndex + 1).trim();
+    if (
+      (value.startsWith("'") && value.endsWith("'")) ||
+      (value.startsWith('"') && value.endsWith('"'))
+    ) {
+      value = value.slice(1, -1);
+    }
+    values[key] = value;
+  }
+  return values;
+}
+
+async function callBridge(action, payload) {
+  const env = await readBridgeEnv();
+  const baseUrl = (env.OPENCLAW_BROWSER_BRIDGE_URL || "").trim();
+  const token = (env.OPENCLAW_BROWSER_BRIDGE_TOKEN || "").trim();
+  if (!baseUrl || !token) {
+    throw new Error(
+      "OpenClaw browser bridge is not ready. Open the browser panel in the app first.",
+    );
+  }
+
+  const response = await fetch(`\${baseUrl}/\${action}`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      authorization: `Bearer \${token}`,
+    },
+    body: JSON.stringify(payload || {}),
+  });
+  const text = await response.text();
+  let decoded = {};
+  if (text.trim().length > 0) {
+    decoded = JSON.parse(text);
+  }
+  if (!response.ok) {
+    throw new Error(decoded.message || `Bridge request failed: HTTP \${response.status}`);
+  }
+  return decoded;
+}
+
+function asToolContent(result) {
+  return [
+    {
+      type: "text",
+      text: JSON.stringify(result, null, 2),
+    },
+  ];
+}
+
+async function onRequest(message) {
+  const id = message.id ?? null;
+  const method = (message.method || "").trim();
+
+  if (method === "initialize") {
+    reply(id, {
+      protocolVersion: PROTOCOL_VERSION,
+      capabilities: {
+        tools: {
+          listChanged: false,
+        },
+      },
+      serverInfo: {
+        name: "openclaw-browser",
+        version: "1.0.0",
+      },
+      instructions:
+        "Use the OpenClaw browser tools for deterministic page navigation, clicking, typing, waiting, and extraction inside the in-app browser panel.",
+    });
+    return;
+  }
+
+  if (method === "notifications/initialized") {
+    return;
+  }
+
+  if (method === "ping") {
+    reply(id, {});
+    return;
+  }
+
+  if (method === "tools/list") {
+    reply(id, { tools: TOOL_DEFS });
+    return;
+  }
+
+  if (method === "tools/call") {
+    const params = message.params || {};
+    const toolName = (params.name || "").trim();
+    const action = TOOL_TO_ACTION[toolName];
+    if (!action) {
+      reply(id, {
+        content: asToolContent({
+          ok: false,
+          message: `Unsupported browser tool: \${toolName}`,
+        }),
+        isError: true,
+      });
+      return;
+    }
+    try {
+      const result = await callBridge(action, params.arguments || {});
+      reply(id, {
+        content: asToolContent(result),
+        structuredContent: result,
+        isError: result.ok === false,
+      });
+    } catch (error) {
+      const result = {
+        ok: false,
+        message: error instanceof Error ? error.message : String(error),
+      };
+      reply(id, {
+        content: asToolContent(result),
+        structuredContent: result,
+        isError: true,
+      });
+    }
+    return;
+  }
+
+  fail(id, -32601, `Method not found: \${method}`);
+}
+
+function parseHeaders(text) {
+  const headers = {};
+  for (const line of text.split("\\r\\n")) {
+    if (!line.trim()) continue;
+    const index = line.indexOf(":");
+    if (index <= 0) continue;
+    headers[line.slice(0, index).trim().toLowerCase()] = line
+      .slice(index + 1)
+      .trim();
+  }
+  return headers;
+}
+
+function pumpStdin() {
+  while (true) {
+    const headerEnd = stdinBuffer.indexOf(HEADER_DELIMITER);
+    if (headerEnd < 0) {
+      return;
+    }
+
+    const headerText = stdinBuffer.slice(0, headerEnd).toString("utf8");
+    const headers = parseHeaders(headerText);
+    const contentLength = Number.parseInt(headers["content-length"] || "", 10);
+    if (!Number.isFinite(contentLength) || contentLength < 0) {
+      fail(null, -32700, "Missing or invalid Content-Length in browser MCP adapter input");
+      stdinBuffer = Buffer.alloc(0);
+      return;
+    }
+
+    const frameStart = headerEnd + HEADER_DELIMITER.length;
+    const frameEnd = frameStart + contentLength;
+    if (stdinBuffer.length < frameEnd) {
+      return;
+    }
+
+    const payloadText = stdinBuffer.slice(frameStart, frameEnd).toString("utf8");
+    stdinBuffer = stdinBuffer.slice(frameEnd);
+
+    let message;
+    try {
+      message = JSON.parse(payloadText);
+    } catch (error) {
+      fail(null, -32700, "Invalid JSON received by browser MCP adapter", {
+        detail: error instanceof Error ? error.message : String(error),
+      });
+      continue;
+    }
+
+    onRequest(message).catch((error) => {
+      fail(message?.id ?? null, -32000, "Unhandled browser MCP adapter error", {
+        detail: error instanceof Error ? error.message : String(error),
+      });
+    });
+  }
+}
+
+process.stdin.on("data", (chunk) => {
+  const bufferChunk = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+  stdinBuffer = Buffer.concat([stdinBuffer, bufferChunk]);
+  pumpStdin();
+});
+
+process.stdin.on("end", () => {
+  process.exit(0);
+});
+''';
+  }
+
+  static String _buildBrowserSkill() {
+    return '''
+---
+name: browser-operator
+description: Control the OpenClaw in-app browser panel from Codex CLI using deterministic browser tools.
+---
+
+Use this skill when the user asks you to inspect a webpage, click through a flow, fill a web form, or extract page content from OpenClaw's in-app browser.
+
+Rules:
+1. Start with `browser_get_state` so you know whether the browser panel is attached.
+2. If the tool reports that the browser panel is unavailable, stop and tell the user to open the browser panel from the terminal screen.
+3. Prefer `browser_open`, `browser_wait_for_text`, `browser_list_interactables`, `browser_highlight`, `browser_click`, `browser_type`, and `browser_extract` over `browser_eval`.
+4. Use stable CSS selectors. Avoid fragile positional selectors unless there is no better choice.
+5. Before any action that could submit a form, log in, send a message, spend money, or change user data, ask for confirmation.
+6. After a navigation or form submit, wait with `browser_wait_for_text` before assuming the page is ready.
+7. When extracting content, keep the result focused. Use `selector` whenever possible instead of dumping the whole page.
+8. If the next selector is unclear, call `browser_list_interactables` or `browser_list_links` first and choose from the returned candidates.
+9. If a selector is risky, call `browser_highlight` before clicking so the user can visually confirm the target.
+
+Typical flow:
+1. `browser_open`
+2. `browser_wait_for_text`
+3. `browser_list_interactables`
+4. `browser_highlight`
+5. `browser_click` or `browser_type`
+6. `browser_capture_snapshot` or `browser_extract`
+7. Fall back to `browser_eval` only if the built-in actions are insufficient.
+''';
+  }
+
+  static String _buildCliWorkspaceAgentsMd() {
+    return '''
+# OpenClaw CLI Workspace
+
+- 当前运行环境是 Android 应用中的 Ubuntu rootfs，通过 PRoot 提供 Linux 用户空间。
+- 默认开发目录是 `${cliWorkspacePath}`，生成的项目、代码、脚本和临时文件优先放在这里。
+- 如需新建工程，请优先使用 `./projects`；临时文件和实验内容请优先使用 `./scratch`。
+- `/storage/emulated/0` 和 `/sdcard` 映射到 Android 共享存储，但权限、性能和路径行为通常不如当前工作区稳定。
+- 不要默认假设这里有 systemd、Docker、KVM、桌面会话或完整内核能力；需要时先自行检测。
+''';
+  }
+
+  static String _buildCliWorkspaceGeminiMd() {
+    return '''
+# OpenClaw Android Ubuntu Context
+
+- This CLI session runs inside an Ubuntu rootfs hosted by an Android app through PRoot.
+- Use `${cliWorkspacePath}` as the default working directory for generated code and project files.
+- Prefer `./projects` for long-lived repositories and `./scratch` for throwaway experiments.
+- Android shared storage may be available at `/storage/emulated/0` and `/sdcard`, but it is slower and more permission-sensitive than the workspace.
+- Verify assumptions before relying on systemd, Docker, kernel modules, or full desktop integrations.
+''';
+  }
+
+  static String _buildCliWorkspaceContextMd() {
+    return '''
+# OpenClaw CLI Context
+
+- Runtime: Ubuntu rootfs hosted inside an Android app through PRoot.
+- Primary workspace: `${cliWorkspacePath}`.
+- Put persistent projects under `./projects`.
+- Put short-lived tests and generated scratch files under `./scratch`.
+- Shared Android storage may exist at `/storage/emulated/0` and `/sdcard`, but it is slower and less predictable than the workspace.
+- Confirm support before depending on systemd, Docker, kernel modules, nested virtualization, or desktop-only integrations.
+''';
+  }
+
+  static String _buildCliWorkspaceGeminiSettingsJson() {
+    final payload = <String, dynamic>{
+      'context': {
+        'fileName': ['AGENTS.md', 'GEMINI.md', 'CONTEXT.md'],
+      },
+      'skills': {
+        'enabled': true,
+      },
+      'experimental': {
+        'enableAgents': true,
+      },
+    };
+    return '${const JsonEncoder.withIndent('  ').convert(payload)}\n';
+  }
+
+  static String _buildCliWorkspaceSkill() {
+    return '''
+---
+name: openclaw-android-runtime
+description: Use when environment assumptions matter. Explains that the CLI runs inside Android-hosted Ubuntu via PRoot and that `${cliWorkspacePath}` is the default development workspace.
+---
+
+Rules:
+1. Treat the runtime as Ubuntu in PRoot on Android, not as a full VM or desktop Linux machine.
+2. Default working directory: `${cliWorkspacePath}`.
+3. Put generated projects under `./projects` and short-lived experiments under `./scratch` unless the user asks for another path.
+4. Android shared storage mounts (`/storage/emulated/0`, `/sdcard`) can be slower and more permission-sensitive than the workspace.
+5. Verify support before relying on systemd, Docker, nested virtualization, kernel modules, or GUI-only tooling.
+''';
   }
 
   static String _trimTrailingSlash(String value) {
@@ -963,6 +1750,11 @@ export PS1='\[\e[1;32m\]\u@\h\[\e[0m\]:\[\e[1;34m\]\w\[\e[0m\]\$ '
       'gemini' => 'GEMINI_API_KEY',
       _ => 'OPENAI_API_KEY',
     };
+  }
+
+  static bool _looksLikeSiliconFlowBaseUrl(String baseUrl) {
+    final normalized = baseUrl.trim().toLowerCase();
+    return normalized.contains('siliconflow.cn');
   }
 
   static String _buildCodexProxyPy() {

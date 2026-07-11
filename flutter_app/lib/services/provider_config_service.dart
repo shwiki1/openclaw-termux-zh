@@ -468,11 +468,46 @@ class ProviderConfigService {
     final entry = <String, dynamic>{
       'apiKey': apiKey,
       'baseUrl': baseUrl,
-      'models': [model],
+      'models': [
+        _buildModelDefinition(modelId: model),
+      ],
     };
     if (_isNonEmptyString(provider.apiValue)) {
       entry['api'] = provider.apiValue;
     }
+    return entry;
+  }
+
+  static Map<String, dynamic> _buildModelDefinition({
+    required String modelId,
+    String? displayName,
+    String? thinkingLevel,
+    Map<String, dynamic>? existing,
+  }) {
+    final normalizedId = modelId.trim();
+    final entry = existing == null
+        ? <String, dynamic>{}
+        : Map<String, dynamic>.from(existing);
+    entry['id'] = normalizedId;
+    entry['name'] =
+        _isNonEmptyString(displayName) ? displayName!.trim() : normalizedId;
+
+    final normalizedThinkingLevel = _normalizeThinkingLevel(thinkingLevel);
+    if (normalizedThinkingLevel != null &&
+        normalizedThinkingLevel != 'off' &&
+        entry['reasoning'] != true) {
+      entry['reasoning'] = true;
+    }
+
+    for (final legacyKey in const [
+      'thinking',
+      'effort',
+      'reasoning_effort',
+      'thought_level',
+    ]) {
+      entry.remove(legacyKey);
+    }
+
     return entry;
   }
 
@@ -519,6 +554,50 @@ class ProviderConfigService {
     return null;
   }
 
+  static String? _extractThinkingLevelFromEntry(dynamic value) {
+    if (value is! Map) {
+      return null;
+    }
+    for (final key in const [
+      'thinking',
+      'effort',
+      'reasoning_effort',
+      'thought_level',
+    ]) {
+      final normalized = _normalizeThinkingLevel(value[key]);
+      if (normalized != null) {
+        return normalized;
+      }
+    }
+    return null;
+  }
+
+  static Map<String, dynamic>? _normalizeModelDefinitionEntry(dynamic value) {
+    final modelId = _extractModelIdFromEntry(value);
+    if (!_isNonEmptyString(modelId)) {
+      return null;
+    }
+
+    if (value is String) {
+      return _buildModelDefinition(modelId: modelId!);
+    }
+
+    if (value is! Map) {
+      return null;
+    }
+
+    final existing = _asStringKeyedMap(value);
+    final displayName = _trimmedString(existing['name']).isNotEmpty
+        ? _trimmedString(existing['name'])
+        : modelId;
+    return _buildModelDefinition(
+      modelId: modelId!,
+      displayName: displayName,
+      thinkingLevel: _extractThinkingLevelFromEntry(existing),
+      existing: existing,
+    );
+  }
+
   static bool _normalizeProviderModelsShape({
     required String providerId,
     required Map<String, dynamic> providerConfig,
@@ -530,7 +609,7 @@ class ProviderConfigService {
       if (trimmed.isEmpty) {
         return false;
       }
-      providerConfig['models'] = [trimmed];
+      providerConfig['models'] = [_buildModelDefinition(modelId: trimmed)];
       return true;
     }
 
@@ -538,11 +617,16 @@ class ProviderConfigService {
       return false;
     }
 
-    final normalizedModels = <String>[];
+    final normalizedModels = <Map<String, dynamic>>[];
     for (final item in rawModels) {
-      final modelId = _extractModelIdFromEntry(item);
-      if (_isNonEmptyString(modelId) && !normalizedModels.contains(modelId)) {
-        normalizedModels.add(modelId!.trim());
+      final normalizedEntry = _normalizeModelDefinitionEntry(item);
+      final modelId = _extractModelIdFromEntry(normalizedEntry);
+      if (normalizedEntry != null &&
+          _isNonEmptyString(modelId) &&
+          !normalizedModels.any(
+            (entry) => _extractModelIdFromEntry(entry) == modelId,
+          )) {
+        normalizedModels.add(normalizedEntry);
       }
     }
 
@@ -552,7 +636,11 @@ class ProviderConfigService {
         final separatorIndex = activeModelRef!.indexOf('/');
         if (separatorIndex >= 0 &&
             separatorIndex < activeModelRef.length - 1) {
-          normalizedModels.add(activeModelRef.substring(separatorIndex + 1));
+          normalizedModels.add(
+            _buildModelDefinition(
+              modelId: activeModelRef.substring(separatorIndex + 1),
+            ),
+          );
         }
       }
     }
@@ -564,7 +652,11 @@ class ProviderConfigService {
     final alreadyNormalized =
         rawModels.length == normalizedModels.length &&
         rawModels.every(
-          (item) => item is String && normalizedModels.contains(item.trim()),
+          (item) => item is Map &&
+              normalizedModels.any(
+                (entry) =>
+                    jsonEncode(entry) == jsonEncode(_asStringKeyedMap(item)),
+              ),
         );
     if (alreadyNormalized) {
       return false;
@@ -572,6 +664,33 @@ class ProviderConfigService {
 
     providerConfig['models'] = normalizedModels;
     return true;
+  }
+
+  static bool sanitizeConfigMapForWrite(Map<String, dynamic> config) {
+    var changed = false;
+    final activeModel = _readActiveModel(config);
+
+    if (_cleanupLegacyMoonshotPluginConfig(config)) {
+      changed = true;
+    }
+    if (_repairLegacyWebSearchProvider(config)) {
+      changed = true;
+    }
+
+    final providers = _ensureProvidersSection(config);
+    for (final entry in providers.entries.toList()) {
+      final providerConfig = _asStringKeyedMap(entry.value);
+      if (_normalizeProviderModelsShape(
+        providerId: entry.key,
+        providerConfig: providerConfig,
+        activeModelRef: activeModel,
+      )) {
+        providers[entry.key] = providerConfig;
+        changed = true;
+      }
+    }
+
+    return changed;
   }
 
   static String? _normalizeThinkingLevel(dynamic value) {
@@ -591,9 +710,7 @@ class ProviderConfigService {
     if (providerConfig is! Map) return null;
     final models = providerConfig['models'];
     if (models is! List || models.isEmpty) return null;
-    final first = models.first;
-    if (first is! Map) return null;
-    return _normalizeThinkingLevel(first['thinking']);
+    return _extractThinkingLevelFromEntry(models.first);
   }
 
   static String normalizeCustomBaseUrl(
@@ -742,6 +859,7 @@ class ProviderConfigService {
     final thinkingLevel = _normalizeThinkingLevel(
           _customPresetMetadataThinkingLevel(presetMetadata, providerId),
         ) ??
+        _extractThinkingLevelFromAllowListEntry(allowListEntry) ??
         _extractThinkingLevel(providerConfig);
 
     return CustomProviderPreset(
@@ -779,6 +897,67 @@ class ProviderConfigService {
       allowList[modelRef] = existingEntry;
     }
     return removedAlias;
+  }
+
+  static String? _extractThinkingLevelFromAllowListEntry(dynamic value) {
+    if (value is! Map) {
+      return null;
+    }
+    final params = _asStringKeyedMap(value['params']);
+    final normalized = _normalizeThinkingLevel(params['thinking']);
+    if (normalized != null) {
+      return normalized;
+    }
+    return _normalizeThinkingLevel(value['thinking']);
+  }
+
+  static bool _setModelThinkingInAllowList(
+    Map<String, dynamic> config, {
+    required String modelRef,
+    required String? thinkingLevel,
+  }) {
+    final defaults = _ensureDefaultsSection(config);
+    final allowList = _asStringKeyedMap(defaults['models']);
+    defaults['models'] = allowList;
+
+    final entry = _asStringKeyedMap(allowList[modelRef]);
+    allowList[modelRef] = entry;
+    final params = _asStringKeyedMap(entry['params']);
+    final normalized = _normalizeThinkingLevel(thinkingLevel);
+    final current = _normalizeThinkingLevel(params['thinking']);
+    var changed = false;
+
+    if (entry.remove('thinking') != null) {
+      changed = true;
+    }
+
+    if (normalized == current) {
+      if (params.isNotEmpty) {
+        entry['params'] = params;
+      } else {
+        entry.remove('params');
+      }
+      allowList[modelRef] = entry;
+      return changed;
+    }
+
+    if (normalized == null) {
+      if (params.remove('thinking') != null) {
+        changed = true;
+      }
+      if (params.isNotEmpty) {
+        entry['params'] = params;
+      } else {
+        entry.remove('params');
+      }
+      allowList[modelRef] = entry;
+      return true;
+    }
+
+    params['thinking'] = normalized;
+    entry['params'] = params;
+    allowList[modelRef] = entry;
+    return true;
   }
 
   static Future<void> migrateCustomProviderConfigIfNeeded() async {
@@ -836,22 +1015,15 @@ class ProviderConfigService {
           configChanged = true;
         }
 
-        final models = providerConfig['models'];
-        if (models is List &&
-            models.isNotEmpty &&
-            models.first is Map<String, dynamic>) {
-          providerConfig['models'] = [preset.modelId];
-          providers[entry.key] = providerConfig;
-          configChanged = true;
-        } else if (models is List &&
-            models.isNotEmpty &&
-            models.first is Map) {
-          providerConfig['models'] = [preset.modelId];
-          providers[entry.key] = providerConfig;
+        if (_clearLegacyAliasInAllowList(config, modelRef: normalizedPrimary)) {
           configChanged = true;
         }
 
-        if (_clearLegacyAliasInAllowList(config, modelRef: normalizedPrimary)) {
+        if (_setModelThinkingInAllowList(
+          config,
+          modelRef: normalizedPrimary,
+          thinkingLevel: preset.thinkingLevel,
+        )) {
           configChanged = true;
         }
 
@@ -992,22 +1164,7 @@ class ProviderConfigService {
     try {
       final config = await _readConfigMap();
       final before = jsonEncode(config);
-      final activeModel = _readActiveModel(config);
-
-      _cleanupLegacyMoonshotPluginConfig(config);
-      _repairLegacyWebSearchProvider(config);
-
-      final providers = _ensureProvidersSection(config);
-      for (final entry in providers.entries.toList()) {
-        final providerConfig = _asStringKeyedMap(entry.value);
-        if (_normalizeProviderModelsShape(
-          providerId: entry.key,
-          providerConfig: providerConfig,
-          activeModelRef: activeModel,
-        )) {
-          providers[entry.key] = providerConfig;
-        }
-      }
+      sanitizeConfigMapForWrite(config);
 
       if (before == jsonEncode(config)) {
         return;
@@ -1067,8 +1224,9 @@ class ProviderConfigService {
       model: model,
     );
 
-    _ensureDefaultModelSection(config)['primary'] =
-        _primaryModelForProvider(provider, model);
+    final modelRef = _primaryModelForProvider(provider, model);
+    _ensureDefaultModelSection(config)['primary'] = modelRef;
+    _ensureModelEnabled(config, modelRef: modelRef);
     await _writeConfigMap(config);
   }
 
@@ -1078,6 +1236,7 @@ class ProviderConfigService {
     required String apiKey,
     required String baseUrl,
     required String modelId,
+    String? thinkingLevel,
   }) {
     final providerEntry = _asStringKeyedMap(existingValue);
     if (compatibility.apiValue != null) {
@@ -1088,8 +1247,30 @@ class ProviderConfigService {
     providerEntry['apiKey'] = apiKey;
     providerEntry['baseUrl'] = baseUrl;
     providerEntry.remove('alias');
-    providerEntry['models'] = [modelId];
+    providerEntry['models'] = [
+      _buildModelDefinition(
+        modelId: modelId,
+        thinkingLevel: thinkingLevel,
+        existing: (() {
+          final models = providerEntry['models'];
+          if (models is List && models.isNotEmpty && models.first is Map) {
+            return _asStringKeyedMap(models.first);
+          }
+          return null;
+        })(),
+      ),
+    ];
     return providerEntry;
+  }
+
+  static void _ensureModelEnabled(
+    Map<String, dynamic> config, {
+    required String modelRef,
+  }) {
+    final defaults = _ensureDefaultsSection(config);
+    final allowList = _asStringKeyedMap(defaults['models']);
+    defaults['models'] = allowList;
+    allowList[modelRef] = _asStringKeyedMap(allowList[modelRef]);
   }
 
   static Future<CustomProviderPreset> saveCustomProviderPreset({
@@ -1124,9 +1305,15 @@ class ProviderConfigService {
         previousProviderId != resolvedProviderId) {
       providers.remove(previousProviderId);
       if (_isNonEmptyString(previousModelId)) {
+        final previousModelRef = '$previousProviderId/${previousModelId!.trim()}';
         _clearLegacyAliasInAllowList(
           config,
-          modelRef: '$previousProviderId/${previousModelId!.trim()}',
+          modelRef: previousModelRef,
+        );
+        _setModelThinkingInAllowList(
+          config,
+          modelRef: previousModelRef,
+          thinkingLevel: null,
         );
       }
       _removeCustomPresetMetadataEntry(
@@ -1135,9 +1322,15 @@ class ProviderConfigService {
       );
     } else if (_isNonEmptyString(previousModelId) &&
         previousModelId != trimmedModelId) {
+      final previousModelRef = '$resolvedProviderId/${previousModelId!.trim()}';
       _clearLegacyAliasInAllowList(
         config,
-        modelRef: '$resolvedProviderId/${previousModelId!.trim()}',
+        modelRef: previousModelRef,
+      );
+      _setModelThinkingInAllowList(
+        config,
+        modelRef: previousModelRef,
+        thinkingLevel: null,
       );
     }
 
@@ -1147,10 +1340,17 @@ class ProviderConfigService {
       apiKey: apiKey.trim(),
       baseUrl: resolvedBaseUrl,
       modelId: trimmedModelId,
+      thinkingLevel: thinkingLevel,
     );
 
     final modelRef = '$resolvedProviderId/$trimmedModelId';
     _ensureDefaultModelSection(config)['primary'] = modelRef;
+    _ensureModelEnabled(config, modelRef: modelRef);
+    _setModelThinkingInAllowList(
+      config,
+      modelRef: modelRef,
+      thinkingLevel: thinkingLevel,
+    );
     _clearLegacyAliasInAllowList(config, modelRef: modelRef);
     _setCustomPresetAlias(
       presetMetadata,
@@ -1185,6 +1385,7 @@ class ProviderConfigService {
     final config = await _readConfigMap();
     _ensureLocalGatewayMode(config);
     _ensureDefaultModelSection(config)['primary'] = trimmed;
+    _ensureModelEnabled(config, modelRef: trimmed);
     await _writeConfigMap(config);
   }
 
@@ -1231,6 +1432,11 @@ class ProviderConfigService {
     if (_isNonEmptyString(modelId)) {
       final modelRef = '$providerId/${modelId!.trim()}';
       _clearLegacyAliasInAllowList(config, modelRef: modelRef);
+      _setModelThinkingInAllowList(
+        config,
+        modelRef: modelRef,
+        thinkingLevel: null,
+      );
 
       final activeModel = _readActiveModel(config);
       if (activeModel == modelRef || activeModel == modelId) {
