@@ -26,11 +26,11 @@ class CliApiConfigService {
   static const _codexProxyEnvPath = '/root/.openclaw/codex-proxy.env';
   static const _codexConfigPath = '/root/.codex/config.toml';
   static const _codexProxyBaseUrl = 'http://127.0.0.1:8787/v1';
-  static const _codexProviderId = 'openclaw';
   static const _codeBuddyModelsPath = '/root/.codebuddy/models.json';
   static const _codeBuddySettingsPath = '/root/.codebuddy/settings.json';
   static const _qwenSettingsPath = '/root/.qwen/settings.json';
   static const _geminiSettingsPath = '/root/.gemini/settings.json';
+  static const _genCliSettingsPath = '/root/.gen-cli/settings.json';
   static const _hermesConfigPath = '/root/.hermes/config.yaml';
   static const _hermesEnvPath = '/root/.hermes/.env';
   static const _terminalThemePath = '/root/.openclaw/terminal-theme.sh';
@@ -210,6 +210,10 @@ class CliApiConfigService {
       _buildGenCliSettingsJson(activeConfigs['generic-agent']!),
     );
     await NativeBridge.writeRootfsFile(
+      _genCliSettingsPath,
+      _buildGenCliSettingsJson(activeConfigs['generic-agent']!),
+    );
+    await NativeBridge.writeRootfsFile(
       _cliWorkspaceSkillPath,
       _buildCliWorkspaceSkill(),
     );
@@ -270,14 +274,15 @@ class CliApiConfigService {
       '$_cliWorkspaceScratchPath "$cliWorkspacePath/.gemini" '
       '"$cliWorkspacePath/.gen-cli" '
       '"$cliWorkspacePath/.agents/skills/openclaw-android-runtime" '
-      '/root/.hermes 2>/dev/null || true; '
+      '/root/.gen-cli /root/.hermes 2>/dev/null || true; '
       'chmod 0755 $_codexProxyPath 2>/dev/null || true; '
       'chmod 0755 $_codexProxyJsPath 2>/dev/null || true; '
       'chmod 0755 $_browserMcpPath 2>/dev/null || true; '
       'chmod $codexProxyEnvMode $_codexProxyEnvPath 2>/dev/null || true; '
       'chmod 0600 $_browserBridgeEnvPath 2>/dev/null || true; '
       'chmod 0600 $_codeBuddyModelsPath $_codeBuddySettingsPath '
-      '$_qwenSettingsPath $_geminiSettingsPath $_hermesConfigPath '
+      '$_qwenSettingsPath $_geminiSettingsPath $_genCliSettingsPath '
+      '$_hermesConfigPath '
       '$_hermesEnvPath 2>/dev/null || true; '
       'chmod 0644 $_terminalThemePath 2>/dev/null || true; '
       'chmod 0644 $_cliWorkspaceAgentsPath $_cliWorkspaceGeminiPath '
@@ -507,7 +512,9 @@ class CliApiConfigService {
     return CliApiConfig(
       toolId: toolId,
       sharedProfileId: toolSettings.sharedProfileId,
-      profileName: toolSettings.profileName,
+      profileName: toolSettings.profileName.trim().isNotEmpty
+          ? toolSettings.profileName
+          : (profile?.profileName ?? ''),
       apiProtocol: profile?.effectiveApiProtocol ?? toolSettings.apiProtocol,
       baseUrl: profile?.baseUrl ?? '',
       apiKey: profile?.apiKey ?? '',
@@ -806,8 +813,10 @@ export PS1='\[\e[1;32m\]\u@\h\[\e[0m\]:\[\e[1;34m\]\w\[\e[0m\]\$ '
     }
     if (toolId == 'generic-agent') {
       if (config.effectiveApiProtocol == 'gemini') {
-        lines.add('export GEMINI_DEFAULT_AUTH_TYPE=${_shQuote('gemini-api-key')}');
-      } else if (_looksLikeSiliconFlowBaseUrl(baseUrl)) {
+        lines.add(
+          'export GEMINI_DEFAULT_AUTH_TYPE=${_shQuote('gemini-api-key')}',
+        );
+      } else {
         lines.add(
           'export GEMINI_DEFAULT_AUTH_TYPE=${_shQuote('siliconflow-api-key')}',
         );
@@ -964,7 +973,7 @@ export PS1='\[\e[1;32m\]\u@\h\[\e[0m\]:\[\e[1;34m\]\w\[\e[0m\]\$ '
     if (_shouldManageToolRuntime(config)) {
       if (_normalizedProtocol(config.effectiveApiProtocol) == 'gemini') {
         selectedAuthType = 'gemini-api-key';
-      } else if (_looksLikeSiliconFlowBaseUrl(config.baseUrl)) {
+      } else {
         selectedAuthType = 'siliconflow-api-key';
       }
     }
@@ -1034,6 +1043,8 @@ export PS1='\[\e[1;32m\]\u@\h\[\e[0m\]:\[\e[1;34m\]\w\[\e[0m\]\$ '
 
   static String _buildCodexToml(CliApiConfig codex) {
     final lines = <String>[];
+    final providerId = _codexProviderIdFor(codex);
+    final providerName = _codexProviderNameFor(codex);
     lines
       ..add('disable_response_storage = true')
       ..add('sandbox_mode = "danger-full-access"')
@@ -1046,7 +1057,7 @@ export PS1='\[\e[1;32m\]\u@\h\[\e[0m\]:\[\e[1;34m\]\w\[\e[0m\]\$ '
       final effort = codex.reasoningEffort.trim();
 
       lines.add('preferred_auth_method = "apikey"');
-      lines.add('model_provider = ${_tomlString(_codexProviderId)}');
+      lines.add('model_provider = ${_tomlString(providerId)}');
       if (model.isNotEmpty) {
         lines.add('model = ${_tomlString(model)}');
       }
@@ -1055,8 +1066,8 @@ export PS1='\[\e[1;32m\]\u@\h\[\e[0m\]:\[\e[1;34m\]\w\[\e[0m\]\$ '
       }
       lines
         ..add('')
-        ..add('[model_providers.$_codexProviderId]')
-        ..add('name = ${_tomlString('OpenClaw')}')
+        ..add('[model_providers.$providerId]')
+        ..add('name = ${_tomlString(providerName)}')
         ..add('base_url = ${_tomlString(_codexProxyBaseUrl)}')
         ..add('wire_api = "responses"')
         ..add('env_key = "OPENAI_API_KEY"')
@@ -1073,6 +1084,15 @@ export PS1='\[\e[1;32m\]\u@\h\[\e[0m\]:\[\e[1;34m\]\w\[\e[0m\]\$ '
       ..add('args = [${_tomlString(_browserMcpPath)}]')
       ..add('startup_timeout_sec = 20')
       ..add('tool_timeout_sec = 120')
+      ..add('')
+      ..add('[projects.${_tomlString(cliWorkspacePath)}]')
+      ..add('trust_level = "trusted"')
+      ..add('')
+      ..add('[projects.${_tomlString(_cliWorkspaceProjectsPath)}]')
+      ..add('trust_level = "trusted"')
+      ..add('')
+      ..add('[projects.${_tomlString(_cliWorkspaceScratchPath)}]')
+      ..add('trust_level = "trusted"')
       ..add('')
       ..add('[projects."/root"]')
       ..add('trust_level = "trusted"');
@@ -1752,9 +1772,24 @@ Rules:
     };
   }
 
-  static bool _looksLikeSiliconFlowBaseUrl(String baseUrl) {
-    final normalized = baseUrl.trim().toLowerCase();
-    return normalized.contains('siliconflow.cn');
+  static String _codexProviderIdFor(CliApiConfig config) {
+    final raw = config.profileName.trim().toLowerCase();
+    final normalized = raw
+        .replaceAll(RegExp(r'[^a-z0-9_-]+'), '-')
+        .replaceAll(RegExp(r'-{2,}'), '-')
+        .replaceAll(RegExp(r'^-+|-+$'), '');
+    if (normalized.isEmpty) {
+      return 'openclaw';
+    }
+    if (RegExp(r'^[0-9]').hasMatch(normalized)) {
+      return 'provider-$normalized';
+    }
+    return normalized;
+  }
+
+  static String _codexProviderNameFor(CliApiConfig config) {
+    final name = config.profileName.trim();
+    return name.isEmpty ? 'OpenClaw' : name;
   }
 
   static String _buildCodexProxyPy() {

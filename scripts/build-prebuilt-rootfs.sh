@@ -82,17 +82,17 @@ case "$ARCH" in
   arm64)
     ROOTFS_ARCH="arm64"
     QEMU_BIN="qemu-aarch64-static"
-    DEFAULT_MIRROR="http://mirrors.tuna.tsinghua.edu.cn/ubuntu-ports"
+    DEFAULT_MIRROR="https://mirrors.ustc.edu.cn/ubuntu-ports"
     ;;
   armhf)
     ROOTFS_ARCH="armhf"
     QEMU_BIN="qemu-arm-static"
-    DEFAULT_MIRROR="http://mirrors.tuna.tsinghua.edu.cn/ubuntu-ports"
+    DEFAULT_MIRROR="https://mirrors.ustc.edu.cn/ubuntu-ports"
     ;;
   amd64)
     ROOTFS_ARCH="amd64"
     QEMU_BIN="qemu-x86_64-static"
-    DEFAULT_MIRROR="http://mirrors.tuna.tsinghua.edu.cn/ubuntu"
+    DEFAULT_MIRROR="https://mirrors.ustc.edu.cn/ubuntu"
     ;;
   *)
     echo "Unsupported arch: $ARCH" >&2
@@ -103,9 +103,9 @@ esac
 MIRROR="${MIRROR:-$DEFAULT_MIRROR}"
 BASE_NAME="ubuntu-base-${UBUNTU_VERSION}-base-${ROOTFS_ARCH}.tar.gz"
 BASE_URLS=(
-  "https://mirrors.tuna.tsinghua.edu.cn/ubuntu-cdimage/ubuntu-base/releases/24.04/release/$BASE_NAME"
   "https://mirrors.ustc.edu.cn/ubuntu-cdimage/ubuntu-base/releases/24.04/release/$BASE_NAME"
   "https://mirrors.aliyun.com/ubuntu-cdimage/ubuntu-base/releases/24.04/release/$BASE_NAME"
+  "https://mirrors.tuna.tsinghua.edu.cn/ubuntu-cdimage/ubuntu-base/releases/24.04/release/$BASE_NAME"
   "https://cdimage.ubuntu.com/ubuntu-base/releases/24.04/release/$BASE_NAME"
 )
 OUTPUT_NAME="openclaw-rootfs-${CODENAME}-${ROOTFS_ARCH}.tar.gz"

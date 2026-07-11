@@ -157,16 +157,16 @@ class AppConstants {
     final isPorts = isUbuntuPortsArch(arch);
     final paths = isPorts
         ? <String>[
-            'http://mirrors.ustc.edu.cn/ubuntu-ports',
-            'http://mirrors.tuna.tsinghua.edu.cn/ubuntu-ports',
-            'http://mirrors.aliyun.com/ubuntu-ports',
-            'http://ports.ubuntu.com/ubuntu-ports',
+            'https://mirrors.ustc.edu.cn/ubuntu-ports',
+            'https://mirrors.aliyun.com/ubuntu-ports',
+            'https://mirrors.tuna.tsinghua.edu.cn/ubuntu-ports',
+            'https://ports.ubuntu.com/ubuntu-ports',
           ]
         : <String>[
-            'http://mirrors.ustc.edu.cn/ubuntu',
-            'http://mirrors.tuna.tsinghua.edu.cn/ubuntu',
-            'http://mirrors.aliyun.com/ubuntu',
-            'http://archive.ubuntu.com/ubuntu',
+            'https://mirrors.ustc.edu.cn/ubuntu',
+            'https://mirrors.aliyun.com/ubuntu',
+            'https://mirrors.tuna.tsinghua.edu.cn/ubuntu',
+            'https://archive.ubuntu.com/ubuntu',
           ];
     return paths;
   }

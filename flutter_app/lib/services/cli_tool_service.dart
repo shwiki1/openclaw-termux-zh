@@ -84,7 +84,7 @@ exec bash -li
     name: 'Gen CLI (Generic Agent)',
     packageName: '@gen-cli/gen-cli',
     executable: 'generic-agent',
-    description: '官方 Gen CLI，优先走原生 Gemini 或 SiliconFlow 模式；遇到 OpenAI 兼容接口时自动切换到内置兼容桥。',
+    description: '官方 Gen CLI，Gemini 协议走原生 API Key，OpenAI 兼容接口统一走 SiliconFlow 认证模式映射。',
     icon: Icons.smart_toy,
     color: Colors.teal,
     installCommand: _genericInstallCommand,
@@ -164,6 +164,71 @@ ensure_cli_workspace() {
     "${OPENCLAW_CLI_WORKSPACE:-/root/openclaw-cli-workspace}/.gen-cli" \
     "${OPENCLAW_CLI_WORKSPACE:-/root/openclaw-cli-workspace}/.agents/skills" \
     2>/dev/null || true
+}
+
+ubuntu_apt_mirror_candidates() {
+  arch="$(dpkg --print-architecture 2>/dev/null || uname -m || echo arm64)"
+  case "$arch" in
+    arm64|armhf|aarch64|armv7l)
+      printf '%s\n' \
+        https://mirrors.ustc.edu.cn/ubuntu-ports \
+        https://mirrors.aliyun.com/ubuntu-ports \
+        https://mirrors.tuna.tsinghua.edu.cn/ubuntu-ports \
+        https://ports.ubuntu.com/ubuntu-ports
+      ;;
+    *)
+      printf '%s\n' \
+        https://mirrors.ustc.edu.cn/ubuntu \
+        https://mirrors.aliyun.com/ubuntu \
+        https://mirrors.tuna.tsinghua.edu.cn/ubuntu \
+        https://archive.ubuntu.com/ubuntu
+      ;;
+  esac
+}
+
+write_ubuntu_sources_list() {
+  mirror="$1"
+  cat > /etc/apt/sources.list <<OPENCLAW_APT_SOURCES
+deb $mirror noble main restricted universe multiverse
+deb $mirror noble-updates main restricted universe multiverse
+deb $mirror noble-backports main restricted universe multiverse
+deb $mirror noble-security main restricted universe multiverse
+OPENCLAW_APT_SOURCES
+}
+
+configure_ubuntu_cn_mirror() {
+  if [ -f /etc/apt/sources.list.d/ubuntu.sources ]; then
+    mv /etc/apt/sources.list.d/ubuntu.sources /etc/apt/sources.list.d/ubuntu.sources.disabled 2>/dev/null || true
+  fi
+  for mirror in $(ubuntu_apt_mirror_candidates); do
+    [ -n "$mirror" ] || continue
+    echo ">>> Trying Ubuntu mirror: $mirror"
+    write_ubuntu_sources_list "$mirror"
+    if apt-get update \
+      -o Acquire::Retries=2 \
+      -o Acquire::http::Timeout=20 \
+      -o Acquire::https::Timeout=20; then
+      echo ">>> Using Ubuntu mirror: $mirror"
+      return 0
+    fi
+  done
+  echo "Failed to refresh apt metadata from all configured Ubuntu mirrors." >&2
+  return 1
+}
+
+ensure_ubuntu_python_prereqs() {
+  configure_ubuntu_cn_mirror
+  apt-get install -y --no-install-recommends \
+    ca-certificates \
+    git \
+    python3 \
+    python3-venv \
+    python3-pip \
+    python3-dev \
+    build-essential \
+    pkg-config \
+    libffi-dev \
+    libssl-dev
 }
 
 install_cli_package() {
@@ -407,16 +472,12 @@ case "\${1:-}" in
     openclaw_skip_model_injection=true
     ;;
 esac
-openclaw_use_official_gen=false
-if [ -z "\${OPENCLAW_API_PROTOCOL:-}" ] || [ "\${OPENCLAW_API_PROTOCOL:-openai}" = "gemini" ] || [ "\${GEMINI_DEFAULT_AUTH_TYPE:-}" = "siliconflow-api-key" ]; then
-  openclaw_use_official_gen=true
-fi
-if [ "\$openclaw_use_official_gen" != true ] && [ "\$openclaw_skip_model_injection" != true ]; then
-  if [ -x /usr/local/bin/generic-agent-openai ]; then
-    exec /usr/local/bin/generic-agent-openai "\$@"
+if [ "\$openclaw_skip_model_injection" != true ] && [ -n "\${OPENCLAW_API_PROTOCOL:-}" ]; then
+  if [ "\${OPENCLAW_API_PROTOCOL}" = "gemini" ]; then
+    export GEMINI_DEFAULT_AUTH_TYPE="\${GEMINI_DEFAULT_AUTH_TYPE:-gemini-api-key}"
+  else
+    export GEMINI_DEFAULT_AUTH_TYPE="\${GEMINI_DEFAULT_AUTH_TYPE:-siliconflow-api-key}"
   fi
-  echo "Gen CLI 当前仅直接支持 Gemini API Key 或 SiliconFlow 模式。当前配置会自动走 OpenAI 兼容桥，但兼容桥缺失。" >&2
-  exit 2
 fi
 if [ "\$openclaw_skip_model_injection" != true ] && [ -n "\${OPENCLAW_MODEL:-}" ]; then
   set -- --model "\$OPENCLAW_MODEL" "\$@"
@@ -480,9 +541,6 @@ mkdir -p \
   2>/dev/null || true
 cd "${OPENCLAW_CLI_WORKSPACE:-/root/openclaw-cli-workspace}" 2>/dev/null || cd /root
 openclaw_managed_auth=false
-openclaw_toml_quote() {
-  printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
-}
 if [ -r /root/.openclaw/codex-proxy.env ] && grep -q '^OPENCLAW_CODEX_PROXY_ENABLED=1$' /root/.openclaw/codex-proxy.env 2>/dev/null; then
   openclaw_managed_auth=true
   pkill -f "/root/.openclaw/codex-proxy.py" >/dev/null 2>&1 || true
@@ -521,22 +579,6 @@ if [ "$openclaw_passthrough" != true ] && [ "$openclaw_has_sandbox_arg" != true 
 fi
 if [ "$openclaw_passthrough" != true ] && [ "$openclaw_cli_mode" = true ] && [ "$openclaw_has_no_alt_screen" != true ]; then
   set -- --no-alt-screen "$@"
-fi
-if [ "$openclaw_passthrough" != true ] && [ "$openclaw_managed_auth" = true ]; then
-  set -- -c 'preferred_auth_method="apikey"' "$@"
-  set -- -c 'model_provider="openclaw"' "$@"
-  set -- -c 'model_providers.openclaw.name="OpenClaw"' "$@"
-  set -- -c 'model_providers.openclaw.base_url="http://127.0.0.1:8787/v1"' "$@"
-  set -- -c 'model_providers.openclaw.wire_api="responses"' "$@"
-  set -- -c 'model_providers.openclaw.env_key="OPENAI_API_KEY"' "$@"
-  if [ -n "${OPENAI_MODEL:-}" ]; then
-    openclaw_model="$(openclaw_toml_quote "$OPENAI_MODEL")"
-    set -- -c "model=\"$openclaw_model\"" "$@"
-  fi
-  if [ -n "${OPENAI_REASONING_EFFORT:-}" ]; then
-    openclaw_effort="$(openclaw_toml_quote "$OPENAI_REASONING_EFFORT")"
-    set -- -c "model_reasoning_effort=\"$openclaw_effort\"" "$@"
-  fi
 fi
 exec node /opt/openclaw-cli/codex/node_modules/@openai/codex/bin/codex.js "$@"
 OPENCLAW_CODEX_WRAPPER
@@ -598,15 +640,12 @@ if ! command -v python3 >/dev/null 2>&1; then
   echo "python3 is required. Run environment setup first." >&2
   exit 1
 fi
+ensure_ubuntu_python_prereqs
 HERMES_TARGET=/opt/openclaw-cli/hermes-agent
 HERMES_STAGING="$HERMES_TARGET.tmp"
 HERMES_PREVIOUS="$HERMES_TARGET.prev"
 rm -rf "$HERMES_STAGING" "$HERMES_PREVIOUS"
-if ! python3 -m venv "$HERMES_STAGING/venv"; then
-  apt-get update
-  apt-get install -y python3-venv python3-pip
-  python3 -m venv "$HERMES_STAGING/venv"
-fi
+python3 -m venv "$HERMES_STAGING/venv"
 "$HERMES_STAGING/venv/bin/python" -m pip install -U pip setuptools wheel
 "$HERMES_STAGING/venv/bin/python" -m pip install -U hermes-agent
 if [ -d "$HERMES_TARGET" ]; then
@@ -631,7 +670,6 @@ if [ ! -f "$GEN_REAL" ]; then
   exit 1
 fi
 write_gen_wrapper "$GEN_REAL"
-write_openai_compatible_agent generic-agent-openai generic-agent "Gen CLI OpenAI Bridge"
 hash -r
 /usr/local/bin/generic-agent --version || true
 echo ">>> GENERIC_AGENT_INSTALL_COMPLETE"

@@ -83,7 +83,7 @@ jobs:
         if: steps.restore_rootfs.outputs.restored != 'true'
         run: |
           set -euo pipefail
-          bash scripts/build-prebuilt-rootfs.sh --no-docker --arch arm64 --mirror http://mirrors.tuna.tsinghua.edu.cn/ubuntu-ports
+          bash scripts/build-prebuilt-rootfs.sh --no-docker --arch arm64 --mirror https://mirrors.ustc.edu.cn/ubuntu-ports
           ROOTFS=flutter_app/assets/bootstrap/openclaw-rootfs-noble-arm64.tar.gz
           test -s "$ROOTFS"
           gzip -t "$ROOTFS"
