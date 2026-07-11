@@ -436,7 +436,11 @@ if [ "$openclaw_passthrough" != true ] && [ "$openclaw_cli_mode" = true ]; then
   set -- --no-alt-screen "$@"
 fi
 if [ "$openclaw_passthrough" != true ] && [ "$openclaw_managed_auth" = true ]; then
-  set -- -c 'openai_base_url="http://127.0.0.1:8787/v1"' "$@"
+  set -- -c 'model_provider="openclaw"' "$@"
+  set -- -c 'model_providers.openclaw.name="OpenClaw"' "$@"
+  set -- -c 'model_providers.openclaw.base_url="http://127.0.0.1:8787/v1"' "$@"
+  set -- -c 'model_providers.openclaw.wire_api="responses"' "$@"
+  set -- -c 'model_providers.openclaw.env_key="OPENAI_API_KEY"' "$@"
   if [ -n "${OPENAI_MODEL:-}" ]; then
     openclaw_model="$(openclaw_toml_quote "$OPENAI_MODEL")"
     set -- -c "model=\"$openclaw_model\"" "$@"

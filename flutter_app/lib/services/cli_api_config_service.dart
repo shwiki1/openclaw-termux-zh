@@ -14,6 +14,7 @@ class CliApiConfigService {
   static const _codexProxyEnvPath = '/root/.openclaw/codex-proxy.env';
   static const _codexConfigPath = '/root/.codex/config.toml';
   static const _codexProxyBaseUrl = 'http://127.0.0.1:8787/v1';
+  static const _codexProviderId = 'openclaw';
   static const _codeBuddyModelsPath = '/root/.codebuddy/models.json';
   static const _codeBuddySettingsPath = '/root/.codebuddy/settings.json';
   static const _qwenSettingsPath = '/root/.qwen/settings.json';
@@ -674,9 +675,7 @@ export PS1='\[\e[1;32m\]\u@\h\[\e[0m\]:\[\e[1;34m\]\w\[\e[0m\]\$ '
     final serviceModel = config.model.trim();
     final toolModel = config.effectiveToolModel;
     final effort = config.reasoningEffort.trim();
-    final openAiBaseUrl = toolId == 'codex' && baseUrl.isNotEmpty
-        ? _codexProxyBaseUrl
-        : _trimTrailingSlash(baseUrl);
+    final openAiBaseUrl = _trimTrailingSlash(baseUrl);
 
     if (apiKey.isNotEmpty) {
       lines
@@ -689,7 +688,7 @@ export PS1='\[\e[1;32m\]\u@\h\[\e[0m\]:\[\e[1;34m\]\w\[\e[0m\]\$ '
         ..add('export CODEBUDDY_API_KEY=${_shQuote(apiKey)}')
         ..add('export CHINESE_LLM_API_KEY=${_shQuote(apiKey)}');
     }
-    if (openAiBaseUrl.isNotEmpty) {
+    if (toolId != 'codex' && openAiBaseUrl.isNotEmpty) {
       lines
         ..add('export OPENAI_BASE_URL=${_shQuote(openAiBaseUrl)}')
         ..add('export CODEX_BASE_URL=${_shQuote(openAiBaseUrl)}')
@@ -889,13 +888,23 @@ export PS1='\[\e[1;32m\]\u@\h\[\e[0m\]:\[\e[1;34m\]\w\[\e[0m\]\$ '
       final model = codex.effectiveToolModel;
       final effort = codex.reasoningEffort.trim();
 
+      lines.add('model_provider = ${_tomlString(_codexProviderId)}');
       if (model.isNotEmpty) {
         lines.add('model = ${_tomlString(model)}');
       }
       if (effort.isNotEmpty) {
         lines.add('model_reasoning_effort = ${_tomlString(effort)}');
       }
-      lines.add('openai_base_url = ${_tomlString(_codexProxyBaseUrl)}');
+      lines
+        ..add('')
+        ..add('[model_providers.$_codexProviderId]')
+        ..add('name = ${_tomlString('OpenClaw')}')
+        ..add('base_url = ${_tomlString(_codexProxyBaseUrl)}')
+        ..add('wire_api = "responses"')
+        ..add('env_key = "OPENAI_API_KEY"')
+        ..add('stream_idle_timeout_ms = 300000')
+        ..add('request_max_retries = 2')
+        ..add('stream_max_retries = 2');
     }
 
     lines
@@ -935,6 +944,7 @@ export PS1='\[\e[1;32m\]\u@\h\[\e[0m\]:\[\e[1;34m\]\w\[\e[0m\]\$ '
     }
     lines.add('OPENCLAW_CODEX_PROXY_ENABLED=1');
     final upstream = codex.baseUrl.trim();
+    final model = codex.effectiveToolModel;
     if (upstream.isNotEmpty) {
       lines.add(
         'OPENCLAW_CODEX_PROXY_UPSTREAM='
@@ -944,8 +954,8 @@ export PS1='\[\e[1;32m\]\u@\h\[\e[0m\]:\[\e[1;34m\]\w\[\e[0m\]\$ '
     if (codex.apiKey.trim().isNotEmpty) {
       lines.add('OPENAI_API_KEY=${_shQuote(codex.apiKey.trim())}');
     }
-    if (codex.model.trim().isNotEmpty) {
-      lines.add('OPENCLAW_CODEX_PROXY_MODEL=${_shQuote(codex.model.trim())}');
+    if (model.isNotEmpty) {
+      lines.add('OPENCLAW_CODEX_PROXY_MODEL=${_shQuote(model)}');
     }
     lines.add('');
     return lines.join('\n');
