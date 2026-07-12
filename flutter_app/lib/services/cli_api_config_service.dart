@@ -336,7 +336,13 @@ class CliApiConfigService {
       '2>/dev/null || true; '
       'grep -q "openclaw/terminal-theme.sh" /root/.bashrc 2>/dev/null || '
       'printf "\\n[ -r /root/.openclaw/terminal-theme.sh ] && . /root/.openclaw/terminal-theme.sh\\n" >> /root/.bashrc; '
-      'chmod 0600 /root/.openclaw/cli-env*.sh 2>/dev/null || true',
+      'chmod 0600 /root/.openclaw/cli-env*.sh 2>/dev/null || true; '
+      'chmod 0755 '
+      '/opt/openclaw-cli/codex/node_modules/@openai/codex-linux-arm64/'
+      'vendor/aarch64-unknown-linux-musl/bin/codex '
+      '/opt/openclaw-cli/codex/node_modules/@openai/codex-linux-arm64/'
+      'vendor/aarch64-unknown-linux-musl/bin/codex-code-mode-host '
+      '2>/dev/null || true',
       timeout: 10,
     );
   }
@@ -769,6 +775,7 @@ class CliApiConfigService {
       'export COLORTERM="\${COLORTERM:-truecolor}"',
       'export FORCE_COLOR=1',
       'export TMPDIR="\${TMPDIR:-/tmp}"',
+      'export PATH=${_shQuote(_managedCliBinDir)}:/usr/local/bin:/usr/bin:/bin:\${PATH:-}',
       'mkdir -p "\${OPENCLAW_CLI_WORKSPACE:-$cliWorkspacePath}" '
       '"\${OPENCLAW_CLI_PROJECTS:-$_cliWorkspaceProjectsPath}" '
       '"\${OPENCLAW_CLI_SCRATCH:-$_cliWorkspaceScratchPath}" '
@@ -1158,13 +1165,20 @@ export PS1='\[\e[1;32m\]\u@\h\[\e[0m\]:\[\e[1;34m\]\w\[\e[0m\]\$ '
     }
     lines
       ..add('disable_response_storage = true')
-      ..add('preferred_auth_method = "apikey"')
+      ..add('preferred_auth_method = "apikey"');
+    if (effort.isNotEmpty) {
+      lines.add('model_reasoning_effort = ${_tomlString(effort)}');
+    }
+    lines
       ..add('sandbox_mode = "danger-full-access"')
       ..add('approval_policy = "never"')
       ..add('tui.notifications = false')
       ..add('tui.terminal_title = []');
-    if (effort.isNotEmpty) {
-      lines.add('model_reasoning_effort = ${_tomlString(effort)}');
+    if (model.isNotEmpty) {
+      lines
+        ..add('')
+        ..add('[tui.model_availability_nux]')
+        ..add('${_tomlString(model)} = 4');
     }
     if (baseUrl.isNotEmpty) {
       lines
@@ -1964,8 +1978,15 @@ if [ "\$openclaw_proxy_should_run" = true ]; then
 fi
 
 CODEX_JS="/opt/openclaw-cli/codex/node_modules/@openai/codex/bin/codex.js"
+CODEX_NATIVE="/opt/openclaw-cli/codex/node_modules/@openai/codex-linux-arm64/vendor/aarch64-unknown-linux-musl/bin/codex"
 [ -f "\$CODEX_JS" ] || {
   echo "Codex CLI entrypoint not found: \$CODEX_JS" >&2
+  echo "Reinstall Codex from the CLI tools page." >&2
+  exit 1
+}
+[ -x "\$CODEX_NATIVE" ] || {
+  echo "Codex native runtime not found or not executable: \$CODEX_NATIVE" >&2
+  echo "Reinstall Codex from the CLI tools page to repair the linux-arm64 runtime." >&2
   exit 1
 }
 

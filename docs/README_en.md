@@ -1,88 +1,88 @@
-﻿# OpenClaw Chinese Integration Edition (openclaw-termux-zh)
+# CiYuanXia
 
 [简体中文](../README.md) | [English](README_en.md)
 
-> This repository is a Chinese-focused integration build of OpenClaw for Android.
->
-> Integrated from:
-> - Upstream project: [`mithun50/openclaw-termux`](https://github.com/mithun50/openclaw-termux)
-> - Translation branch: [`TIANLI0/openclaw-termux` (`feature/translation`)](https://github.com/TIANLI0/openclaw-termux/tree/feature/translation)
+CiYuanXia is a community-maintained Android integration app for OpenClaw, focused on Chinese users and mobile-first setup.
 
 ## Current Version
 
-- Version: `v2.0.2`
-- Release notes: [release/v2.0.2/Release.zh.md](../release/v2.0.2/Release.zh.md)
-- Change log: [CHANGELOG.md](../CHANGELOG.md)
-- Releases page: <https://github.com/JunWan666/openclaw-termux-zh/releases>
+- App name: `次元虾`
+- Android package: `com.agent.cyx`
+- Version name: `2.0.50`
+- Build number: `126`
+- Release artifact prefix: `CiYuanXia-v`
+- The Dart package name remains `openclaw` for compatibility with existing Flutter test imports.
 
-## What's New In v2.0.2
+## What It Does
 
-- Merges the setup stability fixes, the previous terminal-performance work, and current unpublished changes into this v2.0.2 package. Android build number is now `77`.
-- Large RootFS / Node.js runtime archives are no longer bundled in the APK, bringing the universal APK down to about 45.96 MB and split APKs to about 27 MB.
-- Bootstrap resource settings now live on a separate page, with GitHub `basic-resource` defaults plus separate URL/local-file fields for prebuilt RootFS, Ubuntu base RootFS, and Node.js.
-- The first-run setup wizard now uses a small-icon header, a step timeline, and a tighter settings area, with localized bootstrap-resource and sample-config copy.
-- Buffered terminal output refreshes across configure, onboarding, package install, Weixin install, and the regular terminal, reducing UI jank during verbose OpenClaw output.
-- Reduced terminal scrollback from 10000 to 3000 lines to lower memory and rendering pressure.
-- Interactive terminals now default to a lighter PRoot fast mode without the heavier SysV IPC compatibility flag.
-- DNS preparation is centralized through `ProotDnsService.ensureReady()` instead of repeated per-screen fallback writes.
-- Keeps armv7 Node.js compatibility, domestic DNS / Ubuntu mirror fallbacks, apt/dpkg directory preparation, and clearer PRoot failure summaries.
-- Bundled sample configs now point to a test-friendly OpenAI-compatible provider so new users can verify the flow quickly.
-- The local model page now explicitly warns that the current path is PRoot + llama.cpp + GGUF CPU, not Google AI Edge native GPU.
+CiYuanXia runs OpenClaw Gateway directly on Android without requiring Termux or root access. The app uses PRoot to run an Ubuntu RootFS, installs Node.js and OpenClaw inside it, and exposes setup, configuration, logs, backup, foreground services, and device capabilities through Flutter and Kotlin.
 
-## Current Development Branch Changes
+Main capabilities:
 
-- The app brand has been changed to "小龙虾"; Android `applicationId`, `namespace`, and MethodChannel identifiers now use `com.openclaw.xlx`.
-- First-run setup now follows the npm `openclaw@latest` stable release by default, while filtering prerelease tags such as beta, rc, test, and preview from the selectable version list.
-- Runtime defaults in this branch target Ubuntu 24.04.3, Node.js 24.14.1 for arm64/x86_64, and Node.js 22.22.2 for armv7 compatibility.
-- After setup, users can write an Android-recommended config that pre-creates local gateway settings, a random token, workspace defaults, node capability allowlists, and Web console settings; API Base URL, API Key, and model selection remain in the AI Providers page.
-- Custom model providers now include an optional "Model Reasoning Strength" setting saved as `models.providers.<providerId>.models[0].thinking`, with `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, `adaptive`, and `max` support.
+- One-tap setup for Ubuntu RootFS, Node.js, and OpenClaw.
+- Chinese-first setup wizard, dashboard, config editor, logs, and backup center.
+- AI provider, message platform, optional package, and node capability management.
+- Foreground OpenClaw Gateway service with logs and auto-restart.
+- Local model tooling for llama.cpp runtime, GGUF model management, and local chat testing.
+- Backup export, backup library switching, config restore, and workspace restore.
 
-## Download Artifacts
+## Runtime Defaults
 
-| File | Target Device | Size | Download |
-|---|---|---:|---|
-| `OpenClaw-v2.0.2-universal.apk` | Best default choice | 45.96 MB | [Download](https://github.com/JunWan666/openclaw-termux-zh/releases/download/v2.0.2/OpenClaw-v2.0.2-universal.apk) |
-| `OpenClaw-v2.0.2-arm64-v8a.apk` | Most modern Android phones | 27.66 MB | [Download](https://github.com/JunWan666/openclaw-termux-zh/releases/download/v2.0.2/OpenClaw-v2.0.2-arm64-v8a.apk) |
-| `OpenClaw-v2.0.2-armeabi-v7a.apk` | Older 32-bit ARM devices | 27.40 MB | [Download](https://github.com/JunWan666/openclaw-termux-zh/releases/download/v2.0.2/OpenClaw-v2.0.2-armeabi-v7a.apk) |
-| `OpenClaw-v2.0.2-x86_64.apk` | Emulator or x86_64 device | 27.87 MB | [Download](https://github.com/JunWan666/openclaw-termux-zh/releases/download/v2.0.2/OpenClaw-v2.0.2-x86_64.apk) |
-| `OpenClaw-v2.0.2.aab` | Store distribution | 52.74 MB | [Download](https://github.com/JunWan666/openclaw-termux-zh/releases/download/v2.0.2/OpenClaw-v2.0.2.aab) |
+- Ubuntu: `24.04.3 noble`
+- arm64 / x86_64 Node.js: `24.14.1`
+- armv7 / armhf Node.js: `22.22.2`
+- OpenClaw: npm `openclaw@latest` stable release, filtering prerelease tags such as beta, rc, test, and preview.
 
-## Quick Start
+Large runtime resources should not be assumed to be bundled directly in the APK. The app can restore them from the `basic-resource` release, use custom URLs, import local archives, or download from mirrors during first-run setup.
 
-### Option A: APK
-
-1. Download the APK that matches your device.
-2. Install and open the app.
-3. Optionally choose a specific OpenClaw version before setup.
-4. Complete onboarding and provider configuration.
-5. Start the gateway and open `http://127.0.0.1:18789`.
-
-### Option B: Build From Source
+## Build
 
 ```bash
-git clone https://github.com/JunWan666/openclaw-termux-zh.git
-cd openclaw-termux-zh/flutter_app
+cd flutter_app
 flutter pub get
 flutter build apk --release
 ```
 
-To generate the release directory with APKs and AAB:
+Release helper:
 
 ```bash
-python scripts/build_release.py --version 2.0.2 --build-number 77
+python scripts/build_release.py --version 2.0.50 --build-number 126
 ```
 
-## Repository Structure
+GitHub Actions artifact naming:
 
-- `flutter_app/`: Flutter Android app
-- `lib/`: Node / CLI scripts
-- `scripts/`: build and dependency scripts
-- `release/`: release artifacts and notes
-- `CHANGELOG.md`: version history
+```text
+CiYuanXia-v2.0.50-126-arm64-v8a.apk
+```
+
+## Verification
+
+Available in a Node-only environment:
+
+```bash
+npm test
+node node_modules/eslint/bin/eslint.js . --no-warn-ignored
+```
+
+Full Android verification requires Flutter and Android SDK:
+
+```bash
+cd flutter_app
+flutter pub get
+flutter analyze
+flutter test
+flutter build apk --release
+```
+
+## Upstream Sources
+
+- Android integration upstream: [`mithun50/openclaw-termux`](https://github.com/mithun50/openclaw-termux)
+- Translation base branch: [`TIANLI0/openclaw-termux` (`feature/translation`)](https://github.com/TIANLI0/openclaw-termux/tree/feature/translation)
+- OpenClaw core: [`openclaw/openclaw`](https://github.com/openclaw/openclaw)
 
 ## Disclaimer
 
-This repository is a community-maintained Chinese integration variant and is not an official upstream release.
+This repository is a community-maintained integration variant and is not an official OpenClaw Android release.
 
 ## License
 

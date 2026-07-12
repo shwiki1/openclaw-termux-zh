@@ -272,7 +272,7 @@ def collect_artifacts(version: str, build_number: str, output_dir: Path) -> list
     apk_root = FLUTTER_DIR / "build" / "app" / "outputs" / "flutter-apk"
 
     arm64_source = apk_root / ARM64_APK
-    arm64_target = output_dir / f"OpenClaw-v{version}-{build_number}-arm64-v8a.apk"
+    arm64_target = output_dir / f"CiYuanXia-v{version}-{build_number}-arm64-v8a.apk"
     copy_if_exists(arm64_source, arm64_target, copied_files)
 
     doc_source = DOCS_DIR / f"release-v{version}.zh.md"

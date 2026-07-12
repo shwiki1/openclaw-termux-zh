@@ -1,6 +1,6 @@
-# OpenClaw Termux 中文版 — 源码结构文档
+# 次元虾 — 源码结构文档
 
-> 版本：v2.0.2+77 | 协议：MIT | 更新日期：2026-07-03
+> 版本：v2.0.50+126 | 协议：MIT | 更新日期：2026-07-12
 >
 > 本文档用于二次开发前的源码理解，按"从外到内"的方式组织：先看项目全貌，再逐层深入。本文已按当前工作区源码重新核对。
 
@@ -30,7 +30,7 @@
 - Termux App
 - 外部云服务器
 
-核心思路：通过 **PRoot** 在 Android 上运行一个隔离的 Ubuntu RootFS，里面部署 Node.js 和 OpenClaw，再由 Flutter App 提供 Android 原生 UI 控制。
+核心思路：通过 **PRoot** 在 Android 上运行一个隔离的 Ubuntu RootFS，里面部署 Node.js 和 OpenClaw，再由次元虾 Flutter App 提供 Android 原生 UI 控制。
 
 ### 1.2 三大技术层
 
@@ -87,6 +87,7 @@
 | 隔离环境 | PRoot | 无需 Root 的 chroot 替代 |
 | 运行时 | Node.js >= 22.19.0 | 32/64 位 ARM + x86_64；按 `openclaw@latest` engines 校验 |
 | CLI 引擎 | OpenClaw latest stable | 多渠道 AI 网关，推荐版本跟随 npm latest 稳定版 |
+| Android 包名 | `com.agent.cyx` | `applicationId`、`namespace`、Kotlin 包声明和 MethodChannel 均使用该包名 |
 
 当前版本默认运行时策略：
 
@@ -94,7 +95,7 @@
 - `armeabi-v7a` / `armhf`：Node.js `22.22.2`，用于避开 Node.js 24 不再提供官方 `linux-armv7l` 包的问题。
 - `openclaw@latest` 当前为 `2026.6.11`，要求 Node.js `>=22.19.0`，以上两个 Node.js 版本均满足。
 - APK 不再内置大体积 `assets/bootstrap/` 运行时包，初始化时从默认资源、用户填写 URL 或本地压缩包导入。
-- App 品牌当前为“小龙虾”，Android `applicationId` / `namespace` / MethodChannel 包名为 `com.openclaw.xlx`。
+- App 品牌当前为“次元虾”，Android `applicationId` / `namespace` / Kotlin 包声明 / MethodChannel 包名为 `com.agent.cyx`。
 
 ---
 
@@ -149,7 +150,6 @@ openclaw-termux-zh/
 ├── assets/                                # README 截图/图标
 ├── package.json                           # Node.js 依赖
 ├── .github/workflows/flutter-build.yml     # CI/CD
-├── install.sh                             # 一键安装脚本
 ├── CHANGELOG.md
 ├── README.md
 └── LICENSE
@@ -670,11 +670,7 @@ bash scripts/build-prebuilt-rootfs.sh
 
 | 文件名 | ABI | 大小 |
 |---|---|---|
-| `OpenClaw-v2.0.2-universal.apk` | 全架构 | ~46 MB |
-| `OpenClaw-v2.0.2-arm64-v8a.apk` | 64 位 ARM | ~28 MB |
-| `OpenClaw-v2.0.2-armeabi-v7a.apk` | 32 位 ARM | ~27 MB |
-| `OpenClaw-v2.0.2-x86_64.apk` | x86_64 | ~28 MB |
-| `OpenClaw-v2.0.2.aab` | 全架构 | ~53 MB |
+| `CiYuanXia-v2.0.50-126-arm64-v8a.apk` | 64 位 ARM | 以实际构建结果为准 |
 
 ---
 
@@ -786,7 +782,7 @@ bash scripts/build-prebuilt-rootfs.sh
 cd openclaw-termux-zh
 git init
 git add .
-git commit -m "chore: initial import from zip v2.0.2"
+git commit -m "chore: initial import from zip v2.0.50"
 
 # 2. 关联上游（可选，方便拉取更新）
 git remote add upstream https://github.com/JunWan666/openclaw-termux-zh.git
@@ -846,7 +842,7 @@ flutter test
 
 # 远程：构建 APK / AAB
 cd ~/openclaw-termux-zh
-python scripts/build_release.py --version 2.0.2 --build-number 77
+python scripts/build_release.py --version 2.0.50 --build-number 126
 ```
 
 远程构建机首次准备建议：
@@ -868,7 +864,7 @@ flutter doctor --android-licenses
 # 初始化仓库
 git init
 git add .
-git commit -m "chore: import openclaw termux zh v2.0.2"
+git commit -m "chore: import ciyuanxia v2.0.50"
 
 # 推荐：SSH remote，不在仓库配置中保存令牌
 git remote add origin git@gitee.com:<owner>/<repo>.git

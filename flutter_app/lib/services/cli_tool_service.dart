@@ -299,6 +299,40 @@ install_cli_package() {
   rm -f "/usr/local/bin/$bin_name"
 }
 
+ensure_codex_platform_runtime() {
+  codex_root="/opt/openclaw-cli/codex"
+  codex_pkg="$codex_root/node_modules/@openai/codex/package.json"
+  codex_native="$codex_root/node_modules/@openai/codex-linux-arm64/vendor/aarch64-unknown-linux-musl/bin/codex"
+  codex_code_host="$codex_root/node_modules/@openai/codex-linux-arm64/vendor/aarch64-unknown-linux-musl/bin/codex-code-mode-host"
+
+  [ -f "$codex_pkg" ] || {
+    echo "Codex package metadata is missing: $codex_pkg" >&2
+    return 1
+  }
+
+  codex_version="$(node -e "process.stdout.write(require('$codex_pkg').version)")"
+  [ -n "$codex_version" ] || {
+    echo "Unable to resolve Codex package version." >&2
+    return 1
+  }
+
+  if [ ! -x "$codex_native" ]; then
+    echo ">>> Installing Codex native runtime for linux-arm64..."
+    npm install \
+      --prefix "$codex_root" \
+      --include=optional \
+      --no-save \
+      "@openai/codex-linux-arm64@npm:@openai/codex@${codex_version}-linux-arm64"
+  fi
+
+  chmod 0755 "$codex_native" "$codex_code_host" 2>/dev/null || true
+  [ -x "$codex_native" ] || {
+    echo "Codex native runtime is missing or not executable: $codex_native" >&2
+    echo "Reinstall Codex from the CLI tools page to repair the linux-arm64 runtime." >&2
+    return 1
+  }
+}
+
 resolve_node_entry() {
   tool_id="$1"
   package_name="$2"
@@ -668,15 +702,29 @@ ensure_cli_workspace
       r'''
 echo ">>> Installing OpenAI Codex CLI from npm..."
 install_cli_package codex @openai/codex codex
+ensure_codex_platform_runtime
 cat > /usr/local/bin/codex <<'OPENCLAW_CODEX_WRAPPER'
 #!/bin/sh
+export HOME="${HOME:-/root}"
+export USER="${USER:-root}"
+export LOGNAME="${LOGNAME:-root}"
+export XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-/root/.config}"
+export CODEX_HOME="${CODEX_HOME:-/root/.codex}"
 export NODE_OPTIONS="${NODE_OPTIONS:---require /root/.openclaw/bionic-bypass.js}"
 export NODE_EXTRA_CA_CERTS="${NODE_EXTRA_CA_CERTS:-/etc/ssl/certs/ca-certificates.crt}"
 export TMPDIR="${TMPDIR:-/tmp}"
 [ -r /root/.openclaw/terminal-theme.sh ] && . /root/.openclaw/terminal-theme.sh
 [ -r /root/.openclaw/cli-env.sh ] && . /root/.openclaw/cli-env.sh
 [ -r /root/.openclaw/cli-env-codex.sh ] && . /root/.openclaw/cli-env-codex.sh
-if [ -r /root/.openclaw/codex-proxy.env ]; then
+mkdir -p \
+  "${OPENCLAW_CLI_WORKSPACE:-/root/openclaw-cli-workspace}" \
+  "${OPENCLAW_CLI_PROJECTS:-/root/openclaw-cli-workspace/projects}" \
+  "${OPENCLAW_CLI_SCRATCH:-/root/openclaw-cli-workspace/scratch}" \
+  "${CODEX_HOME:-/root/.codex}" \
+  "${XDG_CONFIG_HOME:-/root/.config}" \
+  2>/dev/null || true
+cd "${OPENCLAW_CLI_WORKSPACE:-/root/openclaw-cli-workspace}" 2>/dev/null || cd /root
+if [ -r /root/.openclaw/codex-proxy.env ] && grep -q '^OPENCLAW_CODEX_PROXY_UPSTREAM=' /root/.openclaw/codex-proxy.env 2>/dev/null; then
   pkill -f "/root/.openclaw/codex-proxy.py" >/dev/null 2>&1 || true
   pkill -f "/root/.openclaw/codex-proxy.js" >/dev/null 2>&1 || true
   if command -v python3 >/dev/null 2>&1 && [ -r /root/.openclaw/codex-proxy.py ]; then
@@ -686,6 +734,19 @@ if [ -r /root/.openclaw/codex-proxy.env ]; then
   fi
   sleep 0.5
 fi
+
+CODEX_JS="/opt/openclaw-cli/codex/node_modules/@openai/codex/bin/codex.js"
+CODEX_NATIVE="/opt/openclaw-cli/codex/node_modules/@openai/codex-linux-arm64/vendor/aarch64-unknown-linux-musl/bin/codex"
+[ -f "$CODEX_JS" ] || {
+  echo "Codex CLI entrypoint not found: $CODEX_JS" >&2
+  echo "Reinstall Codex from the CLI tools page." >&2
+  exit 1
+}
+[ -x "$CODEX_NATIVE" ] || {
+  echo "Codex native runtime not found or not executable: $CODEX_NATIVE" >&2
+  echo "Reinstall Codex from the CLI tools page to repair the linux-arm64 runtime." >&2
+  exit 1
+}
 
 openclaw_passthrough=false
 openclaw_has_sandbox_arg=false
@@ -714,7 +775,7 @@ fi
 if [ "$openclaw_passthrough" != true ] && [ "$openclaw_cli_mode" = true ] && [ "$openclaw_has_no_alt_screen" != true ]; then
   set -- --no-alt-screen "$@"
 fi
-exec node /opt/openclaw-cli/codex/node_modules/@openai/codex/bin/codex.js "$@"
+exec node "$CODEX_JS" "$@"
 OPENCLAW_CODEX_WRAPPER
 chmod 0755 /usr/local/bin/codex
 hash -r
@@ -946,7 +1007,8 @@ fi
   static String _installProbeCommand(CliToolDefinition tool) {
     return switch (tool.id) {
       'codex' =>
-        '[ -f /opt/openclaw-cli/codex/node_modules/@openai/codex/bin/codex.js ]',
+        '[ -f /opt/openclaw-cli/codex/node_modules/@openai/codex/bin/codex.js ] && '
+            '[ -x /opt/openclaw-cli/codex/node_modules/@openai/codex-linux-arm64/vendor/aarch64-unknown-linux-musl/bin/codex ]',
       'gemini' =>
         '[ -d /opt/openclaw-cli/gemini/node_modules/@google/gemini-cli ]',
       'generic-agent' =>

@@ -16,7 +16,7 @@ unless they are explicitly declared in `flutter_app/pubspec.yaml`.
 Supported fallback file names match upstream download file names, for example:
 
 - `ubuntu-base-24.04.3-base-arm64.tar.gz`
-- `node-v24.15.0-linux-arm64.tar.xz`
+- `node-v24.14.1-linux-arm64.tar.xz`
 
 Prebuilt rootfs archives for local testing can also be placed here:
 

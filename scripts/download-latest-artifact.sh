@@ -3,7 +3,7 @@
 set -euo pipefail
 
 REPO="${GITHUB_REPO:-shwiki1/openclaw-termux-zh}"
-ARTIFACT_NAME="${ARTIFACT_NAME:-openclaw-apks}"
+ARTIFACT_NAME="${ARTIFACT_NAME:-ciyuanxia-apks}"
 WORKFLOW_NAME="${WORKFLOW_NAME:-Build OpenClaw Apps}"
 DEST_ROOT="${1:-dist}"
 RUN_ID="${2:-}"

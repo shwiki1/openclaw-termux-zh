@@ -261,7 +261,7 @@ const Map<String, String> appStringsJa = {
   'packageCpolarRecentLogsTitle': '\u6700\u8fd1\u306e\u30ed\u30b0',
   'setupWizardTitle': 'OpenClaw セットアップ',
   'setupWizardIntroIdle':
-      'Ubuntu 24.04.3、Node.js 24.15.0（arm64/x86_64、armv7 は 22.22.2）、最新安定版 OpenClaw を自己完結型の環境にダウンロードします。',
+      'Ubuntu 24.04.3、Node.js 24.14.1（arm64/x86_64、armv7 は 22.22.2）、最新安定版 OpenClaw を自己完結型の環境にダウンロードします。',
   'setupWizardIntroRunning': '環境をセットアップしています。アプリはできるだけ前面に保ってください。',
   'setupWizardConfigureApiKeys': 'API キーを設定',
   'setupWizardRetry': '再試行',

@@ -86,7 +86,7 @@ class OnlineModelCatalogVariant {
 
 class OnlineModelCatalogService {
   static const _baseUrl = 'https://huggingface.co';
-  static const _userAgent = 'OpenClaw-Termux-ZH/2.0';
+  static const _userAgent = 'CiYuanXia/2.0.50';
   static final Uri _searchEndpoint = Uri.parse('$_baseUrl/api/models');
   static final Map<String, _SearchCacheEntry> _searchCache =
       <String, _SearchCacheEntry>{};

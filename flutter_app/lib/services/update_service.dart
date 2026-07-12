@@ -130,7 +130,7 @@ class UpdateService {
         UpdateReleaseAsset(
           name: data['fileName']?.toString().trim().isNotEmpty == true
               ? data['fileName'].toString().trim()
-              : '次元虾-${latestVersion}+${latestBuildNumber}-arm64-v8a.apk',
+              : 'CiYuanXia-v${latestVersion}-${latestBuildNumber}-arm64-v8a.apk',
           downloadUrl: apkUrl,
         ),
       );
