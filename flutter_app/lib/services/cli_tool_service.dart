@@ -748,6 +748,66 @@ CODEX_NATIVE="/opt/openclaw-cli/codex/node_modules/@openai/codex-linux-arm64/ven
   exit 1
 }
 
+repair_codex_api_auth() {
+  [ -n "${OPENAI_API_KEY:-}" ] || return 0
+  mkdir -p "${CODEX_HOME:-/root/.codex}" 2>/dev/null || true
+  if command -v python3 >/dev/null 2>&1; then
+    CODEX_AUTH_FILE="${CODEX_HOME:-/root/.codex}/auth.json" \
+    OPENAI_API_KEY="${OPENAI_API_KEY:-}" \
+    python3 - <<'PY'
+import json
+import os
+
+path = os.environ.get("CODEX_AUTH_FILE") or "/root/.codex/auth.json"
+api_key = os.environ.get("OPENAI_API_KEY", "").strip()
+if not api_key:
+    raise SystemExit(0)
+
+data = {}
+try:
+    with open(path, "r", encoding="utf-8") as handle:
+        loaded = json.load(handle)
+        if isinstance(loaded, dict):
+            data = loaded
+except Exception:
+    data = {}
+
+data = {key: value for key, value in data.items()
+        if key in ("auth_mode", "OPENAI_API_KEY")}
+data["auth_mode"] = "apikey"
+data["OPENAI_API_KEY"] = api_key
+
+tmp_path = f"{path}.tmp"
+with open(tmp_path, "w", encoding="utf-8") as handle:
+    json.dump(data, handle, indent=2)
+    handle.write("\n")
+os.replace(tmp_path, path)
+try:
+    os.chmod(path, 0o600)
+except OSError:
+    pass
+PY
+  elif command -v node >/dev/null 2>&1; then
+    CODEX_AUTH_FILE="${CODEX_HOME:-/root/.codex}/auth.json" \
+    OPENAI_API_KEY="${OPENAI_API_KEY:-}" \
+    node - <<'NODE'
+const fs = require("fs");
+const path = process.env.CODEX_AUTH_FILE || "/root/.codex/auth.json";
+const apiKey = (process.env.OPENAI_API_KEY || "").trim();
+if (!apiKey) process.exit(0);
+const data = { auth_mode: "apikey", OPENAI_API_KEY: apiKey };
+fs.writeFileSync(`${path}.tmp`, `${JSON.stringify(data, null, 2)}\n`, {
+  mode: 0o600,
+});
+fs.renameSync(`${path}.tmp`, path);
+try {
+  fs.chmodSync(path, 0o600);
+} catch {}
+NODE
+  fi
+}
+repair_codex_api_auth || true
+
 openclaw_passthrough=false
 openclaw_has_sandbox_arg=false
 openclaw_has_no_alt_screen=false
