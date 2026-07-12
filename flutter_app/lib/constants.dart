@@ -1,12 +1,12 @@
 class AppConstants {
   static const String appName = '次元虾';
   static const String version =
-      String.fromEnvironment('APP_VERSION_NAME', defaultValue: '2.0.49');
+      String.fromEnvironment('APP_VERSION_NAME', defaultValue: '2.0.50');
   static const String buildNumber =
-      String.fromEnvironment('APP_VERSION_CODE', defaultValue: '1');
+      String.fromEnvironment('APP_VERSION_CODE', defaultValue: '126');
   static const String fullVersion = '$version+$buildNumber';
   static const String displayVersion =
-      buildNumber == '1' ? version : '$version ($buildNumber)';
+      buildNumber == '1' ? version : fullVersion;
   static const String packageName = 'com.agent.cyx';
 
   /// Matches ANSI escape sequences (e.g. color codes in terminal output).

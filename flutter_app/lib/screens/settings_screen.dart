@@ -110,10 +110,11 @@ class _SettingsScreenState extends State<SettingsScreen>
         _arch = arch;
         _prootPath = prootPath;
         final versionName = appPackageInfo['versionName']?.toString().trim();
+        final versionCode = appPackageInfo['versionCode']?.toString().trim();
         _appVersionName =
             versionName != null && versionName.isNotEmpty
-                ? (appPackageInfo['versionCode'] != null
-                    ? '$versionName (${appPackageInfo['versionCode']})'
+                ? (versionCode != null && versionCode.isNotEmpty
+                    ? '$versionName+$versionCode'
                     : versionName)
                 : AppConstants.displayVersion;
         _status = status;

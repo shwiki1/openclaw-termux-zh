@@ -154,7 +154,9 @@ class CliApiConfigService {
       if (useAnthropicHeaders) ...{
         'x-api-key': apiKey.trim(),
         'anthropic-version': '2023-06-01',
-      } else if (!useGeminiHeaders)
+      } else if (useGeminiHeaders)
+        'x-goog-api-key': apiKey.trim()
+      else
         'Authorization': 'Bearer ${apiKey.trim()}',
     };
     if (useAnthropicHeaders) {
@@ -801,25 +803,24 @@ export PS1='\[\e[1;32m\]\u@\h\[\e[0m\]:\[\e[1;34m\]\w\[\e[0m\]\$ '
     final serviceModel = config.model.trim();
     final toolModel = config.effectiveToolModel;
     final effort = config.reasoningEffort.trim();
-    final openAiBaseUrl = _trimTrailingSlash(baseUrl);
+    final openAiBaseUrl = toolId == 'codex' && baseUrl.isNotEmpty
+        ? _codexProxyBaseUrl
+        : _trimTrailingSlash(baseUrl);
     final protocol = _normalizedProtocol(config.effectiveApiProtocol);
 
     if (apiKey.isNotEmpty) {
       lines
         ..add('export OPENAI_API_KEY=${_shQuote(apiKey)}')
         ..add('export ANTHROPIC_API_KEY=${_shQuote(apiKey)}')
+        ..add('export GEMINI_API_KEY=${_shQuote(apiKey)}')
+        ..add('export GOOGLE_API_KEY=${_shQuote(apiKey)}')
         ..add('export SILICONFLOW_API_KEY=${_shQuote(apiKey)}')
         ..add('export QWEN_API_KEY=${_shQuote(apiKey)}')
         ..add('export DASHSCOPE_API_KEY=${_shQuote(apiKey)}')
         ..add('export CODEBUDDY_API_KEY=${_shQuote(apiKey)}')
         ..add('export CHINESE_LLM_API_KEY=${_shQuote(apiKey)}');
-      if (protocol == 'gemini') {
-        lines
-          ..add('export GEMINI_API_KEY=${_shQuote(apiKey)}')
-          ..add('export GOOGLE_API_KEY=${_shQuote(apiKey)}');
-      }
     }
-    if (toolId != 'codex' && openAiBaseUrl.isNotEmpty) {
+    if (openAiBaseUrl.isNotEmpty) {
       lines
         ..add('export OPENAI_BASE_URL=${_shQuote(openAiBaseUrl)}')
         ..add('export CODEX_BASE_URL=${_shQuote(openAiBaseUrl)}')
@@ -873,20 +874,6 @@ export PS1='\[\e[1;32m\]\u@\h\[\e[0m\]:\[\e[1;34m\]\w\[\e[0m\]\$ '
         lines.add(
           'export OPENCLAW_GEMINI_MODEL_ALIAS=${_shQuote(customAlias)}',
         );
-      }
-    }
-    if (toolId == 'generic-agent') {
-      if (config.effectiveApiProtocol == 'gemini') {
-        lines.add(
-          'export GEMINI_DEFAULT_AUTH_TYPE=${_shQuote('gemini-api-key')}',
-        );
-      } else {
-        lines.add(
-          'export GEMINI_DEFAULT_AUTH_TYPE=${_shQuote('siliconflow-api-key')}',
-        );
-        if (openAiBaseUrl.isNotEmpty) {
-          lines.add('export SILICONFLOW_BASE_URL=${_shQuote(openAiBaseUrl)}');
-        }
       }
     }
     if (toolId == 'codebuddy' && config.baseUrl.trim().isEmpty) {
@@ -1040,7 +1027,9 @@ export PS1='\[\e[1;32m\]\u@\h\[\e[0m\]:\[\e[1;34m\]\w\[\e[0m\]\$ '
           })}\n';
     }
     final alias = _geminiCustomModelAlias(config);
-    final effectiveModel = config.effectiveToolModel.trim();
+    final defaultModel = config.model.trim().isNotEmpty
+        ? config.model.trim()
+        : config.effectiveToolModel.trim();
     final baseUrl = _trimTrailingSlash(config.baseUrl);
     final displayName = config.profileName.trim().isNotEmpty
         ? config.profileName.trim()
@@ -1052,7 +1041,7 @@ export PS1='\[\e[1;32m\]\u@\h\[\e[0m\]:\[\e[1;34m\]\w\[\e[0m\]\$ '
           'name': alias,
           'baseUrl': baseUrl,
           'apiKey': config.apiKey.trim(),
-          'defaultModel': effectiveModel,
+          'defaultModel': defaultModel,
           'displayName': displayName,
           'description': 'OpenClaw configured model - $baseUrl',
           'createdAt': '1970-01-01T00:00:00.000Z',
@@ -1064,16 +1053,7 @@ export PS1='\[\e[1;32m\]\u@\h\[\e[0m\]:\[\e[1;34m\]\w\[\e[0m\]\$ '
   }
 
   static String _buildGenCliSettingsJson(CliApiConfig config) {
-    String? selectedAuthType;
-    if (_shouldManageToolRuntime(config)) {
-      if (_normalizedProtocol(config.effectiveApiProtocol) == 'gemini') {
-        selectedAuthType = 'gemini-api-key';
-      } else {
-        selectedAuthType = 'siliconflow-api-key';
-      }
-    }
     final payload = <String, dynamic>{
-      if (selectedAuthType != null) 'selectedAuthType': selectedAuthType,
       'contextFileName': ['AGENTS.md', 'GEMINI.md', 'CONTEXT.md'],
       'telemetry': {
         'enabled': false,
@@ -1137,60 +1117,55 @@ export PS1='\[\e[1;32m\]\u@\h\[\e[0m\]:\[\e[1;34m\]\w\[\e[0m\]\$ '
   }
 
   static String _buildCodexToml(CliApiConfig codex) {
+    if (!_shouldManageToolRuntime(codex)) {
+      return '# OpenClaw does not manage Codex for this tool right now.\n';
+    }
     final lines = <String>[];
-    final providerId = _codexProviderIdFor(codex);
-    final providerName = _codexProviderNameFor(codex);
+    final providerId = _codexProviderId(codex);
+    final providerName = codex.profileName.trim().isNotEmpty
+        ? codex.profileName.trim()
+        : providerId;
+    final model = codex.effectiveToolModel.trim();
+    final baseUrl = codex.baseUrl.trim().isNotEmpty ? _codexProxyBaseUrl : '';
+    final effort = codex.reasoningEffort.trim();
+
+    if (baseUrl.isNotEmpty) {
+      lines.add('model_provider = ${_tomlString(providerId)}');
+    }
+    if (model.isNotEmpty) {
+      lines.add('model = ${_tomlString(model)}');
+    }
     lines
       ..add('disable_response_storage = true')
+      ..add('preferred_auth_method = "apikey"')
       ..add('sandbox_mode = "danger-full-access"')
       ..add('approval_policy = "never"')
       ..add('tui.notifications = false')
       ..add('tui.terminal_title = []');
-
-    if (_shouldManageToolRuntime(codex)) {
-      final model = codex.effectiveToolModel;
-      final effort = codex.reasoningEffort.trim();
-
-      lines.add('preferred_auth_method = "apikey"');
-      lines.add('model_provider = ${_tomlString(providerId)}');
-      if (model.isNotEmpty) {
-        lines.add('model = ${_tomlString(model)}');
-      }
-      if (effort.isNotEmpty) {
-        lines.add('model_reasoning_effort = ${_tomlString(effort)}');
-      }
+    if (effort.isNotEmpty) {
+      lines.add('model_reasoning_effort = ${_tomlString(effort)}');
+    }
+    if (baseUrl.isNotEmpty) {
       lines
         ..add('')
         ..add('[model_providers.$providerId]')
         ..add('name = ${_tomlString(providerName)}')
-        ..add('base_url = ${_tomlString(_codexProxyBaseUrl)}')
+        ..add('base_url = ${_tomlString(baseUrl)}')
         ..add('wire_api = "responses"')
         ..add('env_key = "OPENAI_API_KEY"')
         ..add('stream_idle_timeout_ms = 300000')
         ..add('request_max_retries = 2')
-        ..add('stream_max_retries = 2');
+        ..add('stream_max_retries = 2')
+        ..add('')
+        ..add('[projects.${_tomlString(cliWorkspacePath)}]')
+        ..add('trust_level = "trusted"')
+        ..add('')
+        ..add('[projects.${_tomlString(_cliWorkspaceProjectsPath)}]')
+        ..add('trust_level = "trusted"')
+        ..add('')
+        ..add('[projects.${_tomlString(_cliWorkspaceScratchPath)}]')
+        ..add('trust_level = "trusted"');
     }
-
-    lines
-      ..add('')
-      ..add('[mcp_servers.openclaw_browser]')
-      ..add('enabled = true')
-      ..add('command = "node"')
-      ..add('args = [${_tomlString(_browserMcpPath)}]')
-      ..add('startup_timeout_sec = 20')
-      ..add('tool_timeout_sec = 120')
-      ..add('')
-      ..add('[projects.${_tomlString(cliWorkspacePath)}]')
-      ..add('trust_level = "trusted"')
-      ..add('')
-      ..add('[projects.${_tomlString(_cliWorkspaceProjectsPath)}]')
-      ..add('trust_level = "trusted"')
-      ..add('')
-      ..add('[projects.${_tomlString(_cliWorkspaceScratchPath)}]')
-      ..add('trust_level = "trusted"')
-      ..add('')
-      ..add('[projects."/root"]')
-      ..add('trust_level = "trusted"');
 
     if (lines.isEmpty) {
       lines.add('# OpenClaw CLI config is empty. Configure Codex in the app.');
@@ -1207,24 +1182,35 @@ export PS1='\[\e[1;32m\]\u@\h\[\e[0m\]:\[\e[1;34m\]\w\[\e[0m\]\$ '
     return jsonEncode(value);
   }
 
+  static String _codexProviderId(CliApiConfig config) {
+    final preferred = config.profileName.trim();
+    final source = preferred.isNotEmpty
+        ? preferred
+        : _trimTrailingSlash(config.baseUrl);
+    final normalized = source
+        .toLowerCase()
+        .replaceAll(RegExp(r'^https?://'), '')
+        .replaceAll(RegExp(r'[^a-z0-9_]+'), '_')
+        .replaceAll(RegExp(r'^_+|_+$'), '');
+    final providerId = normalized.isEmpty ? 'openclaw' : normalized;
+    return RegExp(r'^[0-9]').hasMatch(providerId)
+        ? 'provider_$providerId'
+        : providerId;
+  }
+
   static String _yamlString(String value) {
     return jsonEncode(value);
   }
 
   static String _buildCodexProxyEnv(CliApiConfig codex) {
+    if (!_shouldManageToolRuntime(codex)) {
+      return '# OpenClaw Codex proxy is disabled until a shared API is selected.\n';
+    }
     final lines = <String>[
       'OPENCLAW_CODEX_PROXY_HOST=127.0.0.1',
       'OPENCLAW_CODEX_PROXY_PORT=8787',
     ];
-    if (!_shouldManageToolRuntime(codex)) {
-      lines
-        ..add('OPENCLAW_CODEX_PROXY_ENABLED=0')
-        ..add('');
-      return lines.join('\n');
-    }
-    lines.add('OPENCLAW_CODEX_PROXY_ENABLED=1');
     final upstream = codex.baseUrl.trim();
-    final model = codex.effectiveToolModel;
     if (upstream.isNotEmpty) {
       lines.add(
         'OPENCLAW_CODEX_PROXY_UPSTREAM='
@@ -1234,8 +1220,11 @@ export PS1='\[\e[1;32m\]\u@\h\[\e[0m\]:\[\e[1;34m\]\w\[\e[0m\]\$ '
     if (codex.apiKey.trim().isNotEmpty) {
       lines.add('OPENAI_API_KEY=${_shQuote(codex.apiKey.trim())}');
     }
-    if (model.isNotEmpty) {
-      lines.add('OPENCLAW_CODEX_PROXY_MODEL=${_shQuote(model)}');
+    if (codex.effectiveToolModel.trim().isNotEmpty) {
+      lines.add(
+        'OPENCLAW_CODEX_PROXY_MODEL='
+        '${_shQuote(codex.effectiveToolModel.trim())}',
+      );
     }
     lines.add('');
     return lines.join('\n');
@@ -1915,32 +1904,6 @@ Rules:
         : 'gemini-api-key';
   }
 
-  static String _codexProviderIdFor(CliApiConfig config) {
-    if (_shouldManageToolRuntime(config)) {
-      return 'hhhl';
-    }
-    final raw = config.profileName.trim().toLowerCase();
-    final normalized = raw
-        .replaceAll(RegExp(r'[^a-z0-9_-]+'), '-')
-        .replaceAll(RegExp(r'-{2,}'), '-')
-        .replaceAll(RegExp(r'^-+|-+$'), '');
-    if (normalized.isEmpty) {
-      return 'openclaw';
-    }
-    if (RegExp(r'^[0-9]').hasMatch(normalized)) {
-      return 'provider-$normalized';
-    }
-    return normalized;
-  }
-
-  static String _codexProviderNameFor(CliApiConfig config) {
-    if (_shouldManageToolRuntime(config)) {
-      return 'hhhl';
-    }
-    final name = config.profileName.trim();
-    return name.isEmpty ? 'OpenClaw' : name;
-  }
-
   static String _buildCliLauncherHeader(String toolEnvPath) {
     return '''
 #!/bin/sh
@@ -1973,9 +1936,11 @@ cd "\${OPENCLAW_CLI_WORKSPACE:-$cliWorkspacePath}" 2>/dev/null || cd /root
 
   static String _buildCodexLauncherSh() {
     return '''${_buildCliLauncherHeader('/root/.openclaw/cli-env-codex.sh')}
-openclaw_managed_auth=false
-if [ -r /root/.openclaw/codex-proxy.env ] && grep -q '^OPENCLAW_CODEX_PROXY_ENABLED=1\$' /root/.openclaw/codex-proxy.env 2>/dev/null; then
-  openclaw_managed_auth=true
+openclaw_proxy_should_run=false
+if [ -r /root/.openclaw/codex-proxy.env ] && grep -q '^OPENCLAW_CODEX_PROXY_UPSTREAM=' /root/.openclaw/codex-proxy.env 2>/dev/null; then
+  openclaw_proxy_should_run=true
+fi
+if [ "\$openclaw_proxy_should_run" = true ]; then
   pkill -f "/root/.openclaw/codex-proxy.py" >/dev/null 2>&1 || true
   pkill -f "/root/.openclaw/codex-proxy.js" >/dev/null 2>&1 || true
   if command -v python3 >/dev/null 2>&1 && [ -r /root/.openclaw/codex-proxy.py ]; then
@@ -2025,28 +1990,12 @@ exec node "\$CODEX_JS" "\$@"
 
   static String _buildGenericAgentLauncherSh() {
     return '''${_buildCliLauncherHeader('/root/.openclaw/cli-env-generic-agent.sh')}
-GEN_REAL="\$(node -e 'const path=require("node:path"); const pkg=require("/opt/openclaw-cli/generic-agent/node_modules/@gen-cli/gen-cli/package.json"); const entry=(pkg.bin && (typeof pkg.bin === "string" ? pkg.bin : pkg.bin.gen)) || pkg.main || "dist/index.js"; process.stdout.write(path.isAbsolute(entry) ? entry : `/opt/openclaw-cli/generic-agent/node_modules/@gen-cli/gen-cli/\${entry}`);' 2>/dev/null)"
-[ -n "\$GEN_REAL" ] && [ -f "\$GEN_REAL" ] || {
-  echo "Gen CLI entrypoint not found." >&2
+GEN_REAL="/usr/local/bin/generic-agent"
+[ -x "\$GEN_REAL" ] || {
+  echo "Generic Agent entrypoint not found." >&2
   exit 1
 }
-openclaw_skip_model_injection=false
-case "\${1:-}" in
-  --version|-v|-V|version|help|--help|-h)
-    openclaw_skip_model_injection=true
-    ;;
-esac
-if [ "\$openclaw_skip_model_injection" != true ] && [ -n "\${OPENCLAW_API_PROTOCOL:-}" ]; then
-  if [ "\${OPENCLAW_API_PROTOCOL}" = "gemini" ]; then
-    export GEMINI_DEFAULT_AUTH_TYPE="\${GEMINI_DEFAULT_AUTH_TYPE:-gemini-api-key}"
-  else
-    export GEMINI_DEFAULT_AUTH_TYPE="\${GEMINI_DEFAULT_AUTH_TYPE:-siliconflow-api-key}"
-  fi
-fi
-if [ "\$openclaw_skip_model_injection" != true ] && [ -n "\${OPENCLAW_MODEL:-}" ]; then
-  set -- --model "\$OPENCLAW_MODEL" "\$@"
-fi
-exec node "\$GEN_REAL" "\$@"
+exec "\$GEN_REAL" "\$@"
 ''';
   }
 
@@ -2081,7 +2030,12 @@ if [ -r /root/.hermes/.env ]; then
   . /root/.hermes/.env
   set +a
 fi
-exec /opt/openclaw-cli/hermes-agent/venv/bin/hermes "\$@"
+HERMES_VENV=/opt/openclaw-cli/hermes-agent/venv
+if [ -x "\$HERMES_VENV/bin/python" ]; then
+  exec "\$HERMES_VENV/bin/python" -m hermes_cli.main "\$@"
+fi
+echo "Hermes Agent runtime entrypoint is missing. Reinstall Hermes Agent from the CLI tools page." >&2
+exit 127
 ''';
   }
 

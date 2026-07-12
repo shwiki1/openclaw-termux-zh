@@ -8,11 +8,17 @@ class CliToolService {
   static const _statusCacheTtl = Duration(seconds: 20);
   static List<CliToolStatus> _statusCache = const [];
   static DateTime? _statusCacheAt;
-  static const _managedCliBinDir = '/root/.openclaw/bin';
-  static const _codexLauncher = '$_managedCliBinDir/codex';
-  static const _genericAgentLauncher = '$_managedCliBinDir/generic-agent';
-  static const _geminiLauncher = '$_managedCliBinDir/gemini';
-  static const _hermesLauncher = '$_managedCliBinDir/hermes';
+  static const _codexVersionCommand =
+      r'''node -e "process.stdout.write(require('/opt/openclaw-cli/codex/node_modules/@openai/codex/package.json').version)"''';
+  static const _codeBuddyVersionCommand =
+      r'''node -e "process.stdout.write(require('/opt/openclaw-cli/codebuddy/node_modules/@tencent-ai/codebuddy-code/package.json').version)"''';
+  static const _qwenVersionCommand =
+      r'''node -e "process.stdout.write(require('/opt/openclaw-cli/qwen-code/node_modules/@qwen-code/qwen-code/package.json').version)"''';
+  static const _geminiVersionCommand =
+      r'''node -e "process.stdout.write(require('/opt/openclaw-cli/gemini/node_modules/@google/gemini-cli/package.json').version)"''';
+  static const _genericVersionCommand = '/usr/local/bin/generic-agent --version';
+  static const _hermesVersionCommand =
+      r'''/opt/openclaw-cli/hermes-agent/venv/bin/python -c "import importlib.metadata as m; print(m.version('hermes-agent'), end='')"''';
 
   static const shellTool = CliToolDefinition(
     id: 'shell',
@@ -41,8 +47,8 @@ exec bash -li
     icon: Icons.auto_awesome,
     color: Colors.green,
     installCommand: _codexInstallCommand,
-    launchCommand: 'exec $_codexLauncher --openclaw-cli-mode',
-    versionCommand: '$_codexLauncher --version',
+    launchCommand: 'exec /usr/local/bin/codex --openclaw-cli-mode',
+    versionCommand: _codexVersionCommand,
   );
 
   static const codeBuddyTool = CliToolDefinition(
@@ -55,7 +61,7 @@ exec bash -li
     color: Colors.lightBlue,
     installCommand: _codeBuddyInstallCommand,
     launchCommand: 'exec /usr/local/bin/codebuddy',
-    versionCommand: '/usr/local/bin/codebuddy --version',
+    versionCommand: _codeBuddyVersionCommand,
   );
 
   static const qwenTool = CliToolDefinition(
@@ -68,7 +74,7 @@ exec bash -li
     color: Colors.orange,
     installCommand: _qwenInstallCommand,
     launchCommand: 'exec /usr/local/bin/qwen',
-    versionCommand: '/usr/local/bin/qwen --version',
+    versionCommand: _qwenVersionCommand,
   );
 
   static const hermesTool = CliToolDefinition(
@@ -80,21 +86,21 @@ exec bash -li
     icon: Icons.bolt,
     color: Colors.amber,
     installCommand: _hermesInstallCommand,
-    launchCommand: 'exec $_hermesLauncher',
-    versionCommand: '$_hermesLauncher --version',
+    launchCommand: 'exec /usr/local/bin/hermes',
+    versionCommand: _hermesVersionCommand,
   );
 
   static const genericTool = CliToolDefinition(
     id: 'generic-agent',
-    name: 'Gen CLI (Generic Agent)',
-    packageName: '@gen-cli/gen-cli',
+    name: 'Generic Agent',
+    packageName: 'openclaw-generic-agent',
     executable: 'generic-agent',
-    description: '官方 Gen CLI，Gemini 协议走原生 API Key，OpenAI 兼容接口统一走 SiliconFlow 认证模式映射。',
+    description: '通用 OpenAI 兼容 Agent，可直接连接任意中转 API，用于普通对话、代码生成和脚本辅助。',
     icon: Icons.smart_toy,
     color: Colors.teal,
     installCommand: _genericInstallCommand,
-    launchCommand: 'exec $_genericAgentLauncher',
-    versionCommand: '$_genericAgentLauncher --version',
+    launchCommand: 'exec /usr/local/bin/generic-agent',
+    versionCommand: _genericVersionCommand,
   );
 
   static const geminiTool = CliToolDefinition(
@@ -106,8 +112,8 @@ exec bash -li
     icon: Icons.diamond,
     color: Colors.indigo,
     installCommand: _geminiInstallCommand,
-    launchCommand: 'exec $_geminiLauncher',
-    versionCommand: '$_geminiLauncher --version',
+    launchCommand: 'exec /usr/local/bin/gemini',
+    versionCommand: _geminiVersionCommand,
   );
 
   static const allTools = [
@@ -500,32 +506,125 @@ OPENCLAW_OPENAI_BRIDGE_WRAPPER
   chmod 0755 "/usr/local/bin/$bin_name"
 }
 
-write_gen_wrapper() {
-  real_js="$1"
-  cat > /usr/local/bin/generic-agent <<OPENCLAW_GEN_WRAPPER
+write_generic_agent() {
+  bin_name="$1"
+  env_tool_id="$2"
+  tool_id="$3"
+  display_name="$4"
+  script_path="/usr/local/lib/openclaw-cli-$bin_name.js"
+  cat > "$script_path" <<'OPENCLAW_GENERIC_AGENT'
+#!/usr/bin/env node
+const readline = require("readline");
+
+const toolId = process.env.OPENCLAW_TOOL_ID || "generic-agent";
+const displayName = process.env.OPENCLAW_TOOL_NAME || "Generic Agent";
+const version = "1.0.0";
+
+if (process.argv.includes("--version") || process.argv.includes("-v")) {
+  console.log(`${displayName} ${version}`);
+  process.exit(0);
+}
+
+function env(name, fallback = "") {
+  return process.env[name] || fallback;
+}
+
+const baseUrl = env("OPENAI_BASE_URL").replace(/\/+$/, "");
+const apiKey = env("OPENAI_API_KEY");
+const model = env("OPENAI_MODEL") || env("OPENCLAW_MODEL") || "gpt-4o-mini";
+const reasoningEffort = env("OPENAI_REASONING_EFFORT") || "";
+
+if (!baseUrl || !apiKey) {
+  console.error(`${displayName} 未配置 API。请回到 CLI Tools 页面点击“配置”，填写 API 地址和 Key。`);
+  process.exit(2);
+}
+
+const rl = readline.createInterface({
+  input: process.stdin,
+  output: process.stdout,
+  prompt: `${displayName}> `,
+});
+
+const messages = [
+  {
+    role: "system",
+    content: `${displayName} running inside OpenClaw. Reply concisely and help with coding or shell tasks.`,
+  },
+];
+
+function chatUrl() {
+  if (baseUrl.endsWith("/v1")) return `${baseUrl}/chat/completions`;
+  return `${baseUrl}/v1/chat/completions`;
+}
+
+async function ask(content) {
+  messages.push({ role: "user", content });
+  const body = {
+    model,
+    messages,
+    stream: false,
+  };
+  if (reasoningEffort) body.reasoning_effort = reasoningEffort;
+  const response = await fetch(chatUrl(), {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify(body),
+  });
+  const text = await response.text();
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}: ${text.slice(0, 800)}`);
+  }
+  const json = JSON.parse(text);
+  const answer = json.choices?.[0]?.message?.content || "";
+  messages.push({ role: "assistant", content: answer });
+  return answer;
+}
+
+console.log(`${displayName} ${version}`);
+console.log(`模型: ${model}`);
+console.log("输入 /exit 退出，/clear 清空上下文。");
+rl.prompt();
+rl.on("line", async (line) => {
+  const text = line.trim();
+  if (!text) {
+    rl.prompt();
+    return;
+  }
+  if (text === "/exit" || text === "exit" || text === "quit") {
+    rl.close();
+    return;
+  }
+  if (text === "/clear") {
+    messages.splice(1);
+    console.log("上下文已清空。");
+    rl.prompt();
+    return;
+  }
+  try {
+    const answer = await ask(text);
+    console.log(`\n${answer}\n`);
+  } catch (error) {
+    console.error(`请求失败: ${error.message || error}`);
+  }
+  rl.prompt();
+});
+OPENCLAW_GENERIC_AGENT
+  sed -i "s/Generic Agent/$display_name/g; s/generic-agent/$tool_id/g" "$script_path"
+  chmod 0755 "$script_path"
+  cat > "/usr/local/bin/$bin_name" <<OPENCLAW_GENERIC_AGENT_WRAPPER
 #!/bin/sh
-$(write_wrapper_header)
-[ -r /root/.openclaw/cli-env-generic-agent.sh ] && . /root/.openclaw/cli-env-generic-agent.sh
-openclaw_skip_model_injection=false
-case "\${1:-}" in
-  --version|-v|-V|version|help|--help|-h)
-    openclaw_skip_model_injection=true
-    ;;
-esac
-if [ "\$openclaw_skip_model_injection" != true ] && [ -n "\${OPENCLAW_API_PROTOCOL:-}" ]; then
-  if [ "\${OPENCLAW_API_PROTOCOL}" = "gemini" ]; then
-    export GEMINI_DEFAULT_AUTH_TYPE="\${GEMINI_DEFAULT_AUTH_TYPE:-gemini-api-key}"
-  else
-    export GEMINI_DEFAULT_AUTH_TYPE="\${GEMINI_DEFAULT_AUTH_TYPE:-siliconflow-api-key}"
-  fi
-fi
-if [ "\$openclaw_skip_model_injection" != true ] && [ -n "\${OPENCLAW_MODEL:-}" ]; then
-  set -- --model "\$OPENCLAW_MODEL" "\$@"
-fi
-exec node "$real_js" "\$@"
-OPENCLAW_GEN_WRAPPER
-  chmod 0755 /usr/local/bin/generic-agent
-  ln -sf /usr/local/bin/generic-agent /usr/local/bin/gen
+export NODE_OPTIONS="\${NODE_OPTIONS:---require /root/.openclaw/bionic-bypass.js}"
+export NODE_EXTRA_CA_CERTS="\${NODE_EXTRA_CA_CERTS:-/etc/ssl/certs/ca-certificates.crt}"
+export TMPDIR="\${TMPDIR:-/tmp}"
+[ -r /root/.openclaw/terminal-theme.sh ] && . /root/.openclaw/terminal-theme.sh
+[ -r /root/.openclaw/cli-env.sh ] && . /root/.openclaw/cli-env.sh
+[ -r /root/.openclaw/cli-env-$env_tool_id.sh ] && . /root/.openclaw/cli-env-$env_tool_id.sh
+exec node "$script_path" "\$@"
+OPENCLAW_GENERIC_AGENT_WRAPPER
+  chmod 0755 "/usr/local/bin/$bin_name"
 }
 
 write_hermes_wrapper() {
@@ -550,7 +649,12 @@ mkdir -p \
   "${OPENCLAW_CLI_WORKSPACE:-/root/openclaw-cli-workspace}/.agents/skills" \
   2>/dev/null || true
 cd "${OPENCLAW_CLI_WORKSPACE:-/root/openclaw-cli-workspace}" 2>/dev/null || cd /root
-exec /opt/openclaw-cli/hermes-agent/venv/bin/hermes "$@"
+HERMES_VENV=/opt/openclaw-cli/hermes-agent/venv
+if [ -x "$HERMES_VENV/bin/python" ]; then
+  exec "$HERMES_VENV/bin/python" -m hermes_cli.main "$@"
+fi
+echo "Hermes Agent runtime entrypoint is missing. Reinstall Hermes Agent from the CLI tools page." >&2
+exit 127
 OPENCLAW_HERMES_WRAPPER
   chmod 0755 /usr/local/bin/hermes
 }
@@ -565,30 +669,13 @@ echo ">>> Installing OpenAI Codex CLI from npm..."
 install_cli_package codex @openai/codex codex
 cat > /usr/local/bin/codex <<'OPENCLAW_CODEX_WRAPPER'
 #!/bin/sh
-export HOME="${HOME:-/root}"
-export USER="${USER:-root}"
-export LOGNAME="${LOGNAME:-root}"
-export XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-/root/.config}"
-export CODEX_HOME="${CODEX_HOME:-/root/.codex}"
-export GEMINI_CONFIG_DIR="${GEMINI_CONFIG_DIR:-/root/.gemini}"
 export NODE_OPTIONS="${NODE_OPTIONS:---require /root/.openclaw/bionic-bypass.js}"
 export NODE_EXTRA_CA_CERTS="${NODE_EXTRA_CA_CERTS:-/etc/ssl/certs/ca-certificates.crt}"
 export TMPDIR="${TMPDIR:-/tmp}"
 [ -r /root/.openclaw/terminal-theme.sh ] && . /root/.openclaw/terminal-theme.sh
 [ -r /root/.openclaw/cli-env.sh ] && . /root/.openclaw/cli-env.sh
 [ -r /root/.openclaw/cli-env-codex.sh ] && . /root/.openclaw/cli-env-codex.sh
-mkdir -p \
-  "${OPENCLAW_CLI_WORKSPACE:-/root/openclaw-cli-workspace}" \
-  "${OPENCLAW_CLI_PROJECTS:-/root/openclaw-cli-workspace/projects}" \
-  "${OPENCLAW_CLI_SCRATCH:-/root/openclaw-cli-workspace/scratch}" \
-  "${OPENCLAW_CLI_WORKSPACE:-/root/openclaw-cli-workspace}/.gemini" \
-  "${OPENCLAW_CLI_WORKSPACE:-/root/openclaw-cli-workspace}/.gen-cli" \
-  "${OPENCLAW_CLI_WORKSPACE:-/root/openclaw-cli-workspace}/.agents/skills" \
-  2>/dev/null || true
-cd "${OPENCLAW_CLI_WORKSPACE:-/root/openclaw-cli-workspace}" 2>/dev/null || cd /root
-openclaw_managed_auth=false
-if [ -r /root/.openclaw/codex-proxy.env ] && grep -q '^OPENCLAW_CODEX_PROXY_ENABLED=1$' /root/.openclaw/codex-proxy.env 2>/dev/null; then
-  openclaw_managed_auth=true
+if [ -r /root/.openclaw/codex-proxy.env ]; then
   pkill -f "/root/.openclaw/codex-proxy.py" >/dev/null 2>&1 || true
   pkill -f "/root/.openclaw/codex-proxy.js" >/dev/null 2>&1 || true
   if command -v python3 >/dev/null 2>&1 && [ -r /root/.openclaw/codex-proxy.py ]; then
@@ -706,15 +793,8 @@ echo ">>> HERMES_AGENT_INSTALL_COMPLETE"
 
   static const _genericInstallCommand = _commonInstallPrefix +
       r'''
-echo ">>> Installing Gen CLI from npm..."
-install_cli_package generic-agent @gen-cli/gen-cli gen
-GEN_REAL="$(resolve_node_entry generic-agent @gen-cli/gen-cli gen)"
-if [ ! -f "$GEN_REAL" ]; then
-  echo "Gen CLI entrypoint not found: $GEN_REAL" >&2
-  find /opt/openclaw-cli/generic-agent/node_modules/@gen-cli/gen-cli -maxdepth 3 -type f 2>/dev/null | sort >&2 || true
-  exit 1
-fi
-write_gen_wrapper "$GEN_REAL"
+echo ">>> Installing OpenClaw Generic Agent..."
+write_generic_agent generic-agent generic-agent generic-agent "Generic Agent"
 hash -r
 /usr/local/bin/generic-agent --version || true
 echo ">>> GENERIC_AGENT_INSTALL_COMPLETE"
@@ -861,9 +941,9 @@ fi
       'gemini' =>
         '[ -d /opt/openclaw-cli/gemini/node_modules/@google/gemini-cli ]',
       'generic-agent' =>
-        '[ -d /opt/openclaw-cli/generic-agent/node_modules/@gen-cli/gen-cli ]',
+        '[ -x /usr/local/bin/generic-agent ] && [ -f /usr/local/lib/openclaw-cli-generic-agent.js ]',
       'hermes-agent' =>
-        '[ -x /opt/openclaw-cli/hermes-agent/venv/bin/hermes ]',
+        '[ -x /opt/openclaw-cli/hermes-agent/venv/bin/python ]',
       _ => 'command -v ${tool.executable} >/dev/null 2>&1',
     };
   }
