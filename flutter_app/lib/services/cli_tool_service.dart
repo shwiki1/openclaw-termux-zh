@@ -48,7 +48,7 @@ exec bash -li
     icon: Icons.auto_awesome,
     color: Colors.green,
     installCommand: _codexInstallCommand,
-    launchCommand: 'exec /usr/local/bin/codex --openclaw-cli-mode',
+    launchCommand: 'exec /root/.openclaw/bin/codex --openclaw-cli-mode',
     versionCommand: _codexVersionCommand,
   );
 

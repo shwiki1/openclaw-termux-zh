@@ -110,6 +110,10 @@ void main() {
 
   test('Codex installer contains the same Termux runtime repair', () {
     final installCommand = CliToolService.codexTool.installCommand;
+    expect(
+      CliToolService.codexTool.launchCommand,
+      'exec /root/.openclaw/bin/codex --openclaw-cli-mode',
+    );
     expect(installCommand, contains('write_codex_termux_runtime_helper'));
     expect(installCommand, contains('configure_codex_termux_runtime || true'));
     expect(installCommand, contains('approvals_reviewer'));
