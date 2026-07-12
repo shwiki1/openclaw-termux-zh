@@ -16,7 +16,8 @@ class CliToolService {
       r'''node -e "process.stdout.write(require('/opt/openclaw-cli/qwen-code/node_modules/@qwen-code/qwen-code/package.json').version)"''';
   static const _geminiVersionCommand =
       r'''node -e "process.stdout.write(require('/opt/openclaw-cli/gemini/node_modules/@google/gemini-cli/package.json').version)"''';
-  static const _genericVersionCommand = '/usr/local/bin/generic-agent --version';
+  static const _genericVersionCommand =
+      r'''node -e "process.stdout.write(require('/opt/openclaw-cli/generic-agent/node_modules/@gen-cli/gen-cli/package.json').version)"''';
   static const _hermesVersionCommand =
       r'''/opt/openclaw-cli/hermes-agent/venv/bin/python -c "import importlib.metadata as m; print(m.version('hermes-agent'), end='')"''';
 
@@ -93,9 +94,9 @@ exec bash -li
   static const genericTool = CliToolDefinition(
     id: 'generic-agent',
     name: 'Generic Agent',
-    packageName: 'openclaw-generic-agent',
+    packageName: '@gen-cli/gen-cli',
     executable: 'generic-agent',
-    description: '通用 OpenAI 兼容 Agent，可直接连接任意中转 API，用于普通对话、代码生成和脚本辅助。',
+    description: 'Gen CLI 官方 Generic Agent，基于 Gemini CLI 分支演进，适合通用终端智能体协作。',
     icon: Icons.smart_toy,
     color: Colors.teal,
     installCommand: _genericInstallCommand,
@@ -793,8 +794,16 @@ echo ">>> HERMES_AGENT_INSTALL_COMPLETE"
 
   static const _genericInstallCommand = _commonInstallPrefix +
       r'''
-echo ">>> Installing OpenClaw Generic Agent..."
-write_generic_agent generic-agent generic-agent generic-agent "Generic Agent"
+echo ">>> Installing Generic Agent from npm..."
+install_cli_package generic-agent @gen-cli/gen-cli gen
+GEN_REAL="$(resolve_node_entry generic-agent @gen-cli/gen-cli gen)"
+if [ ! -f "$GEN_REAL" ]; then
+  echo "Generic Agent entrypoint not found: $GEN_REAL" >&2
+  find /opt/openclaw-cli/generic-agent/node_modules/@gen-cli/gen-cli -maxdepth 3 -type f 2>/dev/null | sort >&2 || true
+  exit 1
+fi
+write_node_wrapper generic-agent generic-agent "$GEN_REAL"
+ln -sf /usr/local/bin/generic-agent /usr/local/bin/gen
 hash -r
 /usr/local/bin/generic-agent --version || true
 echo ">>> GENERIC_AGENT_INSTALL_COMPLETE"
@@ -941,7 +950,7 @@ fi
       'gemini' =>
         '[ -d /opt/openclaw-cli/gemini/node_modules/@google/gemini-cli ]',
       'generic-agent' =>
-        '[ -x /usr/local/bin/generic-agent ] && [ -f /usr/local/lib/openclaw-cli-generic-agent.js ]',
+        '[ -x /usr/local/bin/generic-agent ] && [ -f /opt/openclaw-cli/generic-agent/node_modules/@gen-cli/gen-cli/package.json ]',
       'hermes-agent' =>
         '[ -x /opt/openclaw-cli/hermes-agent/venv/bin/python ]',
       _ => 'command -v ${tool.executable} >/dev/null 2>&1',
