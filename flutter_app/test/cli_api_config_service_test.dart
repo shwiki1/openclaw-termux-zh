@@ -57,11 +57,19 @@ void main() {
     expect(codexConfig, contains('approval_policy = "never"'));
     expect(codexConfig, contains('tui.notifications = false'));
     expect(codexConfig, contains('tui.terminal_title = []'));
+    expect(codexConfig, contains('[mcp_servers.openclaw_browser]'));
+    expect(codexConfig, contains('command = "node"'));
+    expect(
+      codexConfig,
+      contains('args = ["/root/.openclaw/browser-mcp.mjs"]'),
+    );
     expect(codexConfig, isNot(contains('does not manage Codex')));
 
     final helper = rootfsFiles['/root/.openclaw/codex-termux-runtime.sh']!;
     expect(helper, contains('configure_codex_termux_runtime()'));
     expect(helper, contains('codex_configure_model_provider()'));
+    expect(helper, contains('codex_configure_browser_mcp()'));
+    expect(helper, contains('mcp_servers.openclaw_browser'));
     expect(helper, contains('approvals_reviewer'));
     expect(helper, contains('model_provider'));
     expect(helper, contains('disable-terminal-session-change-toast'));
@@ -78,6 +86,14 @@ void main() {
       prootCommands.single,
       contains('/root/.openclaw/codex-termux-runtime.sh'),
     );
+
+    final browserMcp = rootfsFiles['/root/.openclaw/browser-mcp.mjs']!;
+    expect(browserMcp, contains('browser_get_state'));
+    expect(browserMcp, contains('browser_open'));
+
+    final browserSkill =
+        rootfsFiles['/root/.codex/skills/browser-operator/SKILL.md']!;
+    expect(browserSkill, contains('browser_get_state'));
   });
 
   test('Codex API key without custom base URL still uses API auth', () async {
@@ -143,6 +159,11 @@ void main() {
     expect(codexConfig, contains('wire_api = "responses"'));
     expect(codexConfig, contains('env_key = "OPENAI_API_KEY"'));
     expect(codexConfig, contains('stream_idle_timeout_ms = 300000'));
+    expect(codexConfig, contains('[mcp_servers.openclaw_browser]'));
+    expect(
+      codexConfig,
+      contains('args = ["/root/.openclaw/browser-mcp.mjs"]'),
+    );
 
     final env = rootfsFiles['/root/.openclaw/cli-env-codex.sh']!;
     expect(env, contains("export OPENAI_API_KEY='sk-proxy'"));
@@ -166,6 +187,12 @@ void main() {
     final helper = rootfsFiles['/root/.openclaw/codex-termux-runtime.sh']!;
     expect(helper, contains('OPENCLAW_CODEX_PROXY_UPSTREAM'));
     expect(helper, contains('codex_configure_model_provider "$codex_config" "hhhl"'));
+    expect(
+      helper,
+      contains(
+        'codex_configure_browser_mcp "$codex_config" "/root/.openclaw/browser-mcp.mjs"',
+      ),
+    );
   });
 
   test('Codex installer contains the same Termux runtime repair', () {
@@ -177,6 +204,8 @@ void main() {
     expect(installCommand, contains('write_codex_termux_runtime_helper'));
     expect(installCommand, contains('configure_codex_termux_runtime || true'));
     expect(installCommand, contains('codex_configure_model_provider()'));
+    expect(installCommand, contains('codex_configure_browser_mcp()'));
+    expect(installCommand, contains('mcp_servers.openclaw_browser'));
     expect(installCommand, contains('approvals_reviewer'));
     expect(installCommand, contains('tui.terminal_title'));
   });

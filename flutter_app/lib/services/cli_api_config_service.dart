@@ -339,7 +339,7 @@ class CliApiConfigService {
       'chmod 0644 $_cliWorkspaceAgentsPath $_cliWorkspaceGeminiPath '
       '$_cliWorkspaceContextPath $_cliWorkspaceGeminiSettingsPath '
       '$_cliWorkspaceGenCliSettingsPath '
-      '$_cliWorkspaceSkillPath '
+      '$_cliWorkspaceSkillPath $_browserSkillPath $_browserCodexSkillPath '
       '2>/dev/null || true; '
       'grep -q "openclaw/terminal-theme.sh" /root/.bashrc 2>/dev/null || '
       'printf "\\n[ -r /root/.openclaw/terminal-theme.sh ] && . /root/.openclaw/terminal-theme.sh\\n" >> /root/.bashrc; '
@@ -922,6 +922,19 @@ codex_configure_model_provider() {
   } >> "$file"
 }
 
+codex_configure_browser_mcp() {
+  file="$1"
+  mcp_script="${2:-/root/.openclaw/browser-mcp.mjs}"
+  codex_remove_toml_section "$file" "mcp_servers.openclaw_browser"
+  {
+    printf '\n[mcp_servers.openclaw_browser]\n'
+    printf 'command = "node"\n'
+    printf 'args = [%s]\n' "$(codex_toml_string "$mcp_script")"
+    printf 'startup_timeout_sec = 10\n'
+    printf 'tool_timeout_sec = 120\n'
+  } >> "$file"
+}
+
 codex_replace_or_append_property() {
   file="$1"
   key="$2"
@@ -973,6 +986,7 @@ configure_codex_termux_runtime() {
   if [ -n "$codex_provider_base_url" ]; then
     codex_configure_model_provider "$codex_config" "hhhl" "$codex_provider_base_url"
   fi
+  codex_configure_browser_mcp "$codex_config" "/root/.openclaw/browser-mcp.mjs"
   codex_model="${CODEX_MODEL:-${OPENAI_MODEL:-${OPENCLAW_MODEL:-}}}"
   if [ -n "$codex_model" ]; then
     codex_set_top_level_toml_key "$codex_config" "model" "$(codex_toml_string "$codex_model")"
@@ -1389,6 +1403,13 @@ esac
         ..add('[tui.model_availability_nux]')
         ..add('${_tomlString(model)} = 4');
     }
+    lines
+      ..add('')
+      ..add('[mcp_servers.openclaw_browser]')
+      ..add('command = "node"')
+      ..add('args = [${_tomlString(_browserMcpPath)}]')
+      ..add('startup_timeout_sec = 10')
+      ..add('tool_timeout_sec = 120');
     if (baseUrl.isNotEmpty) {
       lines
         ..add('')
