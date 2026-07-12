@@ -61,7 +61,9 @@ void main() {
 
     final helper = rootfsFiles['/root/.openclaw/codex-termux-runtime.sh']!;
     expect(helper, contains('configure_codex_termux_runtime()'));
+    expect(helper, contains('codex_configure_model_provider()'));
     expect(helper, contains('approvals_reviewer'));
+    expect(helper, contains('model_provider'));
     expect(helper, contains('disable-terminal-session-change-toast'));
     expect(helper, contains('bell-character'));
 
@@ -95,7 +97,7 @@ void main() {
     final codexConfig = rootfsFiles['/root/.codex/config.toml']!;
     expect(codexConfig, contains('model = "gpt-5"'));
     expect(codexConfig, contains('preferred_auth_method = "apikey"'));
-    expect(codexConfig, contains('forced_login_method = "api"'));
+    expect(codexConfig, isNot(contains('forced_login_method')));
     expect(codexConfig, isNot(contains('[model_providers.hhhl]')));
 
     final env = rootfsFiles['/root/.openclaw/cli-env-codex.sh']!;
@@ -108,6 +110,64 @@ void main() {
     expect(auth['OPENAI_API_KEY'], 'sk-test');
   });
 
+  test('Codex custom API writes current model provider config shape', () async {
+    await CliApiConfigService.regenerateRuntimeFiles(
+      configs: <String, dynamic>{
+        'sharedProfiles': <dynamic>[
+          <String, dynamic>{
+            'sharedProfileId': 'shared-main',
+            'profileName': 'Main API',
+            'apiProtocol': 'openai',
+            'baseUrl': 'https://proxy.example.com/v1',
+            'apiKey': 'sk-proxy',
+          },
+        ],
+        'tools': <String, dynamic>{
+          'codex': <String, dynamic>{
+            'sharedProfileId': 'shared-main',
+            'model': 'gpt-5.5',
+            'reasoningEffort': 'xhigh',
+          },
+        },
+      },
+    );
+
+    final codexConfig = rootfsFiles['/root/.codex/config.toml']!;
+    expect(codexConfig, contains('model_provider = "hhhl"'));
+    expect(codexConfig, contains('model = "gpt-5.5"'));
+    expect(codexConfig, contains('preferred_auth_method = "apikey"'));
+    expect(codexConfig, isNot(contains('forced_login_method')));
+    expect(codexConfig, contains('[model_providers.hhhl]'));
+    expect(codexConfig, contains('name = "hhhl"'));
+    expect(codexConfig, contains('base_url = "http://127.0.0.1:8787/v1"'));
+    expect(codexConfig, contains('wire_api = "responses"'));
+    expect(codexConfig, contains('env_key = "OPENAI_API_KEY"'));
+    expect(codexConfig, contains('stream_idle_timeout_ms = 300000'));
+
+    final env = rootfsFiles['/root/.openclaw/cli-env-codex.sh']!;
+    expect(env, contains("export OPENAI_API_KEY='sk-proxy'"));
+    expect(
+      env,
+      contains("export OPENAI_BASE_URL='http://127.0.0.1:8787/v1'"),
+    );
+    expect(
+      env,
+      contains("export CODEX_BASE_URL='http://127.0.0.1:8787/v1'"),
+    );
+    expect(env, contains("export OPENAI_MODEL='gpt-5.5'"));
+
+    final proxyEnv = rootfsFiles['/root/.openclaw/codex-proxy.env']!;
+    expect(
+      proxyEnv,
+      contains("OPENCLAW_CODEX_PROXY_UPSTREAM='https://proxy.example.com/v1'"),
+    );
+    expect(proxyEnv, contains("OPENAI_API_KEY='sk-proxy'"));
+
+    final helper = rootfsFiles['/root/.openclaw/codex-termux-runtime.sh']!;
+    expect(helper, contains('OPENCLAW_CODEX_PROXY_UPSTREAM'));
+    expect(helper, contains('codex_configure_model_provider "$codex_config" "hhhl"'));
+  });
+
   test('Codex installer contains the same Termux runtime repair', () {
     final installCommand = CliToolService.codexTool.installCommand;
     expect(
@@ -116,6 +176,7 @@ void main() {
     );
     expect(installCommand, contains('write_codex_termux_runtime_helper'));
     expect(installCommand, contains('configure_codex_termux_runtime || true'));
+    expect(installCommand, contains('codex_configure_model_provider()'));
     expect(installCommand, contains('approvals_reviewer'));
     expect(installCommand, contains('tui.terminal_title'));
   });

@@ -442,6 +442,57 @@ codex_remove_toml_key() {
   ' "$file" > "$tmp" && mv "$tmp" "$file"
 }
 
+codex_remove_toml_section() {
+  file="$1"
+  section_name="$2"
+  section="[$section_name]"
+  tmp="$file.tmp.$$"
+  [ -f "$file" ] || return 0
+  awk -v section="$section" '
+    function trim(s) {
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", s)
+      return s
+    }
+    {
+      probe = trim($0)
+      if (probe ~ /^\[/) {
+        if (probe == section) {
+          skip = 1
+          next
+        }
+        skip = 0
+      }
+      if (!skip) {
+        print
+      }
+    }
+  ' "$file" > "$tmp" && mv "$tmp" "$file"
+}
+
+codex_toml_string() {
+  printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g; s/^/"/; s/$/"/'
+}
+
+codex_configure_model_provider() {
+  file="$1"
+  provider_id="${2:-hhhl}"
+  base_url="$3"
+  [ -n "$base_url" ] || return 0
+
+  codex_set_top_level_toml_key "$file" "model_provider" "$(codex_toml_string "$provider_id")"
+  codex_remove_toml_section "$file" "model_providers.$provider_id"
+  {
+    printf '\n[model_providers.%s]\n' "$provider_id"
+    printf 'name = %s\n' "$(codex_toml_string "$provider_id")"
+    printf 'base_url = %s\n' "$(codex_toml_string "$base_url")"
+    printf 'wire_api = "responses"\n'
+    printf 'env_key = "OPENAI_API_KEY"\n'
+    printf 'stream_idle_timeout_ms = 300000\n'
+    printf 'request_max_retries = 2\n'
+    printf 'stream_max_retries = 2\n'
+  } >> "$file"
+}
+
 codex_replace_or_append_property() {
   file="$1"
   key="$2"
@@ -481,15 +532,32 @@ configure_codex_termux_runtime() {
   termux_config="${HOME:-/root}/.termux/termux.properties"
   mkdir -p "$(dirname "$codex_config")" "$(dirname "$termux_config")" 2>/dev/null || true
   touch "$codex_config" "$termux_config" 2>/dev/null || true
+  [ -r /root/.openclaw/codex-proxy.env ] && . /root/.openclaw/codex-proxy.env
 
   codex_remove_toml_key "$codex_config" "approvals_reviewer"
+  codex_provider_base_url="${CODEX_BASE_URL:-${OPENAI_BASE_URL:-}}"
+  if [ -n "${OPENCLAW_CODEX_PROXY_UPSTREAM:-}" ]; then
+    codex_proxy_host="${OPENCLAW_CODEX_PROXY_HOST:-127.0.0.1}"
+    codex_proxy_port="${OPENCLAW_CODEX_PROXY_PORT:-8787}"
+    codex_provider_base_url="http://$codex_proxy_host:$codex_proxy_port/v1"
+  fi
+  if [ -n "$codex_provider_base_url" ]; then
+    codex_configure_model_provider "$codex_config" "hhhl" "$codex_provider_base_url"
+  fi
+  codex_model="${CODEX_MODEL:-${OPENAI_MODEL:-${OPENCLAW_MODEL:-}}}"
+  if [ -n "$codex_model" ]; then
+    codex_set_top_level_toml_key "$codex_config" "model" "$(codex_toml_string "$codex_model")"
+  fi
+  codex_effort="${CODEX_REASONING_EFFORT:-${OPENAI_REASONING_EFFORT:-${OPENCLAW_REASONING_EFFORT:-}}}"
+  if [ -n "$codex_effort" ]; then
+    codex_set_top_level_toml_key "$codex_config" "model_reasoning_effort" "$(codex_toml_string "$codex_effort")"
+  fi
   codex_set_top_level_toml_key "$codex_config" "sandbox_mode" "\"danger-full-access\""
   codex_set_top_level_toml_key "$codex_config" "approval_policy" "\"never\""
   codex_set_top_level_toml_key "$codex_config" "tui.notifications" "false"
   codex_set_top_level_toml_key "$codex_config" "tui.terminal_title" "[]"
   if [ -n "${OPENAI_API_KEY:-}" ]; then
     codex_set_top_level_toml_key "$codex_config" "preferred_auth_method" "\"apikey\""
-    codex_set_top_level_toml_key "$codex_config" "forced_login_method" "\"api\""
   fi
 
   codex_replace_or_append_property "$termux_config" "disable-terminal-session-change-toast" "true"
