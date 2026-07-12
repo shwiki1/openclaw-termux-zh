@@ -812,16 +812,13 @@ export PS1='\[\e[1;32m\]\u@\h\[\e[0m\]:\[\e[1;34m\]\w\[\e[0m\]\$ '
       lines
         ..add('export OPENAI_API_KEY=${_shQuote(apiKey)}')
         ..add('export ANTHROPIC_API_KEY=${_shQuote(apiKey)}')
+        ..add('export GEMINI_API_KEY=${_shQuote(apiKey)}')
+        ..add('export GOOGLE_API_KEY=${_shQuote(apiKey)}')
         ..add('export SILICONFLOW_API_KEY=${_shQuote(apiKey)}')
         ..add('export QWEN_API_KEY=${_shQuote(apiKey)}')
         ..add('export DASHSCOPE_API_KEY=${_shQuote(apiKey)}')
         ..add('export CODEBUDDY_API_KEY=${_shQuote(apiKey)}')
         ..add('export CHINESE_LLM_API_KEY=${_shQuote(apiKey)}');
-      if (protocol == 'gemini') {
-        lines
-          ..add('export GEMINI_API_KEY=${_shQuote(apiKey)}')
-          ..add('export GOOGLE_API_KEY=${_shQuote(apiKey)}');
-      }
     }
     if (openAiBaseUrl.isNotEmpty) {
       lines
@@ -1143,35 +1140,36 @@ export PS1='\[\e[1;32m\]\u@\h\[\e[0m\]:\[\e[1;34m\]\w\[\e[0m\]\$ '
   }
 
   static String _buildCodexToml(CliApiConfig codex) {
+    if (!_shouldManageToolRuntime(codex)) {
+      return '# OpenClaw does not manage Codex for this tool right now.\n';
+    }
     final lines = <String>[];
-    const providerId = 'openclaw';
-    const providerName = 'OpenClaw Codex Proxy';
+    final model = codex.effectiveToolModel;
+    final baseUrl = codex.baseUrl.trim().isNotEmpty ? _codexProxyBaseUrl : '';
+    final effort = codex.reasoningEffort.trim();
+
+    if (model.isNotEmpty) {
+      lines.add('model = ${_tomlString(model)}');
+    }
     lines
       ..add('disable_response_storage = true')
+      ..add('preferred_auth_method = "apikey"')
       ..add('sandbox_mode = "danger-full-access"')
       ..add('approval_policy = "never"')
       ..add('tui.notifications = false')
       ..add('tui.terminal_title = []');
-
-    if (_shouldManageToolRuntime(codex)) {
-      final model = codex.effectiveToolModel;
-      final effort = codex.reasoningEffort.trim();
-
-      lines.add('preferred_auth_method = "apikey"');
-      lines.add('model_provider = ${_tomlString(providerId)}');
-      if (model.isNotEmpty) {
-        lines.add('model = ${_tomlString(model)}');
-      }
-      if (effort.isNotEmpty) {
-        lines.add('model_reasoning_effort = ${_tomlString(effort)}');
-      }
+    if (effort.isNotEmpty) {
+      lines.add('model_reasoning_effort = ${_tomlString(effort)}');
+    }
+    if (baseUrl.isNotEmpty) {
       lines
+        ..add('model_provider = "openclaw"')
         ..add('')
-        ..add('[model_providers.$providerId]')
-        ..add('name = ${_tomlString(providerName)}')
-        ..add('base_url = ${_tomlString(_codexProxyBaseUrl)}')
-        ..add('wire_api = "responses"')
+        ..add('[model_providers.openclaw]')
+        ..add('name = "OpenClaw Codex Proxy"')
+        ..add('base_url = ${_tomlString(baseUrl)}')
         ..add('env_key = "OPENAI_API_KEY"')
+        ..add('wire_api = "responses"')
         ..add('stream_idle_timeout_ms = 300000')
         ..add('request_max_retries = 2')
         ..add('stream_max_retries = 2');
@@ -2063,7 +2061,18 @@ if [ -r /root/.hermes/.env ]; then
   . /root/.hermes/.env
   set +a
 fi
-exec /opt/openclaw-cli/hermes-agent/venv/bin/hermes "\$@"
+HERMES_VENV=/opt/openclaw-cli/hermes-agent/venv
+if [ -x "\$HERMES_VENV/bin/hermes" ]; then
+  exec "\$HERMES_VENV/bin/hermes" "\$@"
+fi
+if [ -x "\$HERMES_VENV/bin/hermes-agent" ]; then
+  exec "\$HERMES_VENV/bin/hermes-agent" "\$@"
+fi
+if [ -x "\$HERMES_VENV/bin/python" ]; then
+  exec "\$HERMES_VENV/bin/python" -c 'import importlib.metadata as m, sys; dist=m.distribution("hermes-agent"); entry=next((e for e in dist.entry_points if e.group=="console_scripts" and e.name in ("hermes","hermes-agent")), None); target=entry.value if entry else "hermes_agent.__main__:main"; module_name, func_name = target.split(":", 1); module=__import__(module_name, fromlist=[func_name]); sys.argv=["hermes", *sys.argv[1:]]; raise SystemExit(getattr(module, func_name)())' "\$@"
+fi
+echo "Hermes Agent runtime entrypoint is missing. Reinstall Hermes Agent from the CLI tools page." >&2
+exit 127
 ''';
   }
 

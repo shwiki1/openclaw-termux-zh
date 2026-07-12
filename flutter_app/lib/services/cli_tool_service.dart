@@ -557,7 +557,18 @@ mkdir -p \
   "${OPENCLAW_CLI_WORKSPACE:-/root/openclaw-cli-workspace}/.agents/skills" \
   2>/dev/null || true
 cd "${OPENCLAW_CLI_WORKSPACE:-/root/openclaw-cli-workspace}" 2>/dev/null || cd /root
-exec /opt/openclaw-cli/hermes-agent/venv/bin/hermes "$@"
+HERMES_VENV=/opt/openclaw-cli/hermes-agent/venv
+if [ -x "$HERMES_VENV/bin/hermes" ]; then
+  exec "$HERMES_VENV/bin/hermes" "$@"
+fi
+if [ -x "$HERMES_VENV/bin/hermes-agent" ]; then
+  exec "$HERMES_VENV/bin/hermes-agent" "$@"
+fi
+if [ -x "$HERMES_VENV/bin/python" ]; then
+  exec "$HERMES_VENV/bin/python" -c 'import importlib.metadata as m, sys; dist=m.distribution("hermes-agent"); entry=next((e for e in dist.entry_points if e.group=="console_scripts" and e.name in ("hermes","hermes-agent")), None); target=entry.value if entry else "hermes_agent.__main__:main"; module_name, func_name = target.split(":", 1); module=__import__(module_name, fromlist=[func_name]); sys.argv=["hermes", *sys.argv[1:]]; raise SystemExit(getattr(module, func_name)())' "$@"
+fi
+echo "Hermes Agent runtime entrypoint is missing. Reinstall Hermes Agent from the CLI tools page." >&2
+exit 127
 OPENCLAW_HERMES_WRAPPER
   chmod 0755 /usr/local/bin/hermes
 }
