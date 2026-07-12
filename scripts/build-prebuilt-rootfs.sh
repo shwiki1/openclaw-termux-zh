@@ -397,7 +397,6 @@ run_root mkdir -p \
 
 run_root tee "$ROOTFS_DIR/root/.npmrc" >/dev/null <<EOF
 registry=$NPM_REGISTRY
-disturl=$NPM_DISTURL
 audit=false
 fund=false
 progress=false
@@ -417,15 +416,117 @@ if [[ "$OPENCLAW_VERSION" == "latest" ]]; then
   OPENCLAW_SPEC="openclaw@latest"
 fi
 
+install_npm_global_with_fallback() {
+  local package_spec="$1"
+  local package_name="${package_spec%@*}"
+  local registry_primary="$NPM_REGISTRY"
+  local registry_fallback="https://registry.npmjs.org"
+  local install_script
+  install_script=$(cat <<'EOF'
+set -e
+
+package_spec="$1"
+package_name="$2"
+registry_primary="$3"
+registry_fallback="$4"
+cache_dir="/tmp/npm-cache"
+tmp_dir="/tmp/npm-tmp"
+
+mkdir -p "$cache_dir" "$tmp_dir"
+
+npm_install_with_registry() {
+  local registry="$1"
+  env \
+    npm_config_registry="$registry" \
+    NPM_CONFIG_REGISTRY="$registry" \
+    npm_config_audit=false \
+    npm_config_fund=false \
+    npm_config_progress=false \
+    npm_config_update_notifier=false \
+    npm_config_cache="$cache_dir" \
+    TMPDIR="$tmp_dir" \
+    npm install -g --omit=dev --force "$package_spec"
+}
+
+download_and_install_tarball() {
+  local registry="$1"
+  local tarball_url
+  tarball_url="$(env npm_config_registry="$registry" NPM_CONFIG_REGISTRY="$registry" npm view "$package_spec" dist.tarball --silent 2>/dev/null | tail -n 1 | tr -d '\r')"
+  if [[ -z "$tarball_url" ]]; then
+    return 1
+  fi
+
+  local candidates=("$tarball_url")
+  case "$package_name" in
+    openclaw)
+      local version_part="${package_spec#*@}"
+      if [[ -n "$version_part" && "$version_part" != "$package_spec" && "$version_part" != "latest" ]]; then
+        candidates+=(
+          "https://registry.npmjs.org/openclaw/-/openclaw-${version_part}.tgz"
+          "https://registry.npmmirror.com/openclaw/-/openclaw-${version_part}.tgz"
+        )
+      fi
+      ;;
+  esac
+
+  local tarball_path="$tmp_dir/${package_name##*/}.tgz"
+  local url
+  for url in "${candidates[@]}"; do
+    rm -f "$tarball_path"
+    if curl -fL --retry 4 --connect-timeout 20 -o "$tarball_path" "$url"; then
+      env \
+        npm_config_registry="$registry" \
+        NPM_CONFIG_REGISTRY="$registry" \
+        npm_config_audit=false \
+        npm_config_fund=false \
+        npm_config_progress=false \
+        npm_config_update_notifier=false \
+        npm_config_cache="$cache_dir" \
+        TMPDIR="$tmp_dir" \
+        npm install -g --omit=dev --force "$tarball_path" && return 0
+    fi
+  done
+  return 1
+}
+
+echo "    -> npm install via $registry_primary"
+if npm_install_with_registry "$registry_primary"; then
+  exit 0
+fi
+
+echo "    -> tarball fallback via $registry_primary"
+if download_and_install_tarball "$registry_primary"; then
+  exit 0
+fi
+
+if [[ "$registry_primary" != "$registry_fallback" ]]; then
+  echo "    -> npm install via $registry_fallback"
+  if npm_install_with_registry "$registry_fallback"; then
+    exit 0
+  fi
+
+  echo "    -> tarball fallback via $registry_fallback"
+  if download_and_install_tarball "$registry_fallback"; then
+    exit 0
+  fi
+fi
+
+echo "Failed to install npm package: $package_spec" >&2
+exit 1
+EOF
+)
+  chroot_run bash -lc "$(printf '%q ' bash -s -- "$package_spec" "$package_name" "$registry_primary" "$registry_fallback")" <<<"$install_script"
+}
+
 echo "==> Installing OpenClaw: $OPENCLAW_SPEC"
-chroot_run bash -lc "npm_config_registry=$(shell_quote "$NPM_REGISTRY") NPM_CONFIG_REGISTRY=$(shell_quote "$NPM_REGISTRY") npm_config_disturl=$(shell_quote "$NPM_DISTURL") npm_config_audit=false npm_config_fund=false npm_config_progress=false npm_config_update_notifier=false npm_config_cache=/tmp/npm-cache TMPDIR=/tmp/npm-tmp npm install -g --omit=dev --force $(shell_quote "$OPENCLAW_SPEC")"
+install_npm_global_with_fallback "$OPENCLAW_SPEC"
 chroot_run openclaw --version
 
 install_openclaw_plugin() {
   local package_spec="$1"
   local fallback_spec="$2"
   echo "==> Installing OpenClaw plugin: $package_spec"
-  chroot_run bash -lc "export npm_config_registry=$(shell_quote "$NPM_REGISTRY"); export NPM_CONFIG_REGISTRY=$(shell_quote "$NPM_REGISTRY"); export npm_config_disturl=$(shell_quote "$NPM_DISTURL"); export npm_config_audit=false; export npm_config_fund=false; export npm_config_progress=false; export npm_config_update_notifier=false; export npm_config_cache=/tmp/npm-cache; export TMPDIR=/tmp/npm-tmp; openclaw plugins install $(shell_quote "$package_spec") || npm install -g --omit=dev --force $(shell_quote "$fallback_spec")"
+  chroot_run bash -lc "export npm_config_registry=$(shell_quote "$NPM_REGISTRY"); export NPM_CONFIG_REGISTRY=$(shell_quote "$NPM_REGISTRY"); export npm_config_audit=false; export npm_config_fund=false; export npm_config_progress=false; export npm_config_update_notifier=false; export npm_config_cache=/tmp/npm-cache; export TMPDIR=/tmp/npm-tmp; openclaw plugins install $(shell_quote "$package_spec")" || install_npm_global_with_fallback "$fallback_spec"
 }
 
 repair_qqbot_plugin_runtime() {
