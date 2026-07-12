@@ -102,6 +102,38 @@ esac
 
 MIRROR="${MIRROR:-$DEFAULT_MIRROR}"
 BOOTSTRAP_MIRROR="${MIRROR/https:\/\//http://}"
+APT_MIRRORS=("$BOOTSTRAP_MIRROR")
+case "$ROOTFS_ARCH" in
+  arm64|armhf)
+    APT_MIRRORS+=(
+      "http://mirrors.aliyun.com/ubuntu-ports"
+      "http://ports.ubuntu.com/ubuntu-ports"
+    )
+    ;;
+  amd64)
+    APT_MIRRORS+=(
+      "http://mirrors.aliyun.com/ubuntu"
+      "http://archive.ubuntu.com/ubuntu"
+    )
+    ;;
+esac
+
+deduped_apt_mirrors=()
+for candidate in "${APT_MIRRORS[@]}"; do
+  [[ -n "$candidate" ]] || continue
+  skip_candidate=0
+  for existing in "${deduped_apt_mirrors[@]}"; do
+    if [[ "$existing" == "$candidate" ]]; then
+      skip_candidate=1
+      break
+    fi
+  done
+  if [[ "$skip_candidate" == "0" ]]; then
+    deduped_apt_mirrors+=("$candidate")
+  fi
+done
+APT_MIRRORS=("${deduped_apt_mirrors[@]}")
+
 BASE_NAME="ubuntu-base-${UBUNTU_VERSION}-base-${ROOTFS_ARCH}.tar.gz"
 BASE_URLS=(
   "https://mirrors.ustc.edu.cn/ubuntu-cdimage/ubuntu-base/releases/24.04/release/$BASE_NAME"
@@ -254,10 +286,60 @@ shell_quote() {
   printf "'%s'" "$(printf "%s" "$1" | sed "s/'/'\\\\''/g")"
 }
 
+write_apt_sources() {
+  local mirror="$1"
+  run_root tee "$ROOTFS_DIR/etc/apt/sources.list" >/dev/null <<EOF
+deb $mirror $CODENAME main restricted universe multiverse
+deb $mirror ${CODENAME}-updates main restricted universe multiverse
+deb $mirror ${CODENAME}-backports main restricted universe multiverse
+deb $mirror ${CODENAME}-security main restricted universe multiverse
+EOF
+}
+
+ACTIVE_APT_MIRROR=""
+
+apt_update_with_fallbacks() {
+  local mirror
+  for mirror in "${APT_MIRRORS[@]}"; do
+    echo "==> apt-get update via $mirror"
+    write_apt_sources "$mirror"
+    if chroot_run apt-get update; then
+      ACTIVE_APT_MIRROR="$mirror"
+      return 0
+    fi
+  done
+  echo "Failed to update apt metadata from all configured mirrors" >&2
+  return 1
+}
+
+apt_install_with_fallbacks() {
+  local install_args=("$@")
+  if chroot_run apt-get install "${install_args[@]}"; then
+    return 0
+  fi
+
+  local mirror
+  for mirror in "${APT_MIRRORS[@]}"; do
+    if [[ "$mirror" == "$ACTIVE_APT_MIRROR" ]]; then
+      continue
+    fi
+    echo "==> Retrying apt install via $mirror"
+    write_apt_sources "$mirror"
+    if chroot_run apt-get update && chroot_run apt-get install "${install_args[@]}"; then
+      ACTIVE_APT_MIRROR="$mirror"
+      return 0
+    fi
+  done
+
+  echo "Failed to install apt packages from all configured mirrors" >&2
+  return 1
+}
+
 echo "==> Building prebuilt rootfs: $OUTPUT_NAME"
 echo "    Ubuntu base: ${BASE_URLS[0]}"
 echo "    Mirror:      $MIRROR"
 echo "    Bootstrap apt mirror: $BOOTSTRAP_MIRROR"
+echo "    APT mirrors: ${APT_MIRRORS[*]}"
 
 mkdir -p "$CACHE_DIR" "$ASSET_DIR" "$WORK_DIR"
 if [[ ! -s "$BASE_TARBALL" ]]; then
@@ -303,17 +385,13 @@ run_root mkdir -p \
   "$ROOTFS_DIR/var/lib/dpkg/triggers"
 
 run_root rm -f "$ROOTFS_DIR/etc/apt/sources.list.d/ubuntu.sources"
-run_root tee "$ROOTFS_DIR/etc/apt/sources.list" >/dev/null <<EOF
-deb $BOOTSTRAP_MIRROR $CODENAME main restricted universe multiverse
-deb $BOOTSTRAP_MIRROR ${CODENAME}-updates main restricted universe multiverse
-deb $BOOTSTRAP_MIRROR ${CODENAME}-backports main restricted universe multiverse
-deb $BOOTSTRAP_MIRROR ${CODENAME}-security main restricted universe multiverse
-EOF
+write_apt_sources "${APT_MIRRORS[0]}"
 
 run_root tee "$ROOTFS_DIR/etc/apt/apt.conf.d/01-openclaw-proot" >/dev/null <<'EOF'
 APT::Sandbox::User "root";
 Acquire::Languages "none";
 Acquire::Retries "3";
+Acquire::By-Hash "force";
 Acquire::http::Timeout "20";
 Acquire::https::Timeout "20";
 Dpkg::Use-Pty "0";
@@ -347,8 +425,8 @@ mount_rootfs_path /dev "$ROOTFS_DIR/dev" bind
 mount_rootfs_path /sys "$ROOTFS_DIR/sys" bind
 
 echo "==> Installing base packages: ${PACKAGES[*]}"
-chroot_run apt-get update
-chroot_run apt-get install -y --no-install-recommends "${PACKAGES[@]}"
+apt_update_with_fallbacks
+apt_install_with_fallbacks -y --no-install-recommends "${PACKAGES[@]}"
 
 case "$ROOTFS_ARCH" in
   arm64)
