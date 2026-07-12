@@ -385,6 +385,128 @@ cd "${OPENCLAW_CLI_WORKSPACE:-/root/openclaw-cli-workspace}" 2>/dev/null || cd /
 OPENCLAW_WRAPPER_HEADER
 }
 
+write_codex_termux_runtime_helper() {
+  cat > /root/.openclaw/codex-termux-runtime.sh <<'OPENCLAW_CODEX_TERMUX_RUNTIME'
+#!/bin/sh
+
+codex_set_top_level_toml_key() {
+  file="$1"
+  key="$2"
+  value="$3"
+  line="$key = $value"
+  tmp="$file.tmp.$$"
+  [ -f "$file" ] || : > "$file"
+  awk -v key="$key" -v line="$line" '
+    function trim(s) {
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", s)
+      return s
+    }
+    {
+      left = $0
+      sub(/[[:space:]]*=.*/, "", left)
+      if (trim(left) == key) {
+        next
+      }
+      if (!inserted && $0 ~ /^[[:space:]]*\[/) {
+        print line
+        inserted = 1
+      }
+      print
+    }
+    END {
+      if (!inserted) {
+        print line
+      }
+    }
+  ' "$file" > "$tmp" && mv "$tmp" "$file"
+}
+
+codex_remove_toml_key() {
+  file="$1"
+  key="$2"
+  tmp="$file.tmp.$$"
+  [ -f "$file" ] || return 0
+  awk -v key="$key" '
+    function trim(s) {
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", s)
+      return s
+    }
+    {
+      left = $0
+      sub(/[[:space:]]*=.*/, "", left)
+      if (trim(left) == key) {
+        next
+      }
+      print
+    }
+  ' "$file" > "$tmp" && mv "$tmp" "$file"
+}
+
+codex_replace_or_append_property() {
+  file="$1"
+  key="$2"
+  value="$3"
+  line="$key = $value"
+  tmp="$file.tmp.$$"
+  [ -f "$file" ] || : > "$file"
+  awk -v key="$key" -v line="$line" '
+    function trim(s) {
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", s)
+      return s
+    }
+    {
+      probe = $0
+      sub(/^[#[:space:]]*/, "", probe)
+      left = probe
+      sub(/[[:space:]]*=.*/, "", left)
+      if (trim(left) == key) {
+        if (!done) {
+          print line
+          done = 1
+        }
+        next
+      }
+      print
+    }
+    END {
+      if (!done) {
+        print line
+      }
+    }
+  ' "$file" > "$tmp" && mv "$tmp" "$file"
+}
+
+configure_codex_termux_runtime() {
+  codex_config="${CODEX_HOME:-/root/.codex}/config.toml"
+  termux_config="${HOME:-/root}/.termux/termux.properties"
+  mkdir -p "$(dirname "$codex_config")" "$(dirname "$termux_config")" 2>/dev/null || true
+  touch "$codex_config" "$termux_config" 2>/dev/null || true
+
+  codex_remove_toml_key "$codex_config" "approvals_reviewer"
+  codex_set_top_level_toml_key "$codex_config" "sandbox_mode" "\"danger-full-access\""
+  codex_set_top_level_toml_key "$codex_config" "approval_policy" "\"never\""
+  codex_set_top_level_toml_key "$codex_config" "tui.notifications" "false"
+  codex_set_top_level_toml_key "$codex_config" "tui.terminal_title" "[]"
+  if [ -n "${OPENAI_API_KEY:-}" ]; then
+    codex_set_top_level_toml_key "$codex_config" "preferred_auth_method" "\"apikey\""
+    codex_set_top_level_toml_key "$codex_config" "forced_login_method" "\"api\""
+  fi
+
+  codex_replace_or_append_property "$termux_config" "disable-terminal-session-change-toast" "true"
+  codex_replace_or_append_property "$termux_config" "bell-character" "ignore"
+  chmod 0600 "$codex_config" 2>/dev/null || true
+  chmod 0644 "$termux_config" 2>/dev/null || true
+}
+
+case "${0##*/}" in
+  codex-termux-runtime.sh)
+    configure_codex_termux_runtime
+    ;;
+esac
+OPENCLAW_CODEX_TERMUX_RUNTIME
+  chmod 0755 /root/.openclaw/codex-termux-runtime.sh
+}
+
 write_node_wrapper() {
   target="$1"
   bin_name="$2"
@@ -695,6 +817,8 @@ OPENCLAW_HERMES_WRAPPER
 }
 
 write_cli_theme
+write_codex_termux_runtime_helper
+. /root/.openclaw/codex-termux-runtime.sh
 ensure_cli_workspace
 ''';
 
@@ -703,6 +827,7 @@ ensure_cli_workspace
 echo ">>> Installing OpenAI Codex CLI from npm..."
 install_cli_package codex @openai/codex codex
 ensure_codex_platform_runtime
+configure_codex_termux_runtime || true
 cat > /usr/local/bin/codex <<'OPENCLAW_CODEX_WRAPPER'
 #!/bin/sh
 export HOME="${HOME:-/root}"
@@ -716,6 +841,7 @@ export TMPDIR="${TMPDIR:-/tmp}"
 [ -r /root/.openclaw/terminal-theme.sh ] && . /root/.openclaw/terminal-theme.sh
 [ -r /root/.openclaw/cli-env.sh ] && . /root/.openclaw/cli-env.sh
 [ -r /root/.openclaw/cli-env-codex.sh ] && . /root/.openclaw/cli-env-codex.sh
+[ -r /root/.openclaw/codex-termux-runtime.sh ] && . /root/.openclaw/codex-termux-runtime.sh
 mkdir -p \
   "${OPENCLAW_CLI_WORKSPACE:-/root/openclaw-cli-workspace}" \
   "${OPENCLAW_CLI_PROJECTS:-/root/openclaw-cli-workspace/projects}" \
@@ -807,6 +933,9 @@ NODE
   fi
 }
 repair_codex_api_auth || true
+if command -v configure_codex_termux_runtime >/dev/null 2>&1; then
+  configure_codex_termux_runtime || true
+fi
 
 openclaw_passthrough=false
 openclaw_has_sandbox_arg=false

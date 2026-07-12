@@ -32,6 +32,8 @@ class CliApiConfigService {
   static const _codexProxyPath = '/root/.openclaw/codex-proxy.py';
   static const _codexProxyJsPath = '/root/.openclaw/codex-proxy.js';
   static const _codexProxyEnvPath = '/root/.openclaw/codex-proxy.env';
+  static const _codexTermuxRuntimePath =
+      '/root/.openclaw/codex-termux-runtime.sh';
   static const _codexConfigPath = '/root/.codex/config.toml';
   static const _codexAuthPath = '/root/.codex/auth.json';
   static const _codexProxyBaseUrl = 'http://127.0.0.1:8787/v1';
@@ -251,6 +253,10 @@ class CliApiConfigService {
       _buildCodexProxyEnv(codex),
     );
     await NativeBridge.writeRootfsFile(
+      _codexTermuxRuntimePath,
+      _buildCodexTermuxRuntimeSh(),
+    );
+    await NativeBridge.writeRootfsFile(
       _browserMcpPath,
       _buildBrowserMcpScript(),
     );
@@ -318,6 +324,7 @@ class CliApiConfigService {
       '/root/.gen-cli /root/.hermes /root/.config 2>/dev/null || true; '
       'chmod 0755 $_codexProxyPath 2>/dev/null || true; '
       'chmod 0755 $_codexProxyJsPath 2>/dev/null || true; '
+      'chmod 0755 $_codexTermuxRuntimePath 2>/dev/null || true; '
       'chmod 0755 $_browserMcpPath 2>/dev/null || true; '
       'chmod 0755 $_codexLauncherPath $_genericAgentLauncherPath '
       '$_geminiLauncherPath $_hermesLauncherPath 2>/dev/null || true; '
@@ -342,7 +349,8 @@ class CliApiConfigService {
       'vendor/aarch64-unknown-linux-musl/bin/codex '
       '/opt/openclaw-cli/codex/node_modules/@openai/codex-linux-arm64/'
       'vendor/aarch64-unknown-linux-musl/bin/codex-code-mode-host '
-      '2>/dev/null || true',
+      '2>/dev/null || true; '
+      '$_codexTermuxRuntimePath >/dev/null 2>&1 || true',
       timeout: 10,
     );
   }
@@ -807,6 +815,126 @@ export PS1='\[\e[1;32m\]\u@\h\[\e[0m\]:\[\e[1;34m\]\w\[\e[0m\]\$ '
 ''';
   }
 
+  static String _buildCodexTermuxRuntimeSh() {
+    return r'''#!/bin/sh
+
+codex_set_top_level_toml_key() {
+  file="$1"
+  key="$2"
+  value="$3"
+  line="$key = $value"
+  tmp="$file.tmp.$$"
+  [ -f "$file" ] || : > "$file"
+  awk -v key="$key" -v line="$line" '
+    function trim(s) {
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", s)
+      return s
+    }
+    {
+      left = $0
+      sub(/[[:space:]]*=.*/, "", left)
+      if (trim(left) == key) {
+        next
+      }
+      if (!inserted && $0 ~ /^[[:space:]]*\[/) {
+        print line
+        inserted = 1
+      }
+      print
+    }
+    END {
+      if (!inserted) {
+        print line
+      }
+    }
+  ' "$file" > "$tmp" && mv "$tmp" "$file"
+}
+
+codex_remove_toml_key() {
+  file="$1"
+  key="$2"
+  tmp="$file.tmp.$$"
+  [ -f "$file" ] || return 0
+  awk -v key="$key" '
+    function trim(s) {
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", s)
+      return s
+    }
+    {
+      left = $0
+      sub(/[[:space:]]*=.*/, "", left)
+      if (trim(left) == key) {
+        next
+      }
+      print
+    }
+  ' "$file" > "$tmp" && mv "$tmp" "$file"
+}
+
+codex_replace_or_append_property() {
+  file="$1"
+  key="$2"
+  value="$3"
+  line="$key = $value"
+  tmp="$file.tmp.$$"
+  [ -f "$file" ] || : > "$file"
+  awk -v key="$key" -v line="$line" '
+    function trim(s) {
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", s)
+      return s
+    }
+    {
+      probe = $0
+      sub(/^[#[:space:]]*/, "", probe)
+      left = probe
+      sub(/[[:space:]]*=.*/, "", left)
+      if (trim(left) == key) {
+        if (!done) {
+          print line
+          done = 1
+        }
+        next
+      }
+      print
+    }
+    END {
+      if (!done) {
+        print line
+      }
+    }
+  ' "$file" > "$tmp" && mv "$tmp" "$file"
+}
+
+configure_codex_termux_runtime() {
+  codex_config="${CODEX_HOME:-/root/.codex}/config.toml"
+  termux_config="${HOME:-/root}/.termux/termux.properties"
+  mkdir -p "$(dirname "$codex_config")" "$(dirname "$termux_config")" 2>/dev/null || true
+  touch "$codex_config" "$termux_config" 2>/dev/null || true
+
+  codex_remove_toml_key "$codex_config" "approvals_reviewer"
+  codex_set_top_level_toml_key "$codex_config" "sandbox_mode" "\"danger-full-access\""
+  codex_set_top_level_toml_key "$codex_config" "approval_policy" "\"never\""
+  codex_set_top_level_toml_key "$codex_config" "tui.notifications" "false"
+  codex_set_top_level_toml_key "$codex_config" "tui.terminal_title" "[]"
+  if [ -n "${OPENAI_API_KEY:-}" ]; then
+    codex_set_top_level_toml_key "$codex_config" "preferred_auth_method" "\"apikey\""
+    codex_set_top_level_toml_key "$codex_config" "forced_login_method" "\"api\""
+  fi
+
+  codex_replace_or_append_property "$termux_config" "disable-terminal-session-change-toast" "true"
+  codex_replace_or_append_property "$termux_config" "bell-character" "ignore"
+  chmod 0600 "$codex_config" 2>/dev/null || true
+  chmod 0644 "$termux_config" 2>/dev/null || true
+}
+
+case "${0##*/}" in
+  codex-termux-runtime.sh)
+    configure_codex_termux_runtime
+    ;;
+esac
+''';
+  }
+
   static String _toolEnvPath(String toolId) =>
       '/root/.openclaw/cli-env-$toolId.sh';
 
@@ -816,6 +944,18 @@ export PS1='\[\e[1;32m\]\u@\h\[\e[0m\]:\[\e[1;34m\]\w\[\e[0m\]\$ '
 
   static String _buildToolEnvFile(String toolId, CliApiConfig config) {
     if (!_shouldManageToolRuntime(config)) {
+      if (toolId == 'codex' && config.apiKey.trim().isNotEmpty) {
+        return [
+          '# Generated by OpenClaw app. Codex uses the official OpenAI API endpoint.',
+          'export OPENCLAW_TOOL_ID=${_shQuote(toolId)}',
+          'export OPENAI_API_KEY=${_shQuote(config.apiKey.trim())}',
+          if (config.effectiveToolModel.trim().isNotEmpty)
+            'export OPENAI_MODEL=${_shQuote(config.effectiveToolModel.trim())}',
+          if (config.reasoningEffort.trim().isNotEmpty)
+            'export OPENAI_REASONING_EFFORT=${_shQuote(config.reasoningEffort.trim())}',
+          '',
+        ].join('\n');
+      }
       return [
         '# Generated by OpenClaw app.',
         '# No valid API base URL is configured for this tool.',
@@ -1148,25 +1288,27 @@ export PS1='\[\e[1;32m\]\u@\h\[\e[0m\]:\[\e[1;34m\]\w\[\e[0m\]\$ '
   }
 
   static String _buildCodexToml(CliApiConfig codex) {
-    if (!_shouldManageToolRuntime(codex)) {
-      return '# OpenClaw does not manage Codex for this tool right now.\n';
-    }
     final lines = <String>[];
     const providerId = 'hhhl';
+    final managesRuntime = _shouldManageToolRuntime(codex);
+    final apiKey = codex.apiKey.trim();
     final model = codex.effectiveToolModel.trim();
-    final baseUrl = codex.baseUrl.trim().isNotEmpty ? _codexProxyBaseUrl : '';
+    final baseUrl = managesRuntime ? _codexProxyBaseUrl : '';
     final effort = codex.reasoningEffort.trim();
 
+    lines.add('# Generated by OpenClaw app. Safe to regenerate.');
     if (baseUrl.isNotEmpty) {
       lines.add('model_provider = ${_tomlString(providerId)}');
     }
     if (model.isNotEmpty) {
       lines.add('model = ${_tomlString(model)}');
     }
-    lines
-      ..add('disable_response_storage = true')
-      ..add('preferred_auth_method = "apikey"')
-      ..add('forced_login_method = "api"');
+    lines.add('disable_response_storage = true');
+    if (managesRuntime || apiKey.isNotEmpty) {
+      lines
+        ..add('preferred_auth_method = "apikey"')
+        ..add('forced_login_method = "api"');
+    }
     if (effort.isNotEmpty) {
       lines.add('model_reasoning_effort = ${_tomlString(effort)}');
     }
@@ -1203,9 +1345,6 @@ export PS1='\[\e[1;32m\]\u@\h\[\e[0m\]:\[\e[1;34m\]\w\[\e[0m\]\$ '
         ..add('trust_level = "trusted"');
     }
 
-    if (lines.isEmpty) {
-      lines.add('# OpenClaw CLI config is empty. Configure Codex in the app.');
-    }
     lines.add('');
     return lines.join('\n');
   }
@@ -1965,6 +2104,7 @@ cd "\${OPENCLAW_CLI_WORKSPACE:-$cliWorkspacePath}" 2>/dev/null || cd /root
 
   static String _buildCodexLauncherSh() {
     return '''${_buildCliLauncherHeader('/root/.openclaw/cli-env-codex.sh')}
+[ -r /root/.openclaw/codex-termux-runtime.sh ] && . /root/.openclaw/codex-termux-runtime.sh
 openclaw_proxy_should_run=false
 if [ -r /root/.openclaw/codex-proxy.env ] && grep -q '^OPENCLAW_CODEX_PROXY_UPSTREAM=' /root/.openclaw/codex-proxy.env 2>/dev/null; then
   openclaw_proxy_should_run=true
@@ -2052,6 +2192,9 @@ NODE
   fi
 }
 repair_codex_api_auth || true
+if command -v configure_codex_termux_runtime >/dev/null 2>&1; then
+  configure_codex_termux_runtime || true
+fi
 
 openclaw_passthrough=false
 openclaw_has_sandbox_arg=false
