@@ -1,6 +1,6 @@
 # Current App State
 
-Last updated: 2026-07-13 18:13 UTC
+Last updated: 2026-07-13 19:10 UTC
 
 ## Current Truth
 - App: `次元虾`, a Chinese Android integration for OpenClaw Gateway without a Termux app dependency.
@@ -10,14 +10,14 @@ Last updated: 2026-07-13 18:13 UTC
 - Active branch: `codex-termux-runtime-fix`.
 - Remotes: `origin` is Gitee `https://gitee.com/cds-y-code/openclaw-termux-zh.git`; `shwiki` is GitHub `https://github.com/shwiki1/openclaw-termux-zh.git`.
 - Cloud build: `.github/workflows/flutter-build.yml` builds an `arm64-v8a` APK and can create a GitHub Release.
-- Current source version: root `package.json` `2.0.50`; Flutter `pubspec.yaml` `2.0.50+135`.
+- Current source version: root `package.json` `2.0.50`; Flutter `pubspec.yaml` `2.0.50+136`.
 - App version: `2.0.50`.
-- Build number: `135` in `flutter_app/pubspec.yaml`; CI may use a higher GitHub run number.
-- Version metadata is aligned to `2.0.50+135` in Flutter defaults, README files, STRUCTURE, and CHANGELOG.
+- Build number: `136` in `flutter_app/pubspec.yaml`; CI may use a higher GitHub run number.
+- Version metadata is aligned to `2.0.50+136` in Flutter defaults, README files, STRUCTURE, and CHANGELOG.
 - Last artifact: GitHub Actions run `29272795310` produced `CiYuanXia-v2.0.50-136-arm64-v8a.apk` from `shwiki/codex-termux-runtime-fix` head `42762fd6a4d240c6441234ea89a4ad9cc57db6ce`; local download path is `artifacts/github-run-29272795310/ciyuanxia-apks/CiYuanXia-v2.0.50-136-arm64-v8a.apk`; APK SHA256 `c3b7985b80b0db156a51f617533298d5916161b26232d3539bf82ea9730361d7`; `aapt dump xmltree` reports Android manifest `versionCode=2136` for the arm64 split APK.
 
 ## Active Task
-- Fresh arm64 APK `CiYuanXia-v2.0.50-136-arm64-v8a.apk` was built and downloaded; device smoke on Android arm64 is still needed to verify the Codex browser sidecar keep-alive and default instructions page fixes.
+- Codex browser script assistant has been implemented locally. `browser_get_state` was corrected to work as a bridge-only state query without requiring an attached WebView. The feature still needs Flutter analyze/test in a Flutter SDK environment and Android device smoke, especially save/run/copy-command flows.
 
 ## Recently Changed
 - Extended Codex browser automation with `browser_wait_for_selector`, `browser_scroll`, `browser_press_key`, and `browser_select_option`.
@@ -40,6 +40,12 @@ Last updated: 2026-07-13 18:13 UTC
 - Committed and pushed the Codex browser sidecar behavior fix as GitHub commit `42762fd6a4d240c6441234ea89a4ad9cc57db6ce`.
 - Watched GitHub Actions workflow `Build OpenClaw Apps` run `29272795310` to successful completion and downloaded the `ciyuanxia-apks` artifact.
 - Added top-level `artifacts/` to `.gitignore` so downloaded APK artifacts stay local and are not accidentally committed.
+- Added `BrowserScriptLibraryService` to persist saved browser automation scripts in shared preferences with filename, description, ordered steps, variables, source URL/title, timestamps, run count, quick command, and Codex prompt metadata.
+- Extended `BrowserAutomationService` with `script_list`, `script_save`, `script_run`, `script_rename`, and `script_delete` bridge actions, plus replay of saved deterministic browser actions.
+- Added a script assistant button to `TerminalBrowserPanel`; it opens a bottom-sheet script directory with save-from-recent, run, rename, copy quick command, copy Codex prompt, delete, loading, empty, and error states.
+- Updated `CliApiConfigService` to generate browser MCP script tools for saved scripts and a `/root/.openclaw/bin/browser-script` shortcut launcher.
+- Updated `browser-operator` generated skill guidance and `CHANGELOG.md` for the script assistant.
+- Corrected `browser_get_state` so Codex can inspect browser attachment/state without forcing the browser panel to attach first, and normalized saved-script run responses to include state under a `state` field.
 
 ## Checks
 - `rg` consistency checks confirmed the new browser tools are present in the bridge, WebView delegate, MCP generator, generated skill text, and test assertions.
@@ -60,14 +66,17 @@ Last updated: 2026-07-13 18:13 UTC
 - Browser sidecar lifecycle fix checks: `git diff --check` passed; `npm test` passed with 11 checks; `npm run lint -- --no-warn-ignored` passed; final app memory validation passed with no errors and no warnings; `command -v dart` and `command -v flutter` returned no local SDK paths, so Flutter analyze/test were not run locally.
 - Browser default instructions page checks: `rg` confirmed no `PreferencesService`/`dashboardUrl` reference remains in `terminal_browser_panel.dart`; `git diff --check` passed; `npm test` passed with 11 checks; `npm run lint -- --no-warn-ignored` passed; final app memory validation passed with no errors and no warnings; local Flutter analyze/test were not run because `dart` and `flutter` are unavailable.
 - New cloud build checks: `npm test` passed; `npm run lint -- --no-warn-ignored` passed; `gh run 29272795310` completed successfully; `gh run view` showed `APP_VERSION_CODE=136` and artifact upload success; `gh run download` pulled `CiYuanXia-v2.0.50-136-arm64-v8a.apk`; `sha256sum` matched `c3b7985b80b0db156a51f617533298d5916161b26232d3539bf82ea9730361d7`; `unzip -l` confirmed arm64 PRoot libraries; `aapt dump xmltree` reported manifest `versionCode=2136`.
+- Browser script assistant checks after the bridge-only `browser_get_state` fix: `git diff --check` passed; `npm test` passed with 11 checks; `npm run lint -- --no-warn-ignored` passed; app memory validation passed with no errors and no warnings; `command -v dart` and `command -v flutter` returned no local SDK paths, so Flutter analyze/test were not run locally.
 
 ## Memory Validation
 - Initial validation before filling memory passed with warnings for placeholder fields.
 - Final validation after metadata fixes passed with no errors and no warnings.
 - Final validation after recording GitHub Actions run `29272795310` passed with no errors and no warnings.
+- Final validation after browser script assistant memory updates passed with no errors and no warnings.
 
 ## Risks And Blockers
 - Local environment cannot run Flutter checks yet.
+- Browser script assistant changes need Flutter analyzer coverage and Android device smoke; local environment cannot visually inspect the bottom-sheet UI.
 - The compact browser sidecar keep-alive and default instructions page fixes still need an Android device smoke test.
 - The new APK was signed with the configured release secrets, but install/update behavior still needs device verification.
 - Flutter analyzer issues, if any, did not block the successful APK build because the workflow only treats them as non-fatal; keep an eye on future analyzer output.
@@ -76,5 +85,7 @@ Last updated: 2026-07-13 18:13 UTC
 - Project policy in `AGENTS.md`: build/release only Android `arm64-v8a` APK unless explicitly requested.
 
 ## Next Actions
+- In a Flutter SDK or GitHub Actions environment, run `cd flutter_app && flutter analyze && flutter test` for the browser script assistant changes.
+- Device-smoke the Codex browser script assistant on Android: perform a short browser flow, save recent actions, rename the script, copy `browser-script run <id>`, run it from the Codex terminal, delete the script, and verify the WebView remains attached.
 - Device-smoke the freshly built arm64 APK on Android: launch, setup/runtime bootstrap, gateway start/stop, terminal, Codex browser MCP tools, verify first browser open shows the `Codex 浏览器自动化控制` instructions page instead of Gateway, and verify closing/reopening the compact right browser sidecar keeps `浏览器已连接`.
 - For the next build, bump `flutter_app/pubspec.yaml` to at least `2.0.50+136` before creating another installable artifact.

@@ -95,16 +95,28 @@ void main() {
     expect(browserMcp, contains('browser_scroll'));
     expect(browserMcp, contains('browser_press_key'));
     expect(browserMcp, contains('browser_select_option'));
+    expect(browserMcp, contains('browser_script_list'));
+    expect(browserMcp, contains('browser_script_save'));
+    expect(browserMcp, contains('browser_script_run'));
+    expect(browserMcp, contains('browser_script_rename'));
+    expect(browserMcp, contains('browser_script_delete'));
     expect(browserMcp, contains('browser_wait_for_selector: "wait_for_selector"'));
     expect(browserMcp, contains('browser_scroll: "scroll"'));
     expect(browserMcp, contains('browser_press_key: "press_key"'));
     expect(browserMcp, contains('browser_select_option: "select_option"'));
-    expect(browserMcp, contains('version: "1.1.0"'));
+    expect(browserMcp, contains('browser_script_run: "script_run"'));
+    expect(browserMcp, contains('version: "1.2.0"'));
     expect(
       browserMcp,
       contains('process.stdout.write(payload.toString("utf8") + "\\n")'),
     );
     expect(browserMcp, contains('Content-Length:'));
+
+    final browserScriptLauncher =
+        rootfsFiles['/root/.openclaw/bin/browser-script']!;
+    expect(browserScriptLauncher, contains('browser-script run <script-id>'));
+    expect(browserScriptLauncher, contains('bridge_action="script_run"'));
+    expect(browserScriptLauncher, contains('OPENCLAW_BROWSER_BRIDGE_TOKEN'));
 
     final browserSkill =
         rootfsFiles['/root/.codex/skills/browser-operator/SKILL.md']!;
@@ -113,6 +125,9 @@ void main() {
     expect(browserSkill, contains('browser_scroll'));
     expect(browserSkill, contains('browser_press_key'));
     expect(browserSkill, contains('browser_select_option'));
+    expect(browserSkill, contains('browser_script_list'));
+    expect(browserSkill, contains('browser_script_save'));
+    expect(browserSkill, contains('browser_script_run'));
   });
 
   test('Codex API key without custom base URL still uses API auth', () async {

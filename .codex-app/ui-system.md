@@ -17,6 +17,7 @@ Operational Android utility app for managing an OpenClaw runtime. Existing scree
 - `ResponsiveLayout`: content width/text-scale clamps.
 - `TerminalToolbar`, `NativeTerminalView`, `NativeProotTerminal`: terminal input and native terminal surfaces.
 - `CliApiConfigDialog` / `CliApiProfilesDialog`: configuration dialogs.
+- `TerminalBrowserPanel` now includes a compact script assistant button (`Icons.playlist_play`) that opens a bottom-sheet script directory with save-from-recent, run, rename, copy command/prompt, delete, loading, empty, and error states.
 
 ## Icon Strategy
 - Flutter/Dart UI currently uses Material `Icons`.
@@ -31,4 +32,5 @@ Operational Android utility app for managing an OpenClaw runtime. Existing scree
 ## Screen QA Notes
 - Verify safe areas, keyboard overlap, loading states, empty states, error states, and text fitting.
 - Important screens to manually smoke when UI changes: setup wizard, dashboard, terminal, Web dashboard, config editor, provider detail, backup manager, local model screens, settings/update flow.
+- For Codex browser UI changes, smoke the terminal browser sidecar on compact and wide widths, including the script assistant bottom sheet and header icon density.
 - Keep long Chinese/Japanese/English localized strings from overflowing compact Android screens.

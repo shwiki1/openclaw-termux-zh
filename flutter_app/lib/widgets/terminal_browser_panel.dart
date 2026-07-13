@@ -8,6 +8,7 @@ import 'package:webview_flutter_android/webview_flutter_android.dart';
 
 import '../app.dart';
 import '../services/browser_automation_service.dart';
+import '../services/browser_script_library_service.dart';
 import '../services/native_bridge.dart';
 
 class TerminalBrowserPanel extends StatefulWidget {
@@ -1534,6 +1535,21 @@ class _TerminalBrowserPanelState extends State<TerminalBrowserPanel>
     );
   }
 
+  Future<void> _showScriptLibrary() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: const Color(0xFF090909),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(8)),
+      ),
+      builder: (context) {
+        return _BrowserScriptLibrarySheet(service: _service);
+      },
+    );
+  }
+
   Future<void> _refreshInspectorCurrentMode() async {
     if (_inspectorMode == 'links') {
       await _loadLinksInspector();
@@ -2015,15 +2031,23 @@ class _TerminalBrowserPanelState extends State<TerminalBrowserPanel>
                       ),
                       _buildActionIcon(
                         icon: Icons.refresh,
+                        tooltip: 'Reload',
                         onTap: () => unawaited(_handleReloadButton()),
                       ),
                       _buildActionIcon(
+                        icon: Icons.playlist_play,
+                        tooltip: 'Scripts',
+                        onTap: () => unawaited(_showScriptLibrary()),
+                      ),
+                      _buildActionIcon(
                         icon: Icons.download_rounded,
+                        tooltip: 'Save snapshot',
                         onTap: () => unawaited(_exportSnapshot()),
                       ),
                       if (widget.onClose != null)
                         _buildActionIcon(
                           icon: Icons.close,
+                          tooltip: 'Close',
                           onTap: widget.onClose,
                         ),
                     ],
@@ -2147,8 +2171,10 @@ class _TerminalBrowserPanelState extends State<TerminalBrowserPanel>
     required IconData icon,
     required VoidCallback? onTap,
     bool enabled = true,
+    String? tooltip,
   }) {
     return IconButton(
+      tooltip: tooltip,
       onPressed: enabled ? onTap : null,
       icon: Icon(icon, size: 18),
       color: enabled ? Colors.white : Colors.white24,
@@ -2197,4 +2223,584 @@ class _TerminalBrowserPanelState extends State<TerminalBrowserPanel>
       ),
     );
   }
+}
+
+class _BrowserScriptLibrarySheet extends StatefulWidget {
+  final BrowserAutomationService service;
+
+  const _BrowserScriptLibrarySheet({
+    required this.service,
+  });
+
+  @override
+  State<_BrowserScriptLibrarySheet> createState() =>
+      _BrowserScriptLibrarySheetState();
+}
+
+class _BrowserScriptLibrarySheetState
+    extends State<_BrowserScriptLibrarySheet> {
+  var _loading = true;
+  var _saving = false;
+  var _error = '';
+  String _runningId = '';
+  String _deletingId = '';
+  List<BrowserAutomationScript> _scripts = const <BrowserAutomationScript>[];
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_loadScripts());
+  }
+
+  Future<void> _loadScripts() async {
+    setState(() {
+      _loading = true;
+      _error = '';
+    });
+    try {
+      final scripts = await widget.service.loadScripts();
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _scripts = scripts;
+      });
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _error = error.toString();
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _saveRecentScript() async {
+    final result = await _showScriptEditDialog(
+      title: '保存最近流程',
+      fileName: _defaultScriptFileName(),
+      description: '保存最近一次可复用的浏览器操作流程',
+      confirmLabel: '保存',
+    );
+    if (result == null) {
+      return;
+    }
+    setState(() {
+      _saving = true;
+    });
+    try {
+      final response = await widget.service.saveRecentScript(
+        fileName: result.fileName,
+        description: result.description,
+      );
+      if (!mounted) {
+        return;
+      }
+      _showSnack(
+        response['ok'] == false
+            ? response['message']?.toString() ?? '脚本保存失败'
+            : '脚本已保存',
+      );
+      await _loadScripts();
+    } finally {
+      if (mounted) {
+        setState(() {
+          _saving = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _runScript(BrowserAutomationScript script) async {
+    setState(() {
+      _runningId = script.id;
+    });
+    try {
+      final response = await widget.service.runScript(script.id);
+      if (!mounted) {
+        return;
+      }
+      _showSnack(
+        response['ok'] == false
+            ? response['message']?.toString() ?? '脚本运行失败'
+            : '脚本运行完成',
+      );
+      await _loadScripts();
+    } finally {
+      if (mounted) {
+        setState(() {
+          _runningId = '';
+        });
+      }
+    }
+  }
+
+  Future<void> _renameScript(BrowserAutomationScript script) async {
+    final result = await _showScriptEditDialog(
+      title: '重命名脚本',
+      fileName: script.fileName,
+      description: script.description,
+      confirmLabel: '保存',
+    );
+    if (result == null) {
+      return;
+    }
+    final response = await widget.service.renameScript(
+      id: script.id,
+      fileName: result.fileName,
+      description: result.description,
+    );
+    if (!mounted) {
+      return;
+    }
+    _showSnack(
+      response['ok'] == false
+          ? response['message']?.toString() ?? '脚本重命名失败'
+          : '脚本已更新',
+    );
+    await _loadScripts();
+  }
+
+  Future<void> _deleteScript(BrowserAutomationScript script) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('删除脚本'),
+          content: Text('确定删除 ${script.fileName}？'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('删除'),
+            ),
+          ],
+        );
+      },
+    );
+    if (confirmed != true) {
+      return;
+    }
+    setState(() {
+      _deletingId = script.id;
+    });
+    try {
+      final response = await widget.service.deleteScript(script.id);
+      if (!mounted) {
+        return;
+      }
+      _showSnack(
+        response['ok'] == false
+            ? response['message']?.toString() ?? '脚本删除失败'
+            : '脚本已删除',
+      );
+      await _loadScripts();
+    } finally {
+      if (mounted) {
+        setState(() {
+          _deletingId = '';
+        });
+      }
+    }
+  }
+
+  Future<void> _copyText(String text, String label) async {
+    await Clipboard.setData(ClipboardData(text: text));
+    if (!mounted) {
+      return;
+    }
+    _showSnack('$label 已复制');
+  }
+
+  Future<_ScriptEditResult?> _showScriptEditDialog({
+    required String title,
+    required String fileName,
+    required String description,
+    required String confirmLabel,
+  }) async {
+    final fileController = TextEditingController(text: fileName);
+    final descriptionController = TextEditingController(text: description);
+    try {
+      return await showDialog<_ScriptEditResult>(
+        context: context,
+        builder: (context) {
+          return AlertDialog(
+            title: Text(title),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: fileController,
+                  decoration: const InputDecoration(
+                    labelText: '文件名',
+                    hintText: 'daily-login.browser.json',
+                  ),
+                  textInputAction: TextInputAction.next,
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: descriptionController,
+                  decoration: const InputDecoration(
+                    labelText: '用处简介',
+                    hintText: '说明这个脚本适合什么任务',
+                  ),
+                  minLines: 2,
+                  maxLines: 4,
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('取消'),
+              ),
+              FilledButton(
+                onPressed: () {
+                  final nextFileName = fileController.text.trim();
+                  if (nextFileName.isEmpty) {
+                    return;
+                  }
+                  Navigator.of(context).pop(
+                    _ScriptEditResult(
+                      fileName: nextFileName,
+                      description: descriptionController.text.trim(),
+                    ),
+                  );
+                },
+                child: Text(confirmLabel),
+              ),
+            ],
+          );
+        },
+      );
+    } finally {
+      fileController.dispose();
+      descriptionController.dispose();
+    }
+  }
+
+  void _showSnack(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
+  }
+
+  String _defaultScriptFileName() {
+    final now = DateTime.now();
+    String two(int value) => value.toString().padLeft(2, '0');
+    return 'browser-${now.year}${two(now.month)}${two(now.day)}-'
+        '${two(now.hour)}${two(now.minute)}.browser.json';
+  }
+
+  String _formatDate(DateTime value) {
+    String two(int number) => number.toString().padLeft(2, '0');
+    final local = value.toLocal();
+    return '${local.year}-${two(local.month)}-${two(local.day)} '
+        '${two(local.hour)}:${two(local.minute)}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final height = MediaQuery.sizeOf(context).height * 0.86;
+    return ConstrainedBox(
+      constraints: BoxConstraints(maxHeight: height),
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 10, 10),
+            child: Row(
+              children: [
+                Container(
+                  width: 34,
+                  height: 34,
+                  decoration: BoxDecoration(
+                    color: AppColors.accent.withAlpha(26),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: AppColors.accent.withAlpha(110)),
+                  ),
+                  child: const Icon(
+                    Icons.playlist_play,
+                    size: 19,
+                    color: AppColors.accent,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '浏览器脚本助手',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        '保存、复用和快速启动 Codex 浏览器操作流程',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: Colors.white60,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  tooltip: '刷新',
+                  onPressed: _loading ? null : () => unawaited(_loadScripts()),
+                  icon: const Icon(Icons.refresh),
+                ),
+                IconButton(
+                  tooltip: '关闭',
+                  onPressed: () => Navigator.of(context).pop(),
+                  icon: const Icon(Icons.close),
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+            child: Row(
+              children: [
+                Expanded(
+                  child: FilledButton.icon(
+                    onPressed:
+                        _saving ? null : () => unawaited(_saveRecentScript()),
+                    icon: _saving
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.save_alt, size: 18),
+                    label: const Text('保存最近流程'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Divider(height: 1, color: Colors.white.withAlpha(14)),
+          Expanded(child: _buildBody(theme)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBody(ThemeData theme) {
+    if (_loading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (_error.isNotEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(18),
+          child: Text(
+            _error,
+            textAlign: TextAlign.center,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: AppColors.statusRed,
+            ),
+          ),
+        ),
+      );
+    }
+    if (_scripts.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(22),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.topic_outlined,
+                size: 42,
+                color: Colors.white.withAlpha(90),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                '还没有保存的浏览器脚本',
+                style: theme.textTheme.titleSmall?.copyWith(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                '让 Codex 完成一次浏览器流程后，可以把最近的可复用动作保存成脚本。',
+                textAlign: TextAlign.center,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: Colors.white60,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return ListView.separated(
+      padding: const EdgeInsets.all(12),
+      itemCount: _scripts.length,
+      separatorBuilder: (_, __) => const SizedBox(height: 10),
+      itemBuilder: (context, index) {
+        return _buildScriptCard(theme, _scripts[index]);
+      },
+    );
+  }
+
+  Widget _buildScriptCard(ThemeData theme, BrowserAutomationScript script) {
+    final running = _runningId == script.id;
+    final deleting = _deletingId == script.id;
+    final disabled = running || deleting;
+    final meta = [
+      '${script.steps.length} 步',
+      '运行 ${script.runCount} 次',
+      '更新 ${_formatDate(script.updatedAt)}',
+      if (script.lastRunAt != null) '最近运行 ${_formatDate(script.lastRunAt!)}',
+    ].join(' · ');
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white.withAlpha(7),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.white.withAlpha(16)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Icon(
+                Icons.description_outlined,
+                size: 18,
+                color: AppColors.accent,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  script.fileName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            script.description,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: Colors.white70,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            meta,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: Colors.white45,
+            ),
+          ),
+          if (script.sourceUrl.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text(
+              script.sourceUrl,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: const Color(0xFFFBBF24),
+                fontFamily: 'monospace',
+              ),
+            ),
+          ],
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            children: [
+              FilledButton.icon(
+                onPressed: disabled ? null : () => unawaited(_runScript(script)),
+                icon: running
+                    ? const SizedBox(
+                        width: 15,
+                        height: 15,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.play_arrow, size: 16),
+                label: const Text('运行'),
+              ),
+              OutlinedButton.icon(
+                onPressed:
+                    disabled ? null : () => unawaited(_renameScript(script)),
+                icon: const Icon(Icons.edit, size: 16),
+                label: const Text('重命名'),
+              ),
+              OutlinedButton.icon(
+                onPressed: disabled
+                    ? null
+                    : () => unawaited(
+                          _copyText(script.quickCommand, '快捷命令'),
+                        ),
+                icon: const Icon(Icons.terminal, size: 16),
+                label: const Text('复制命令'),
+              ),
+              OutlinedButton.icon(
+                onPressed: disabled
+                    ? null
+                    : () => unawaited(
+                          _copyText(script.codexPrompt, 'Codex 提示词'),
+                        ),
+                icon: const Icon(Icons.content_copy, size: 16),
+                label: const Text('复制提示'),
+              ),
+              TextButton.icon(
+                onPressed:
+                    disabled ? null : () => unawaited(_deleteScript(script)),
+                icon: deleting
+                    ? const SizedBox(
+                        width: 15,
+                        height: 15,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.delete_outline, size: 16),
+                label: const Text('删除'),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ScriptEditResult {
+  final String fileName;
+  final String description;
+
+  const _ScriptEditResult({
+    required this.fileName,
+    required this.description,
+  });
 }

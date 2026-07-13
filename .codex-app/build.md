@@ -2,9 +2,9 @@
 
 ## Local Checks Only
 - Formatting: not run in this session; Flutter/Dart SDK unavailable locally.
-- Lint/static analysis: `npm run lint -- --no-warn-ignored` passed on 2026-07-13 after Codex browser automation changes.
+- Lint/static analysis: `npm run lint -- --no-warn-ignored` passed on 2026-07-13 after Codex browser script assistant changes and the bridge-only `browser_get_state` fix.
 - Typecheck/analyze: local `dart`/`flutter` commands are unavailable; run `cd flutter_app && flutter analyze` in a Flutter SDK environment or GitHub Actions.
-- Unit tests: `npm test` passed on 2026-07-13 with 11 passed, 0 failed after Codex browser automation changes; Flutter tests exist in `flutter_app/test/` but were not run locally.
+- Unit tests: `npm test` passed on 2026-07-13 with 11 passed, 0 failed after Codex browser script assistant changes and the bridge-only `browser_get_state` fix; Flutter tests exist in `flutter_app/test/` but were not run locally.
 
 ## GitHub Cloud Build
 - Repository remotes: `origin` Gitee and `shwiki` GitHub. Confirm target remote before push/build operations.
@@ -17,8 +17,8 @@
 ## Version Management
 - Canonical version file: `flutter_app/pubspec.yaml` for Flutter app version/build, plus root `package.json` for npm package version. Keep them aligned for releases.
 - Current user-facing version: `2.0.50`.
-- Current build number: `135` in `flutter_app/pubspec.yaml`.
-- Known drift: none for current `2.0.50+135` metadata after 2026-07-13 browser cloud-build prep.
+- Current build number: `136` in `flutter_app/pubspec.yaml`.
+- Known drift: none for current `2.0.50+136` metadata after 2026-07-13 browser cloud-build prep.
 - Last cloud build version: source metadata `2.0.50+135`; GitHub Actions run `29272795310` generated CI version `2.0.50+136` for the arm64 split APK, and `aapt dump xmltree` reported manifest `versionCode=2136`.
 - Last cloud build artifact: `ciyuanxia-apks` artifact ID `8288274347`, containing `CiYuanXia-v2.0.50-136-arm64-v8a.apk`, downloaded to `artifacts/github-run-29272795310/ciyuanxia-apks/`.
 - Version bump policy: Increment build number for every new cloud build; bump user-facing version only for release changes.
@@ -37,13 +37,13 @@
 - Runtime assets: `openclaw-rootfs-noble-arm64.tar.gz` is currently a Git LFS pointer; `basic-resource` Release stores large runtime assets and SHA256 values.
 
 ## Test Matrix
-- Static checks: npm ESLint passed again after the test fix; `git diff --check` passed; GitHub Actions `flutter analyze --no-fatal-infos` completed successfully in run `29272795310`.
+- Static checks: npm ESLint passed again after the browser script assistant changes; `git diff --check` passed; GitHub Actions `flutter analyze --no-fatal-infos` completed successfully in run `29272795310`.
 - Unit tests: Node self-test passed again after the test fix; Flutter tests were not run locally or in the current workflow, which only runs analyze and the APK build.
 - Integration/E2E tests: no Flutter `integration_test`, Maestro, Appium, or emulator test workflow found.
 - Device/emulator/browser smoke target: none run in this session. Use Android 10+ arm64 device/emulator for install/setup/gateway smoke.
 
 ## Privacy And Observability
-- User data collected/stored/transmitted: OpenClaw configs/API keys, provider/message platform settings, Gateway logs, workspace files/backups, downloaded runtime/model/update files, browser page content when the user invokes Codex browser tools, and local device capability data when enabled.
+- User data collected/stored/transmitted: OpenClaw configs/API keys, provider/message platform settings, Gateway logs, workspace files/backups, downloaded runtime/model/update files, browser page content and saved local browser automation scripts when the user invokes Codex browser tools, and local device capability data when enabled.
 - Networking: downloads from GitHub/Ubuntu/Node/npm/model sources, app update manifest `http://api.lziyu.cn/openclaw/latest.json`, local gateway/model endpoints, WebSocket node connection.
 - Android permissions: internet, foreground services, notifications, wake lock, ignore battery optimization, overlay, camera, fine/coarse location, vibration, body/high-rate sensors, external/all-files storage, install packages, Bluetooth, USB host.
 - Analytics/crash reporting/logging: no analytics or crash-reporting SDK detected; gateway/setup/browser action logs exist and must not expose secrets.

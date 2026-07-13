@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
+import 'browser_script_library_service.dart';
 import 'native_bridge.dart';
 
 abstract class BrowserAutomationDelegate {
@@ -96,14 +97,23 @@ class BrowserActionLogEntry {
   final String action;
   final bool ok;
   final String message;
+  final Map<String, dynamic> payload;
   final DateTime at;
 
   const BrowserActionLogEntry({
     required this.action,
     required this.ok,
     required this.message,
+    this.payload = const <String, dynamic>{},
     required this.at,
   });
+
+  BrowserAutomationScriptStep toScriptStep() {
+    return BrowserAutomationScriptStep(
+      action: action,
+      payload: payload,
+    );
+  }
 }
 
 class BrowserAutomationService extends ChangeNotifier {
@@ -116,6 +126,53 @@ class BrowserAutomationService extends ChangeNotifier {
   static const _host = '127.0.0.1';
   static const _port = 38927;
   static final _uuid = Uuid();
+  static const _bridgeOnlyActions = {
+    'get_state',
+    'script_list',
+    'script_save',
+    'script_rename',
+    'script_delete',
+  };
+  static const _recordableScriptActions = {
+    'open',
+    'back',
+    'forward',
+    'reload',
+    'click',
+    'type',
+    'wait_for_text',
+    'wait_for_selector',
+    'scroll',
+    'press_key',
+    'select_option',
+  };
+  static const _runnableScriptActions = {
+    ..._recordableScriptActions,
+    'extract',
+    'list_links',
+    'list_interactables',
+    'highlight',
+    'capture_snapshot',
+  };
+  static const _toolActionAliases = {
+    'browser_open': 'open',
+    'browser_back': 'back',
+    'browser_forward': 'forward',
+    'browser_reload': 'reload',
+    'browser_click': 'click',
+    'browser_type': 'type',
+    'browser_wait_for_text': 'wait_for_text',
+    'browser_wait_for_selector': 'wait_for_selector',
+    'browser_scroll': 'scroll',
+    'browser_press_key': 'press_key',
+    'browser_select_option': 'select_option',
+    'browser_extract': 'extract',
+    'browser_list_links': 'list_links',
+    'browser_list_interactables': 'list_interactables',
+    'browser_highlight': 'highlight',
+    'browser_capture_snapshot': 'capture_snapshot',
+    'browser_eval': 'eval',
+  };
 
   HttpServer? _server;
   Future<void>? _starting;
@@ -223,6 +280,46 @@ class BrowserAutomationService extends ChangeNotifier {
     final pending = _pendingOpenUrl;
     _pendingOpenUrl = '';
     return pending;
+  }
+
+  Future<List<BrowserAutomationScript>> loadScripts() {
+    return BrowserScriptLibraryService.loadScripts();
+  }
+
+  Future<Map<String, dynamic>> saveRecentScript({
+    required String fileName,
+    required String description,
+    int maxRecentSteps = 16,
+    bool overwrite = false,
+  }) {
+    return _invokeAction('script_save', {
+      'fileName': fileName,
+      'description': description,
+      'maxRecentSteps': maxRecentSteps,
+      'overwrite': overwrite,
+      'sourceUrl': _currentUrl,
+      'sourceTitle': _currentTitle,
+    });
+  }
+
+  Future<Map<String, dynamic>> runScript(String id) {
+    return _invokeAction('script_run', {'id': id});
+  }
+
+  Future<Map<String, dynamic>> renameScript({
+    required String id,
+    required String fileName,
+    required String description,
+  }) {
+    return _invokeAction('script_rename', {
+      'id': id,
+      'fileName': fileName,
+      'description': description,
+    });
+  }
+
+  Future<Map<String, dynamic>> deleteScript(String id) {
+    return _invokeAction('script_delete', {'id': id});
   }
 
   Future<void> _startServer() async {
@@ -387,11 +484,14 @@ class BrowserAutomationService extends ChangeNotifier {
     String action,
     Map<String, dynamic> payload,
   ) async {
-    final delegate = await _ensureDelegateForAction(
-      action: action,
-      payload: payload,
-    );
-    if (delegate == null) {
+    final needsDelegate = !_bridgeOnlyActions.contains(action);
+    final delegate = needsDelegate
+        ? await _ensureDelegateForAction(
+            action: action,
+            payload: payload,
+          )
+        : null;
+    if (needsDelegate && delegate == null) {
       return {
         'ok': false,
         'message': hasPendingPanelRequest
@@ -407,119 +507,9 @@ class BrowserAutomationService extends ChangeNotifier {
     notifyListeners();
 
     try {
-      late Map<String, dynamic> state;
-      switch (action) {
-        case 'get_state':
-          state = await delegate.getState();
-          break;
-        case 'self_test':
-          state = await delegate.selfTest();
-          break;
-        case 'open':
-          state = await delegate.open(_string(payload['url']));
-          break;
-        case 'back':
-          state = await delegate.back();
-          break;
-        case 'forward':
-          state = await delegate.forward();
-          break;
-        case 'reload':
-          state = await delegate.reload();
-          break;
-        case 'click':
-          state = await delegate.click(
-            selector: _string(payload['selector']),
-          );
-          break;
-        case 'type':
-          state = await delegate.type(
-            selector: _string(payload['selector']),
-            text: _string(payload['text']),
-            submit: payload['submit'] == true,
-          );
-          break;
-        case 'wait_for_text':
-          state = await delegate.waitForText(
-            text: _string(payload['text']),
-            timeoutMs: _int(payload['timeoutMs'], fallback: 10000),
-          );
-          break;
-        case 'wait_for_selector':
-          state = await delegate.waitForSelector(
-            selector: _string(payload['selector']),
-            timeoutMs: _int(payload['timeoutMs'], fallback: 10000),
-            visible: payload['visible'] != false,
-          );
-          break;
-        case 'scroll':
-          state = await delegate.scroll(
-            selector: _nullableString(payload['selector']),
-            direction: _stringOrFallback(
-              payload['direction'],
-              fallback: 'down',
-            ),
-            pixels: _int(payload['pixels'], fallback: 700),
-          );
-          break;
-        case 'press_key':
-          state = await delegate.pressKey(
-            selector: _nullableString(payload['selector']),
-            key: _string(payload['key']),
-          );
-          break;
-        case 'select_option':
-          state = await delegate.selectOption(
-            selector: _string(payload['selector']),
-            value: _nullableString(payload['value']),
-            label: _nullableString(payload['label']),
-            index: payload.containsKey('index')
-                ? _int(payload['index'], fallback: -1)
-                : null,
-          );
-          break;
-        case 'extract':
-          state = await delegate.extract(
-            selector: _nullableString(payload['selector']),
-            prompt: _nullableString(payload['prompt']),
-            maxLength: _int(payload['maxLength'], fallback: 4000),
-          );
-          break;
-        case 'list_links':
-          state = await delegate.listLinks(
-            filter: _nullableString(payload['filter']),
-            maxItems: _int(payload['maxItems'], fallback: 12),
-          );
-          break;
-        case 'list_interactables':
-          state = await delegate.listInteractables(
-            filter: _nullableString(payload['filter']),
-            maxItems: _int(payload['maxItems'], fallback: 16),
-          );
-          break;
-        case 'highlight':
-          state = await delegate.highlight(
-            selector: _string(payload['selector']),
-          );
-          break;
-        case 'capture_snapshot':
-          state = await delegate.captureSnapshot(
-            selector: _nullableString(payload['selector']),
-            maxLength: _int(payload['maxLength'], fallback: 8000),
-          );
-          break;
-        case 'eval':
-          state = await delegate.eval(
-            script: _string(payload['script']),
-          );
-          break;
-        default:
-          return {
-            'ok': false,
-            'message': 'Unsupported browser action: $action',
-            'state': _snapshot(),
-          };
-      }
+      final state = needsDelegate
+          ? await _invokeBrowserDelegateAction(delegate!, action, payload)
+          : await _invokeScriptLibraryAction(action, payload);
 
       _mergeState(state);
       _recordAction(
@@ -529,6 +519,9 @@ class BrowserAutomationService extends ChangeNotifier {
           state['message'],
           fallback: 'Browser action "$action" completed.',
         ),
+        payload: _recordableScriptActions.contains(action)
+            ? _jsonMap(payload)
+            : const <String, dynamic>{},
       );
       return {
         'ok': state['ok'] != false,
@@ -545,6 +538,9 @@ class BrowserAutomationService extends ChangeNotifier {
         action: action,
         ok: false,
         message: _lastError,
+        payload: _recordableScriptActions.contains(action)
+            ? _jsonMap(payload)
+            : const <String, dynamic>{},
       );
       return {
         'ok': false,
@@ -557,6 +553,428 @@ class BrowserAutomationService extends ChangeNotifier {
       }
       notifyListeners();
     }
+  }
+
+  Future<Map<String, dynamic>> _invokeBrowserDelegateAction(
+    BrowserAutomationDelegate delegate,
+    String action,
+    Map<String, dynamic> payload,
+  ) async {
+    switch (action) {
+      case 'get_state':
+        return delegate.getState();
+      case 'self_test':
+        return delegate.selfTest();
+      case 'open':
+        return delegate.open(_string(payload['url']));
+      case 'back':
+        return delegate.back();
+      case 'forward':
+        return delegate.forward();
+      case 'reload':
+        return delegate.reload();
+      case 'click':
+        return delegate.click(
+          selector: _string(payload['selector']),
+        );
+      case 'type':
+        return delegate.type(
+          selector: _string(payload['selector']),
+          text: _string(payload['text']),
+          submit: payload['submit'] == true,
+        );
+      case 'wait_for_text':
+        return delegate.waitForText(
+          text: _string(payload['text']),
+          timeoutMs: _int(payload['timeoutMs'], fallback: 10000),
+        );
+      case 'wait_for_selector':
+        return delegate.waitForSelector(
+          selector: _string(payload['selector']),
+          timeoutMs: _int(payload['timeoutMs'], fallback: 10000),
+          visible: payload['visible'] != false,
+        );
+      case 'scroll':
+        return delegate.scroll(
+          selector: _nullableString(payload['selector']),
+          direction: _stringOrFallback(
+            payload['direction'],
+            fallback: 'down',
+          ),
+          pixels: _int(payload['pixels'], fallback: 700),
+        );
+      case 'press_key':
+        return delegate.pressKey(
+          selector: _nullableString(payload['selector']),
+          key: _string(payload['key']),
+        );
+      case 'select_option':
+        return delegate.selectOption(
+          selector: _string(payload['selector']),
+          value: _nullableString(payload['value']),
+          label: _nullableString(payload['label']),
+          index: payload.containsKey('index')
+              ? _int(payload['index'], fallback: -1)
+              : null,
+        );
+      case 'extract':
+        return delegate.extract(
+          selector: _nullableString(payload['selector']),
+          prompt: _nullableString(payload['prompt']),
+          maxLength: _int(payload['maxLength'], fallback: 4000),
+        );
+      case 'list_links':
+        return delegate.listLinks(
+          filter: _nullableString(payload['filter']),
+          maxItems: _int(payload['maxItems'], fallback: 12),
+        );
+      case 'list_interactables':
+        return delegate.listInteractables(
+          filter: _nullableString(payload['filter']),
+          maxItems: _int(payload['maxItems'], fallback: 16),
+        );
+      case 'highlight':
+        return delegate.highlight(
+          selector: _string(payload['selector']),
+        );
+      case 'capture_snapshot':
+        return delegate.captureSnapshot(
+          selector: _nullableString(payload['selector']),
+          maxLength: _int(payload['maxLength'], fallback: 8000),
+        );
+      case 'eval':
+        return delegate.eval(
+          script: _string(payload['script']),
+        );
+      case 'script_run':
+        return _runSavedScript(delegate, payload);
+      default:
+        return {
+          'ok': false,
+          'message': 'Unsupported browser action: $action',
+          'state': _snapshot(),
+        };
+    }
+  }
+
+  Future<Map<String, dynamic>> _invokeScriptLibraryAction(
+    String action,
+    Map<String, dynamic> payload,
+  ) async {
+    switch (action) {
+      case 'get_state':
+        return {
+          'ok': true,
+          'message': 'Browser state loaded.',
+          ..._snapshot(),
+        };
+      case 'script_list':
+        return _listScripts(payload);
+      case 'script_save':
+        return _saveScript(payload);
+      case 'script_rename':
+        return _renameScript(payload);
+      case 'script_delete':
+        return _deleteScript(payload);
+      default:
+        return {
+          'ok': false,
+          'message': 'Unsupported browser script action: $action',
+          'state': _snapshot(),
+        };
+    }
+  }
+
+  Future<Map<String, dynamic>> _listScripts(
+    Map<String, dynamic> payload,
+  ) async {
+    final filter = _nullableString(payload['filter'])?.toLowerCase() ?? '';
+    final scripts = await BrowserScriptLibraryService.loadScripts();
+    final filtered = filter.isEmpty
+        ? scripts
+        : scripts.where((script) {
+            final haystack = [
+              script.id,
+              script.fileName,
+              script.description,
+              script.sourceUrl,
+              script.sourceTitle,
+            ].join(' ').toLowerCase();
+            return haystack.contains(filter);
+          }).toList();
+    return {
+      'ok': true,
+      'message': filtered.isEmpty
+          ? 'No browser scripts matched the request.'
+          : 'Browser scripts loaded.',
+      'count': filtered.length,
+      'scripts': [
+        for (final script in filtered) script.toJson(includeCommand: true),
+      ],
+    };
+  }
+
+  Future<Map<String, dynamic>> _saveScript(
+    Map<String, dynamic> payload,
+  ) async {
+    final explicitSteps = _scriptStepsFromPayload(payload['steps']);
+    final steps = explicitSteps.isNotEmpty
+        ? explicitSteps
+        : _recentScriptSteps(
+            maxSteps: _int(payload['maxRecentSteps'], fallback: 16),
+          );
+    if (steps.isEmpty) {
+      return {
+        'ok': false,
+        'message':
+            'No repeatable browser actions are available to save. Run browser_open, click, type, wait, scroll, key, or select actions first.',
+      };
+    }
+
+    final script = await BrowserScriptLibraryService.saveScript(
+      id: _string(payload['id']),
+      fileName: _stringOrFallback(
+        payload['fileName'],
+        fallback:
+            'browser-script-${DateTime.now().millisecondsSinceEpoch}.browser.json',
+      ),
+      description: _stringOrFallback(
+        payload['description'],
+        fallback: 'Reusable browser automation script',
+      ),
+      steps: steps,
+      variables: _stringList(payload['variables']),
+      sourceUrl: _stringOrFallback(payload['sourceUrl'], fallback: _currentUrl),
+      sourceTitle: _stringOrFallback(
+        payload['sourceTitle'],
+        fallback: _currentTitle,
+      ),
+      overwrite: payload['overwrite'] == true,
+    );
+    return {
+      'ok': true,
+      'message': 'Browser script saved: ${script.fileName}',
+      'script': script.toJson(includeCommand: true),
+    };
+  }
+
+  Future<Map<String, dynamic>> _renameScript(
+    Map<String, dynamic> payload,
+  ) async {
+    final id = _string(payload['id']);
+    final fileName = _string(payload['fileName']);
+    if (id.isEmpty || fileName.isEmpty) {
+      return {
+        'ok': false,
+        'message': 'Provide both id and fileName to rename a browser script.',
+      };
+    }
+    final script = await BrowserScriptLibraryService.renameScript(
+      id: id,
+      fileName: fileName,
+      description: payload.containsKey('description')
+          ? _string(payload['description'])
+          : null,
+    );
+    if (script == null) {
+      return {
+        'ok': false,
+        'message': 'Browser script was not found: $id',
+      };
+    }
+    return {
+      'ok': true,
+      'message': 'Browser script renamed: ${script.fileName}',
+      'script': script.toJson(includeCommand: true),
+    };
+  }
+
+  Future<Map<String, dynamic>> _deleteScript(
+    Map<String, dynamic> payload,
+  ) async {
+    final id = _string(payload['id']);
+    if (id.isEmpty) {
+      return {
+        'ok': false,
+        'message': 'Provide id to delete a browser script.',
+      };
+    }
+    final deleted = await BrowserScriptLibraryService.deleteScript(id);
+    return {
+      'ok': deleted,
+      'message': deleted
+          ? 'Browser script deleted.'
+          : 'Browser script was not found: $id',
+    };
+  }
+
+  Future<Map<String, dynamic>> _runSavedScript(
+    BrowserAutomationDelegate delegate,
+    Map<String, dynamic> payload,
+  ) async {
+    final script = await BrowserScriptLibraryService.findScript(
+      id: _string(payload['id']),
+      fileName: _string(payload['fileName']),
+    );
+    if (script == null) {
+      return {
+        'ok': false,
+        'message': 'Browser script was not found.',
+      };
+    }
+
+    final variables = _stringMap(payload['variables']);
+    final stopOnError = payload['stopOnError'] != false;
+    final stepResults = <Map<String, dynamic>>[];
+    for (var i = 0; i < script.steps.length; i++) {
+      final step = script.steps[i];
+      final action = _normalizeScriptAction(step.action);
+      if (!_runnableScriptActions.contains(action)) {
+        final result = {
+          'index': i + 1,
+          'action': step.action,
+          'ok': false,
+          'message': 'Saved scripts cannot run browser action: ${step.action}',
+        };
+        stepResults.add(result);
+        if (stopOnError) {
+          return {
+            'ok': false,
+            'message': result['message'],
+            'script': script.toJson(includeCommand: true),
+            'steps': stepResults,
+            'state': _snapshot(),
+          };
+        }
+        continue;
+      }
+
+      final resolvedPayload = _resolveScriptVariables(step.payload, variables);
+      final state = await _invokeBrowserDelegateAction(
+        delegate,
+        action,
+        resolvedPayload,
+      );
+      _mergeState(state);
+      final ok = state['ok'] != false;
+      final message = _stringOrFallback(
+        state['message'],
+        fallback: 'Browser script step completed.',
+      );
+      _recordAction(
+        action: action,
+        ok: ok,
+        message: message,
+        payload: _recordableScriptActions.contains(action)
+            ? resolvedPayload
+            : const <String, dynamic>{},
+      );
+      stepResults.add({
+        'index': i + 1,
+        'action': action,
+        'ok': ok,
+        'message': message,
+        'result': state,
+      });
+      if (!ok && stopOnError) {
+        return {
+          'ok': false,
+          'message': 'Browser script stopped at step ${i + 1}: $message',
+          'script': script.toJson(includeCommand: true),
+          'steps': stepResults,
+          'state': _snapshot(),
+        };
+      }
+    }
+
+    final updated = await BrowserScriptLibraryService.markRun(script.id);
+    return {
+      'ok': true,
+      'message': 'Browser script completed: ${script.fileName}',
+      'script': (updated ?? script).toJson(includeCommand: true),
+      'steps': stepResults,
+      'state': _snapshot(),
+    };
+  }
+
+  List<BrowserAutomationScriptStep> _recentScriptSteps({
+    required int maxSteps,
+  }) {
+    final safeMaxSteps = maxSteps.clamp(1, 40).toInt();
+    return _recentActions
+        .where((entry) => entry.ok)
+        .where((entry) => _recordableScriptActions.contains(entry.action))
+        .take(safeMaxSteps)
+        .map((entry) => entry.toScriptStep())
+        .toList()
+        .reversed
+        .toList();
+  }
+
+  List<BrowserAutomationScriptStep> _scriptStepsFromPayload(Object? rawSteps) {
+    if (rawSteps is! List) {
+      return const <BrowserAutomationScriptStep>[];
+    }
+    final steps = <BrowserAutomationScriptStep>[];
+    for (final rawStep in rawSteps) {
+      if (rawStep is! Map) {
+        continue;
+      }
+      final json = rawStep.map((key, value) => MapEntry(key.toString(), value));
+      final action = _normalizeScriptAction(
+        json['action']?.toString() ?? json['tool']?.toString() ?? '',
+      );
+      final payload = json.containsKey('payload')
+          ? _jsonMap(json['payload'])
+          : _jsonMap(json['arguments']);
+      if (action.isEmpty || !_runnableScriptActions.contains(action)) {
+        continue;
+      }
+      steps.add(
+        BrowserAutomationScriptStep(
+          action: action,
+          payload: payload,
+          note: json['note']?.toString().trim() ?? '',
+        ),
+      );
+    }
+    return steps;
+  }
+
+  String _normalizeScriptAction(String action) {
+    final normalized = action.trim();
+    if (normalized.isEmpty) {
+      return '';
+    }
+    return _toolActionAliases[normalized] ?? normalized;
+  }
+
+  Map<String, dynamic> _resolveScriptVariables(
+    Map<String, dynamic> payload,
+    Map<String, String> variables,
+  ) {
+    final resolved = _resolveScriptValue(payload, variables);
+    return resolved is Map<String, dynamic> ? resolved : <String, dynamic>{};
+  }
+
+  Object? _resolveScriptValue(Object? value, Map<String, String> variables) {
+    if (value is String) {
+      var resolved = value;
+      for (final entry in variables.entries) {
+        resolved = resolved.replaceAll('{{${entry.key}}}', entry.value);
+      }
+      return resolved;
+    }
+    if (value is Map) {
+      return <String, dynamic>{
+        for (final entry in value.entries)
+          entry.key.toString(): _resolveScriptValue(entry.value, variables),
+      };
+    }
+    if (value is Iterable) {
+      return [for (final item in value) _resolveScriptValue(item, variables)];
+    }
+    return value;
   }
 
   Future<BrowserAutomationDelegate?> _ensureDelegateForAction({
@@ -602,14 +1020,15 @@ class BrowserAutomationService extends ChangeNotifier {
   void _mergeState(Map<String, dynamic> state) {
     final normalizedUrl = _nullableString(state['url']);
     final normalizedTitle = _nullableString(state['title']);
-    final normalizedLoading = state['loading'] == true;
     if (normalizedUrl != null) {
       _currentUrl = normalizedUrl;
     }
     if (normalizedTitle != null) {
       _currentTitle = normalizedTitle;
     }
-    _loading = normalizedLoading;
+    if (state.containsKey('loading')) {
+      _loading = state['loading'] == true;
+    }
     if (state.containsKey('error')) {
       _lastError = state['error']?.toString().trim() ?? '';
     }
@@ -635,6 +1054,7 @@ class BrowserAutomationService extends ChangeNotifier {
             'action': entry.action,
             'ok': entry.ok,
             'message': entry.message,
+            'payload': entry.payload,
             'at': entry.at.toIso8601String(),
           },
       ],
@@ -689,6 +1109,7 @@ class BrowserAutomationService extends ChangeNotifier {
     required String action,
     required bool ok,
     required String message,
+    Map<String, dynamic> payload = const <String, dynamic>{},
   }) {
     _recentActions.insert(
       0,
@@ -696,6 +1117,7 @@ class BrowserAutomationService extends ChangeNotifier {
         action: action,
         ok: ok,
         message: message,
+        payload: payload,
         at: DateTime.now().toUtc(),
       ),
     );
@@ -713,6 +1135,55 @@ class BrowserAutomationService extends ChangeNotifier {
     response.headers.contentType = ContentType.json;
     response.write(const JsonEncoder.withIndent('  ').convert(body));
     unawaited(response.close());
+  }
+
+  static Map<String, dynamic> _jsonMap(Object? value) {
+    final safe = _jsonSafe(value);
+    if (safe is Map<String, dynamic>) {
+      return safe;
+    }
+    if (safe is Map) {
+      return safe.map((key, item) => MapEntry(key.toString(), item));
+    }
+    return <String, dynamic>{};
+  }
+
+  static Object? _jsonSafe(Object? value) {
+    if (value == null || value is String || value is num || value is bool) {
+      return value;
+    }
+    if (value is Map) {
+      return <String, dynamic>{
+        for (final entry in value.entries)
+          entry.key.toString(): _jsonSafe(entry.value),
+      };
+    }
+    if (value is Iterable) {
+      return [for (final item in value) _jsonSafe(item)];
+    }
+    return value.toString();
+  }
+
+  static List<String> _stringList(Object? value) {
+    if (value is! List) {
+      return const <String>[];
+    }
+    return value
+        .map((item) => item.toString().trim())
+        .where((item) => item.isNotEmpty)
+        .toSet()
+        .toList();
+  }
+
+  static Map<String, String> _stringMap(Object? value) {
+    if (value is! Map) {
+      return const <String, String>{};
+    }
+    return {
+      for (final entry in value.entries)
+        if (entry.key.toString().trim().isNotEmpty)
+          entry.key.toString().trim(): entry.value.toString(),
+    };
   }
 
   static String _string(Object? value) {

@@ -48,6 +48,8 @@ class CliApiConfigService {
   static const _terminalThemePath = '/root/.openclaw/terminal-theme.sh';
   static const _browserBridgeEnvPath = '/root/.openclaw/browser-bridge.env';
   static const _browserMcpPath = '/root/.openclaw/browser-mcp.mjs';
+  static const _browserScriptLauncherPath =
+      '$_managedCliBinDir/browser-script';
   static const _browserMcpStartupTimeoutSec = 60;
   static const _browserCodexSkillPath =
       '/root/.codex/skills/browser-operator/SKILL.md';
@@ -262,6 +264,10 @@ class CliApiConfigService {
       _buildBrowserMcpScript(),
     );
     await NativeBridge.writeRootfsFile(
+      _browserScriptLauncherPath,
+      _buildBrowserScriptLauncherSh(),
+    );
+    await NativeBridge.writeRootfsFile(
       _browserSkillPath,
       _buildBrowserSkill(),
     );
@@ -327,6 +333,7 @@ class CliApiConfigService {
       'chmod 0755 $_codexProxyJsPath 2>/dev/null || true; '
       'chmod 0755 $_codexTermuxRuntimePath 2>/dev/null || true; '
       'chmod 0755 $_browserMcpPath 2>/dev/null || true; '
+      'chmod 0755 $_browserScriptLauncherPath 2>/dev/null || true; '
       'chmod 0755 $_codexLauncherPath $_genericAgentLauncherPath '
       '$_geminiLauncherPath $_hermesLauncherPath 2>/dev/null || true; '
       'chmod $codexProxyEnvMode $_codexProxyEnvPath 2>/dev/null || true; '
@@ -1834,6 +1841,139 @@ const TOOL_DEFS = [
     },
   },
   {
+    name: "browser_script_list",
+    description:
+      "List saved OpenClaw browser automation scripts, including filenames, descriptions, quick commands, and run metadata.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        filter: {
+          type: "string",
+          description: "Optional text filter for filename, description, source URL, or id.",
+        },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "browser_script_save",
+    description:
+      "Save a reusable browser automation script. Provide explicit steps when possible; if steps are omitted, the app saves recent repeatable browser actions.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: {
+          type: "string",
+          description: "Optional existing script id to overwrite.",
+        },
+        fileName: {
+          type: "string",
+          description: "User-facing script filename, for example daily-login.browser.json.",
+        },
+        description: {
+          type: "string",
+          description: "Short description of what the script is for.",
+        },
+        steps: {
+          type: "array",
+          description:
+            "Optional ordered steps. Each step accepts action or browser_* tool plus payload or arguments.",
+          items: {
+            type: "object",
+            properties: {
+              action: { type: "string" },
+              tool: { type: "string" },
+              payload: { type: "object" },
+              arguments: { type: "object" },
+              note: { type: "string" },
+            },
+            additionalProperties: true,
+          },
+        },
+        variables: {
+          type: "array",
+          description:
+            "Optional variable names used as {{name}} placeholders in step payload strings.",
+          items: { type: "string" },
+        },
+        maxRecentSteps: {
+          type: "integer",
+          description: "Maximum recent repeatable actions to save when steps are omitted.",
+          minimum: 1,
+          maximum: 40,
+        },
+        sourceUrl: {
+          type: "string",
+          description: "Optional source URL for the script record.",
+        },
+        sourceTitle: {
+          type: "string",
+          description: "Optional source page title for the script record.",
+        },
+        overwrite: {
+          type: "boolean",
+          description: "Whether a matching filename may be overwritten.",
+        },
+      },
+      required: ["fileName", "description"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "browser_script_run",
+    description:
+      "Run a saved browser automation script by id or filename. The browser panel opens automatically when possible.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: {
+          type: "string",
+          description: "Saved script id.",
+        },
+        fileName: {
+          type: "string",
+          description: "Saved script filename, used when id is unknown.",
+        },
+        variables: {
+          type: "object",
+          description: "Values for {{name}} placeholders inside script step payloads.",
+        },
+        stopOnError: {
+          type: "boolean",
+          description: "Whether to stop at the first failing step. Defaults to true.",
+        },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "browser_script_rename",
+    description:
+      "Rename a saved browser automation script and update its description.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "Saved script id." },
+        fileName: { type: "string", description: "New script filename." },
+        description: { type: "string", description: "New script description." },
+      },
+      required: ["id", "fileName"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "browser_script_delete",
+    description: "Delete a saved browser automation script by id.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "Saved script id." },
+      },
+      required: ["id"],
+      additionalProperties: false,
+    },
+  },
+  {
     name: "browser_get_state",
     description:
       "Return the current browser state including title, URL, loading flag, and the last bridge error.",
@@ -1864,6 +2004,11 @@ const TOOL_TO_ACTION = {
   browser_highlight: "highlight",
   browser_capture_snapshot: "capture_snapshot",
   browser_eval: "eval",
+  browser_script_list: "script_list",
+  browser_script_save: "script_save",
+  browser_script_run: "script_run",
+  browser_script_rename: "script_rename",
+  browser_script_delete: "script_delete",
   browser_get_state: "get_state",
 };
 
@@ -1974,10 +2119,10 @@ async function onRequest(message) {
       },
       serverInfo: {
         name: "openclaw-browser",
-        version: "1.1.0",
+        version: "1.2.0",
       },
       instructions:
-        "Use the OpenClaw browser tools for deterministic page navigation, scrolling, clicking, typing, selection, waiting, and extraction inside the in-app browser panel.",
+        "Use the OpenClaw browser tools for deterministic page navigation, scrolling, clicking, typing, selection, waiting, extraction, and reusable saved browser scripts inside the in-app browser panel.",
     });
     return;
   }
@@ -2125,6 +2270,111 @@ process.stdin.on("end", () => {
 ''';
   }
 
+  static String _buildBrowserScriptLauncherSh() {
+    return '''
+#!/usr/bin/env sh
+set -eu
+
+ENV_PATH=${_shQuote(_browserBridgeEnvPath)}
+
+usage() {
+  cat <<'USAGE'
+Usage:
+  browser-script list [filter]
+  browser-script show <script-id-or-filename>
+  browser-script run <script-id>
+  browser-script delete <script-id>
+USAGE
+}
+
+if [ -r "\$ENV_PATH" ]; then
+  . "\$ENV_PATH"
+fi
+
+base_url="\${OPENCLAW_BROWSER_BRIDGE_URL:-}"
+token="\${OPENCLAW_BROWSER_BRIDGE_TOKEN:-}"
+if [ -z "\$base_url" ] || [ -z "\$token" ]; then
+  echo "OpenClaw browser bridge is not ready. Open the Codex browser panel first." >&2
+  exit 1
+fi
+
+command_name="\${1:-list}"
+if [ "\$#" -gt 0 ]; then
+  shift
+fi
+
+case "\$command_name" in
+  list)
+    filter="\${1:-}"
+    bridge_action="script_list"
+    payload=\$(node -e 'process.stdout.write(JSON.stringify({ filter: process.argv[1] || "" }))' "\$filter")
+    ;;
+  show)
+    filter="\${1:-}"
+    [ -n "\$filter" ] || { usage >&2; exit 2; }
+    bridge_action="script_list"
+    payload=\$(node -e 'process.stdout.write(JSON.stringify({ filter: process.argv[1] || "" }))' "\$filter")
+    ;;
+  run)
+    script_id="\${1:-}"
+    [ -n "\$script_id" ] || { usage >&2; exit 2; }
+    bridge_action="script_run"
+    payload=\$(node -e 'process.stdout.write(JSON.stringify({ id: process.argv[1] || "" }))' "\$script_id")
+    ;;
+  delete)
+    script_id="\${1:-}"
+    [ -n "\$script_id" ] || { usage >&2; exit 2; }
+    bridge_action="script_delete"
+    payload=\$(node -e 'process.stdout.write(JSON.stringify({ id: process.argv[1] || "" }))' "\$script_id")
+    ;;
+  -h|--help|help)
+    usage
+    exit 0
+    ;;
+  *)
+    usage >&2
+    exit 2
+    ;;
+esac
+
+node - "\$base_url" "\$token" "\$bridge_action" "\$payload" <<'NODE'
+const [baseUrl, token, action, payloadText] = process.argv.slice(2);
+
+(async () => {
+  let payload = {};
+  try {
+    payload = payloadText ? JSON.parse(payloadText) : {};
+  } catch (error) {
+    console.error("Invalid browser-script payload:", error instanceof Error ? error.message : String(error));
+    process.exitCode = 1;
+    return;
+  }
+
+  const response = await fetch(baseUrl.replace(/\\/\$/, "") + "/" + action, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      authorization: "Bearer " + token,
+    },
+    body: JSON.stringify(payload),
+  });
+  const text = await response.text();
+  let decoded = {};
+  if (text.trim()) {
+    decoded = JSON.parse(text);
+  }
+  console.log(JSON.stringify(decoded, null, 2));
+  if (!response.ok || decoded.ok === false) {
+    process.exitCode = 1;
+  }
+})().catch((error) => {
+  console.error(error instanceof Error ? error.message : String(error));
+  process.exitCode = 1;
+});
+NODE
+''';
+  }
+
   static String _buildBrowserSkill() {
     return '''
 ---
@@ -2147,6 +2397,9 @@ Rules:
 10. If a selector is risky, call `browser_highlight` before clicking so the user can visually confirm the target.
 11. Use `browser_scroll` for below-the-fold content before falling back to broad extraction.
 12. Use `browser_press_key` for keyboard-driven UI and `browser_select_option` for native dropdowns.
+13. Before repeating a known workflow, call `browser_script_list` and prefer `browser_script_run` when a matching script exists.
+14. After completing a repeatable workflow, offer to save it with `browser_script_save`; include a clear filename and short purpose description.
+15. Saved scripts replay deterministic browser actions. Do not save secrets in descriptions, filenames, or variable names; use `{{name}}` placeholders for values that should change per run.
 
 Typical flow:
 1. `browser_open`
@@ -2156,7 +2409,14 @@ Typical flow:
 5. `browser_highlight`
 6. `browser_click`, `browser_type`, `browser_select_option`, or `browser_press_key`
 7. `browser_capture_snapshot` or `browser_extract`
-8. Fall back to `browser_eval` only if the built-in actions are insufficient.
+8. `browser_script_save` when the successful flow is reusable.
+9. Fall back to `browser_eval` only if the built-in actions are insufficient.
+
+Script flow:
+1. `browser_script_list` with a short filter from the user request.
+2. `browser_script_run` when a saved script matches.
+3. If no script matches, perform the workflow manually with browser tools.
+4. Save a reusable result with `browser_script_save` using explicit steps when possible, or recent actions when the action log is sufficient.
 ''';
   }
 

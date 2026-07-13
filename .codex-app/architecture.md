@@ -11,7 +11,7 @@
 - PRoot boundary: `ProcessManager.kt` builds native PRoot commands and bind mounts; `BootstrapManager.kt` creates/extracts RootFS, Node, OpenClaw, config, workspace, and permissions.
 - Gateway boundary: Flutter `GatewayProvider`/`GatewayService` control Kotlin `GatewayService`, which starts OpenClaw inside the RootFS and emits logs.
 - Node capability boundary: `NodeProvider` connects to OpenClaw over WebSocket and dispatches capability requests to Dart handlers and native permissions.
-- Codex browser automation boundary: `BrowserAutomationService` exposes a loopback/token-protected bridge; `TerminalBrowserPanel` executes WebView actions; `CliApiConfigService` generates `/root/.openclaw/browser-mcp.mjs` and `browser-operator` skill files for Codex.
+- Codex browser automation boundary: `BrowserAutomationService` exposes a loopback/token-protected bridge; `BrowserScriptLibraryService` persists saved browser scripts in `shared_preferences`; `TerminalBrowserPanel` executes WebView actions and displays the script directory; `CliApiConfigService` generates `/root/.openclaw/browser-mcp.mjs`, `/root/.openclaw/bin/browser-script`, and `browser-operator` skill files for Codex.
 - Codex browser default-page policy: `TerminalBrowserPanel` must load the built-in Codex browser automation instructions by default. Do not auto-load the Gateway dashboard URL or any token-bearing URL unless the user enters it or a Codex browser action explicitly requests it.
 - Compact Codex terminal browser sidecar policy: on screens under 960 px wide, `TerminalScreen` keeps `TerminalBrowserPanel` mounted in an in-page `Stack` and slides it offscreen when closed. Do not move this panel back into `Scaffold.endDrawer`, because drawer disposal can unbind the browser automation delegate and disconnect Codex browser tools.
 - Generated native platform folder policy: `flutter_app/android/` is committed and meaningful; local Flutter cache/wrapper/generated files are ignored by `.gitignore`.
@@ -47,7 +47,8 @@
 
 ## API Contracts And Migrations
 - API contracts: Method channel method names in `NativeBridge` and `MainActivity.kt`; event channels; JSON node frame structure in `models/node_frame.dart`; OpenClaw config JSON; update manifest response consumed by `UpdateService`; browser bridge actions used by generated Codex MCP.
-- Browser MCP tools: `browser_self_test`, `browser_open`, `browser_back`, `browser_forward`, `browser_reload`, `browser_click`, `browser_type`, `browser_wait_for_text`, `browser_wait_for_selector`, `browser_scroll`, `browser_press_key`, `browser_select_option`, `browser_extract`, `browser_list_links`, `browser_list_interactables`, `browser_highlight`, `browser_capture_snapshot`, `browser_eval`, and `browser_get_state`.
+- Browser MCP tools: `browser_self_test`, `browser_open`, `browser_back`, `browser_forward`, `browser_reload`, `browser_click`, `browser_type`, `browser_wait_for_text`, `browser_wait_for_selector`, `browser_scroll`, `browser_press_key`, `browser_select_option`, `browser_extract`, `browser_list_links`, `browser_list_interactables`, `browser_highlight`, `browser_capture_snapshot`, `browser_eval`, `browser_script_list`, `browser_script_save`, `browser_script_run`, `browser_script_rename`, `browser_script_delete`, and `browser_get_state`.
+- Browser script storage schema: `BrowserScriptLibraryService` stores JSON in shared preference key `browser_automation_scripts_json`. Each script has `id`, `fileName`, `description`, ordered steps with bridge action names and payloads, optional variable names, source URL/title, timestamps, last run time, and run count. Backward compatibility is by tolerant JSON readers and filename normalization.
 - Local storage schemas: `shared_preferences` keys in service/provider classes; OpenClaw workspace under RootFS; backup/snapshot JSON formats; CLI API profile/config files.
 - Migration strategy: no central migration framework found; schema changes need focused migration code or backward-compatible readers plus tests.
 - Rollback considerations: backup restore can overwrite `/root/.openclaw`; RootFS extraction and local model/runtime changes should preserve fallback/retry paths.
@@ -59,6 +60,7 @@
 - Keep Flutter/Kotlin channel contracts in sync on both sides.
 - Keep the Codex browser default page as an automation instruction page, not the OpenClaw Gateway dashboard.
 - Keep the compact Codex browser sidecar mounted while hidden so browser automation remains attached after users close the right slide-in panel.
+- Keep saved Codex browser scripts limited to deterministic bridge actions by default; `browser_eval` should remain a live/manual escape hatch unless a future decision explicitly expands saved-script permissions.
 - Build and release only `arm64-v8a` APK unless the user explicitly asks otherwise.
 - Install Codex/Claude CLI tooling inside the Ubuntu RootFS under `/opt/openclaw-cli/<tool>` with wrappers in `/usr/local/bin`; do not revert to fragile global npm installs.
 - Treat permissions, signing, app ID/package, JNI/PRoot binaries, RootFS assets, and dependency changes as release-critical.
