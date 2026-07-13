@@ -29,6 +29,7 @@ flutter_app/android/app/src/main/java/io/flutter/plugins/GeneratedPluginRegistra
 
 # Local release output
 dist/
+artifacts/
 release/*
 !release/*/
 release/*/*
