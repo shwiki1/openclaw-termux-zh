@@ -17,9 +17,9 @@
 ## Version Management
 - Canonical version file: `flutter_app/pubspec.yaml` for Flutter app version/build, plus root `package.json` for npm package version. Keep them aligned for releases.
 - Current user-facing version: `2.0.50`.
-- Current build number: `133` in `flutter_app/pubspec.yaml`.
-- Known drift: none for current `2.0.50+133` metadata after 2026-07-13 fixes.
-- Last cloud build version: not verified in this session.
+- Current build number: `134` in `flutter_app/pubspec.yaml`.
+- Known drift: none for current `2.0.50+134` metadata after 2026-07-13 cloud-build prep.
+- Last cloud build version: pending for `2.0.50+134`.
 - Last cloud build artifact: not produced in this session.
 - Version bump policy: Increment build number for every new cloud build; bump user-facing version only for release changes.
 - Workflow version policy: CI derives version name from `pubspec.yaml`, then sets versionCode to `GITHUB_RUN_NUMBER` if greater than pubspec build, otherwise `pubspec build + 1`.

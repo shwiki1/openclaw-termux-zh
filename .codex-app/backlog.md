@@ -1,6 +1,7 @@
 # Backlog
 
 ## Ready
+- Watch the GitHub Actions cloud build for the `2.0.50+134` metadata commit and record artifact details.
 - Run Flutter checks in a machine or CI environment with Flutter installed: `cd flutter_app && flutter pub get && flutter analyze && flutter test`.
 - Device-smoke Codex browser automation from the terminal screen: self-test, open URL, wait selector, scroll, type, press Enter, select option, capture snapshot.
 - Pick the next product/code task and scope it to existing owners: setup/runtime, gateway, node capabilities, terminal, local model, backup, update, or UI polish.
@@ -18,7 +19,7 @@
 
 ## Do Not Forget
 - Keep app version/build number updated before every new cloud build.
-- Current metadata is aligned at `2.0.50+133`; decide whether to bump before producing a new artifact.
+- Current metadata is aligned at `2.0.50+134`; record the exact GitHub run version/build after the cloud artifact is produced.
 - Update `.codex-app/state.md` and the latest session handoff after meaningful changes.
 - Preserve `AGENTS.md`: only build/release Android `arm64-v8a` APK unless explicitly asked.
 - Keep Codex/Claude CLI installation inside Ubuntu RootFS dedicated prefixes under `/opt/openclaw-cli/<tool>` with wrappers in `/usr/local/bin`.

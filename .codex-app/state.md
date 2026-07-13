@@ -1,6 +1,6 @@
 # Current App State
 
-Last updated: 2026-07-13 10:54 UTC
+Last updated: 2026-07-13 15:25 UTC
 
 ## Current Truth
 - App: `次元虾`, a Chinese Android integration for OpenClaw Gateway without a Termux app dependency.
@@ -10,14 +10,14 @@ Last updated: 2026-07-13 10:54 UTC
 - Active branch: `codex-termux-runtime-fix`.
 - Remotes: `origin` is Gitee `https://gitee.com/cds-y-code/openclaw-termux-zh.git`; `shwiki` is GitHub `https://github.com/shwiki1/openclaw-termux-zh.git`.
 - Cloud build: `.github/workflows/flutter-build.yml` builds an `arm64-v8a` APK and can create a GitHub Release.
-- Current source version: root `package.json` `2.0.50`; Flutter `pubspec.yaml` `2.0.50+133`.
+- Current source version: root `package.json` `2.0.50`; Flutter `pubspec.yaml` `2.0.50+134`.
 - App version: `2.0.50`.
-- Build number: `133` in `flutter_app/pubspec.yaml`; CI may use a higher GitHub run number.
-- Version metadata is aligned to `2.0.50+133` in Flutter defaults, README files, STRUCTURE, and CHANGELOG.
+- Build number: `134` in `flutter_app/pubspec.yaml`; CI may use a higher GitHub run number.
+- Version metadata is aligned to `2.0.50+134` in Flutter defaults, README files, STRUCTURE, and CHANGELOG.
 - Last artifact: no artifact built in this session.
 
 ## Active Task
-- Updated and strengthened Codex CLI browser automation.
+- Preparing GitHub Actions cloud build for Codex browser automation changes.
 
 ## Recently Changed
 - Extended Codex browser automation with `browser_wait_for_selector`, `browser_scroll`, `browser_press_key`, and `browser_select_option`.
@@ -27,6 +27,7 @@ Last updated: 2026-07-13 10:54 UTC
 - Added an Unreleased changelog note for Codex browser automation enhancement.
 - Updated `flutter_app/lib/constants.dart` default build number from `126` to `133`.
 - Updated `README.md`, `docs/README_en.md`, `STRUCTURE.md`, and `CHANGELOG.md` to match `2.0.50+133`.
+- Bumped Flutter source/build metadata from `2.0.50+133` to `2.0.50+134` before the next cloud build.
 - Corrected `STRUCTURE.md` notes that incorrectly described the current repo state and CI as multi-architecture/AAB oriented.
 
 ## Checks
@@ -35,6 +36,7 @@ Last updated: 2026-07-13 10:54 UTC
 - `git diff --check`: passed.
 - `npm test`: passed, 11 checks passed and 0 failed.
 - `npm run lint -- --no-warn-ignored`: passed.
+- `rg` consistency checks found no remaining current-version `2.0.50+133`, `2.0.50-133`, or default build `133` references in primary version docs/source after the `134` bump.
 - `command -v dart` and `command -v flutter`: no local SDK found; Flutter analyze/test/build need a Flutter SDK environment or GitHub Actions.
 
 ## Memory Validation
@@ -49,5 +51,6 @@ Last updated: 2026-07-13 10:54 UTC
 
 ## Next Actions
 - Run `cd flutter_app && flutter analyze && flutter test` in a Flutter SDK environment to validate Dart changes.
-- Before any cloud build, confirm whether to keep `2.0.50+133` or bump to a new build number, then record exact version/build.
+- Push the `2.0.50+134` metadata commit to GitHub and watch `.github/workflows/flutter-build.yml`.
+- Record the GitHub run id, artifact name, and exact CI version/build after the cloud build finishes.
 - For native packaging, use GitHub Actions after confirming `GH_TOKEN`/`GITHUB_TOKEN` or `gh auth login`; do not store secrets in the repo.
