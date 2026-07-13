@@ -48,8 +48,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7.0.0
-        with:
-          lfs: true
 
       - name: Setup Java 17
         uses: actions/setup-java@v5.5.0
@@ -70,7 +68,6 @@ jobs:
           sudo apt-get install -y --no-install-recommends binutils curl gzip qemu-user-static unzip xz-utils zstd
 
       - name: Restore bundled OpenClaw rootfs
-        if: ${{ vars.BUILD_BUNDLED_ROOTFS == 'true' }}
         id: restore_rootfs
         env:
           GH_TOKEN: ${{ github.token }}
