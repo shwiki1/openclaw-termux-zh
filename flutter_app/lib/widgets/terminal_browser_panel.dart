@@ -27,6 +27,10 @@ class TerminalBrowserPanel extends StatefulWidget {
 
 class _TerminalBrowserPanelState extends State<TerminalBrowserPanel>
     implements BrowserAutomationDelegate {
+  static const _desktopUserAgent =
+      'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 '
+      '(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+
   static const _welcomeHtml = '''
 <!doctype html>
 <html lang="zh-CN">
@@ -123,6 +127,8 @@ class _TerminalBrowserPanelState extends State<TerminalBrowserPanel>
           <li>在终端里告诉 Codex 目标网址和要完成的任务。</li>
           <li>需要登录、搜索、填写表单或读取页面内容时，让 Codex 使用 <code>browser-operator</code>。</li>
           <li>你也可以在上方地址栏手动输入网址，当前页面会被 Codex 接管。</li>
+          <li>浏览器默认请求电脑端页面，并支持页面缩放。</li>
+          <li>Codex 完成可复用流程后，会把脚本草稿放入右上角脚本助手的待保存区。</li>
         </ul>
 
         <h2>提示示例</h2>
@@ -334,9 +340,11 @@ class _TerminalBrowserPanelState extends State<TerminalBrowserPanel>
         ),
       );
 
+    unawaited(controller.setUserAgent(_desktopUserAgent));
     final platformController = controller.platform;
     if (platformController is AndroidWebViewController) {
       unawaited(platformController.setUseWideViewPort(true));
+      unawaited(platformController.setTextZoom(100));
       unawaited(
         platformController.setMixedContentMode(MixedContentMode.alwaysAllow),
       );
@@ -2219,15 +2227,35 @@ class _BrowserScriptLibrarySheetState
     extends State<_BrowserScriptLibrarySheet> {
   var _loading = true;
   var _saving = false;
+  var _savingPending = false;
+  var _clearingPending = false;
   var _error = '';
   String _runningId = '';
   String _deletingId = '';
   List<BrowserAutomationScript> _scripts = const <BrowserAutomationScript>[];
+  BrowserAutomationScriptDraft? _pendingDraft;
 
   @override
   void initState() {
     super.initState();
+    widget.service.addListener(_handleServiceChanged);
     unawaited(_loadScripts());
+  }
+
+  @override
+  void dispose() {
+    widget.service.removeListener(_handleServiceChanged);
+    super.dispose();
+  }
+
+  void _handleServiceChanged() {
+    final nextDraft = widget.service.pendingScriptDraft;
+    if (identical(nextDraft, _pendingDraft) || !mounted) {
+      return;
+    }
+    setState(() {
+      _pendingDraft = nextDraft;
+    });
   }
 
   Future<void> _loadScripts() async {
@@ -2242,6 +2270,7 @@ class _BrowserScriptLibrarySheetState
       }
       setState(() {
         _scripts = scripts;
+        _pendingDraft = widget.service.pendingScriptDraft;
       });
     } catch (error) {
       if (!mounted) {
@@ -2254,6 +2283,68 @@ class _BrowserScriptLibrarySheetState
       if (mounted) {
         setState(() {
           _loading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _savePendingScript(BrowserAutomationScriptDraft draft) async {
+    final result = await _showScriptEditDialog(
+      title: '保存待保存脚本',
+      fileName: draft.fileName,
+      description: draft.description,
+      confirmLabel: '保存',
+    );
+    if (result == null) {
+      return;
+    }
+    setState(() {
+      _savingPending = true;
+    });
+    try {
+      final response = await widget.service.savePendingScript(
+        fileName: result.fileName,
+        description: result.description,
+      );
+      if (!mounted) {
+        return;
+      }
+      _showSnack(
+        response['ok'] == false
+            ? response['message']?.toString() ?? '待保存脚本保存失败'
+            : '待保存脚本已保存',
+      );
+      await _loadScripts();
+    } finally {
+      if (mounted) {
+        setState(() {
+          _savingPending = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _discardPendingScript() async {
+    setState(() {
+      _clearingPending = true;
+    });
+    try {
+      final response = await widget.service.clearPendingScriptDraft();
+      if (!mounted) {
+        return;
+      }
+      _showSnack(
+        response['ok'] == false
+            ? response['message']?.toString() ?? '待保存脚本清除失败'
+            : '待保存脚本已清除',
+      );
+      setState(() {
+        _pendingDraft = widget.service.pendingScriptDraft;
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _clearingPending = false;
         });
       }
     }
@@ -2598,46 +2689,182 @@ class _BrowserScriptLibrarySheetState
       );
     }
     if (_scripts.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(22),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
+      return ListView(
+        padding: const EdgeInsets.all(12),
+        children: [
+          if (_pendingDraft != null) ...[
+            _buildPendingDraftCard(theme, _pendingDraft!),
+            const SizedBox(height: 10),
+          ],
+          _buildEmptyScriptsState(theme),
+        ],
+      );
+    }
+
+    final children = <Widget>[
+      if (_pendingDraft != null) ...[
+        _buildPendingDraftCard(theme, _pendingDraft!),
+        const SizedBox(height: 10),
+      ],
+      for (var index = 0; index < _scripts.length; index++) ...[
+        _buildScriptCard(theme, _scripts[index]),
+        if (index != _scripts.length - 1) const SizedBox(height: 10),
+      ],
+    ];
+    return ListView(
+      padding: const EdgeInsets.all(12),
+      children: children,
+    );
+  }
+
+  Widget _buildEmptyScriptsState(ThemeData theme) {
+    return Padding(
+      padding: const EdgeInsets.all(22),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.topic_outlined,
+            size: 42,
+            color: Colors.white.withAlpha(90),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            '还没有保存的浏览器脚本',
+            style: theme.textTheme.titleSmall?.copyWith(
+              color: Colors.white,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            _pendingDraft == null
+                ? '让 Codex 完成一次浏览器流程后，脚本助手会显示待保存的可复用脚本。'
+                : '上方待保存脚本确认后会进入这里，之后可一键运行或复制快捷命令。',
+            textAlign: TextAlign.center,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: Colors.white60,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPendingDraftCard(
+    ThemeData theme,
+    BrowserAutomationScriptDraft draft,
+  ) {
+    final meta = [
+      '${draft.steps.length} 步',
+      draft.autoGenerated ? '自动草稿' : 'Codex 草稿',
+      '更新 ${_formatDate(draft.updatedAt)}',
+    ].join(' · ');
+    final disabled = _savingPending || _clearingPending;
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFBBF24).withAlpha(12),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFFBBF24).withAlpha(90)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(
-                Icons.topic_outlined,
-                size: 42,
-                color: Colors.white.withAlpha(90),
+              const Icon(
+                Icons.pending_actions,
+                size: 18,
+                color: Color(0xFFFBBF24),
               ),
-              const SizedBox(height: 12),
-              Text(
-                '还没有保存的浏览器脚本',
-                style: theme.textTheme.titleSmall?.copyWith(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                '让 Codex 完成一次浏览器流程后，可以把最近的可复用动作保存成脚本。',
-                textAlign: TextAlign.center,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: Colors.white60,
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  '待保存：${draft.fileName}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
+                  ),
                 ),
               ),
             ],
           ),
-        ),
-      );
-    }
-
-    return ListView.separated(
-      padding: const EdgeInsets.all(12),
-      itemCount: _scripts.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 10),
-      itemBuilder: (context, index) {
-        return _buildScriptCard(theme, _scripts[index]);
-      },
+          const SizedBox(height: 6),
+          Text(
+            draft.description,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: Colors.white70,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            meta,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: Colors.white.withAlpha(115),
+            ),
+          ),
+          if (draft.sourceUrl.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text(
+              draft.sourceUrl,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: const Color(0xFFFBBF24),
+                fontFamily: 'monospace',
+              ),
+            ),
+          ],
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            children: [
+              FilledButton.icon(
+                onPressed:
+                    disabled ? null : () => unawaited(_savePendingScript(draft)),
+                icon: _savingPending
+                    ? const SizedBox(
+                        width: 15,
+                        height: 15,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.save_alt, size: 16),
+                label: const Text('保存/编辑'),
+              ),
+              OutlinedButton.icon(
+                onPressed: disabled
+                    ? null
+                    : () => unawaited(
+                          _copyText(draft.codexPrompt, '复用提示'),
+                        ),
+                icon: const Icon(Icons.content_copy, size: 16),
+                label: const Text('复制提示'),
+              ),
+              TextButton.icon(
+                onPressed:
+                    disabled ? null : () => unawaited(_discardPendingScript()),
+                icon: _clearingPending
+                    ? const SizedBox(
+                        width: 15,
+                        height: 15,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.clear, size: 16),
+                label: const Text('丢弃'),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 

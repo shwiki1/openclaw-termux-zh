@@ -97,18 +97,21 @@ void main() {
     expect(browserMcp, contains('browser_press_key'));
     expect(browserMcp, contains('browser_select_option'));
     expect(browserMcp, contains('browser_script_list'));
+    expect(browserMcp, contains('browser_script_stage'));
     expect(browserMcp, contains('browser_script_save'));
     expect(browserMcp, contains('browser_script_run'));
     expect(browserMcp, contains('browser_script_rename'));
     expect(browserMcp, contains('browser_script_delete'));
+    expect(browserMcp, contains('browser_script_clear_pending'));
     expect(browserMcp, contains('browser_wait_for_selector: "wait_for_selector"'));
     expect(browserMcp, contains('browser_scroll: "scroll"'));
     expect(browserMcp, contains('browser_press_key: "press_key"'));
     expect(browserMcp, contains('browser_select_option: "select_option"'));
+    expect(browserMcp, contains('browser_script_stage: "script_stage"'));
     expect(browserMcp, contains('browser_script_run: "script_run"'));
     expect(browserMcp, contains('function normalizeBridgeAction'));
     expect(browserMcp, contains('toolName === "browser_control"'));
-    expect(browserMcp, contains('version: "1.3.0"'));
+    expect(browserMcp, contains('version: "1.4.0"'));
     expect(
       browserMcp,
       contains('process.stdout.write(payload.toString("utf8") + "\\n")'),
@@ -126,7 +129,12 @@ void main() {
       contains('browser-script interactables [filter] [maxItems]'),
     );
     expect(browserScriptLauncher, contains('browser-script run <script-id>'));
+    expect(
+      browserScriptLauncher,
+      contains('browser-script stage <file-name> <description>'),
+    );
     expect(browserScriptLauncher, contains('bridge_action="capture_snapshot"'));
+    expect(browserScriptLauncher, contains('bridge_action="script_stage"'));
     expect(browserScriptLauncher, contains('bridge_action="script_run"'));
     expect(browserScriptLauncher, contains('const ACTION_ALIASES = {'));
     expect(browserScriptLauncher, contains('browser_type: "type"'));
@@ -142,8 +150,10 @@ void main() {
     expect(browserSkill, contains('browser_press_key'));
     expect(browserSkill, contains('browser_select_option'));
     expect(browserSkill, contains('browser_script_list'));
+    expect(browserSkill, contains('browser_script_stage'));
     expect(browserSkill, contains('browser_script_save'));
     expect(browserSkill, contains('browser_script_run'));
+    expect(browserSkill, contains('pending-save'));
   });
 
   test('Codex API key without custom base URL still uses API auth', () async {

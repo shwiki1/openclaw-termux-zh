@@ -1873,7 +1873,7 @@ const TOOL_DEFS = [
   {
     name: "browser_script_list",
     description:
-      "List saved OpenClaw browser automation scripts, including filenames, descriptions, quick commands, and run metadata.",
+      "List saved OpenClaw browser automation scripts and the current pending-save draft, including filenames, descriptions, quick commands, and run metadata.",
     inputSchema: {
       type: "object",
       properties: {
@@ -1882,6 +1882,62 @@ const TOOL_DEFS = [
           description: "Optional text filter for filename, description, source URL, or id.",
         },
       },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "browser_script_stage",
+    description:
+      "Update the script assistant pending-save draft after completing a reusable browser workflow. Codex should provide an auto-filled filename, purpose description, and explicit steps when possible.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        fileName: {
+          type: "string",
+          description: "Auto-filled pending script filename, for example login-dashboard.browser.json.",
+        },
+        description: {
+          type: "string",
+          description: "Short purpose summary explaining when to reuse this script.",
+        },
+        steps: {
+          type: "array",
+          description:
+            "Optional ordered reusable steps. Each step accepts action or browser_* tool plus payload or arguments. If omitted, recent repeatable browser actions are staged.",
+          items: {
+            type: "object",
+            properties: {
+              action: { type: "string" },
+              tool: { type: "string" },
+              payload: { type: "object" },
+              arguments: { type: "object" },
+              note: { type: "string" },
+            },
+            additionalProperties: true,
+          },
+        },
+        variables: {
+          type: "array",
+          description:
+            "Optional variable names used as {{name}} placeholders in step payload strings.",
+          items: { type: "string" },
+        },
+        maxRecentSteps: {
+          type: "integer",
+          description: "Maximum recent repeatable actions to stage when steps are omitted.",
+          minimum: 1,
+          maximum: 40,
+        },
+        sourceUrl: {
+          type: "string",
+          description: "Optional source URL for the pending script draft.",
+        },
+        sourceTitle: {
+          type: "string",
+          description: "Optional source page title for the pending script draft.",
+        },
+      },
+      required: ["fileName", "description"],
       additionalProperties: false,
     },
   },
@@ -2004,6 +2060,15 @@ const TOOL_DEFS = [
     },
   },
   {
+    name: "browser_script_clear_pending",
+    description: "Clear the script assistant pending-save browser script draft.",
+    inputSchema: {
+      type: "object",
+      properties: {},
+      additionalProperties: false,
+    },
+  },
+  {
     name: "browser_get_state",
     description:
       "Return the current browser state including title, URL, loading flag, and the last bridge error.",
@@ -2035,10 +2100,12 @@ const TOOL_TO_ACTION = {
   browser_capture_snapshot: "capture_snapshot",
   browser_eval: "eval",
   browser_script_list: "script_list",
+  browser_script_stage: "script_stage",
   browser_script_save: "script_save",
   browser_script_run: "script_run",
   browser_script_rename: "script_rename",
   browser_script_delete: "script_delete",
+  browser_script_clear_pending: "script_clear_pending",
   browser_get_state: "get_state",
 };
 
@@ -2164,10 +2231,10 @@ async function onRequest(message) {
       },
       serverInfo: {
         name: "openclaw-browser",
-        version: "1.3.0",
+        version: "1.4.0",
       },
       instructions:
-        "Use the OpenClaw browser tools for deterministic page navigation, scrolling, clicking, typing, selection, waiting, extraction, and reusable saved browser scripts inside the in-app browser panel. If individual tools are not exposed, use browser_control with action and payload.",
+        "Use the OpenClaw browser tools for deterministic page navigation, scrolling, clicking, typing, selection, waiting, extraction, and reusable saved browser scripts inside the in-app browser panel. If individual tools are not exposed, use browser_control with action and payload. After completing a reusable workflow, update the script assistant pending-save draft with browser_script_stage.",
     });
     return;
   }
@@ -2370,8 +2437,10 @@ Usage:
   browser-script press-key <key> [selector]
   browser-script list [filter]
   browser-script show <script-id-or-filename>
+  browser-script stage <file-name> <description>
   browser-script run <script-id>
   browser-script delete <script-id>
+  browser-script clear-pending
 USAGE
 }
 
@@ -2476,6 +2545,14 @@ case "\$command_name" in
     bridge_action="script_list"
     payload=\$(node -e 'process.stdout.write(JSON.stringify({ filter: process.argv[1] || "" }))' "\$filter")
     ;;
+  stage)
+    file_name="\${1:-}"
+    description="\${2:-}"
+    [ -n "\$file_name" ] || { usage >&2; exit 2; }
+    [ -n "\$description" ] || { usage >&2; exit 2; }
+    bridge_action="script_stage"
+    payload=\$(node -e 'process.stdout.write(JSON.stringify({ fileName: process.argv[1] || "", description: process.argv[2] || "" }))' "\$file_name" "\$description")
+    ;;
   run)
     script_id="\${1:-}"
     [ -n "\$script_id" ] || { usage >&2; exit 2; }
@@ -2487,6 +2564,10 @@ case "\$command_name" in
     [ -n "\$script_id" ] || { usage >&2; exit 2; }
     bridge_action="script_delete"
     payload=\$(node -e 'process.stdout.write(JSON.stringify({ id: process.argv[1] || "" }))' "\$script_id")
+    ;;
+  clear-pending|discard-pending)
+    bridge_action="script_clear_pending"
+    payload="{}"
     ;;
   -h|--help|help)
     usage
@@ -2521,10 +2602,12 @@ const ACTION_ALIASES = {
   browser_capture_snapshot: "capture_snapshot",
   browser_eval: "eval",
   browser_script_list: "script_list",
+  browser_script_stage: "script_stage",
   browser_script_save: "script_save",
   browser_script_run: "script_run",
   browser_script_rename: "script_rename",
   browser_script_delete: "script_delete",
+  browser_script_clear_pending: "script_clear_pending",
   browser_get_state: "get_state",
 };
 
@@ -2636,8 +2719,10 @@ Rules:
 13. Use `browser_scroll` for below-the-fold content before falling back to broad extraction.
 14. Use `browser_press_key` for keyboard-driven UI and `browser_select_option` for native dropdowns.
 15. Before repeating a known workflow, call `browser_script_list` and prefer `browser_script_run` when a matching script exists.
-16. After completing a repeatable workflow, offer to save it with `browser_script_save`; include a clear filename and short purpose description.
-17. Saved scripts replay deterministic browser actions. Do not save secrets in descriptions, filenames, or variable names; use `{{name}}` placeholders for values that should change per run.
+16. After completing any complete repeatable browser workflow, update the script assistant pending-save draft with `browser_script_stage`; automatically fill `fileName` and `description` from the completed task.
+17. Prefer explicit reusable steps in `browser_script_stage`. If the exact steps are already in the recent action log, staging without steps is acceptable, but still provide the filename and purpose description.
+18. Saved scripts replay deterministic browser actions. Do not save secrets in descriptions, filenames, or variable names; use `{{name}}` placeholders for values that should change per run.
+19. For login, API-key creation, payment, posting, deletion, or other sensitive flows, stage reusable navigation and form structure only; replace passwords, tokens, one-time codes, and user-specific values with placeholders.
 
 Typical flow:
 1. `browser_open`
@@ -2647,7 +2732,7 @@ Typical flow:
 5. `browser_highlight`
 6. `browser_click`, `browser_type`, `browser_select_option`, or `browser_press_key`
 7. `browser_capture_snapshot` or `browser_extract`
-8. `browser_script_save` when the successful flow is reusable.
+8. `browser_script_stage` with an auto filename, purpose description, and reusable steps so the user can save it from the script assistant.
 9. Fall back to `browser_eval` only if the built-in actions are insufficient.
 10. If any listed tool is missing from the callable tools, run the same step through `browser_control`.
 
@@ -2655,7 +2740,9 @@ Script flow:
 1. `browser_script_list` with a short filter from the user request.
 2. `browser_script_run` when a saved script matches.
 3. If no script matches, perform the workflow manually with browser tools.
-4. Save a reusable result with `browser_script_save` using explicit steps when possible, or recent actions when the action log is sufficient.
+4. After the manual workflow succeeds, call `browser_script_stage` and set `fileName` such as `site-task.browser.json`, plus a concise `description` explaining when to reuse it.
+5. If `browser_script_stage` is missing, use `browser_control` with `{ "action": "script_stage", "payload": ... }` or `browser-script stage <file-name> <description>`.
+6. Use `browser_script_save` only when the user explicitly asks Codex to save directly instead of placing the result in the pending-save area.
 ''';
   }
 

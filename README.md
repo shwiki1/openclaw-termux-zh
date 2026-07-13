@@ -27,7 +27,7 @@
 - 应用名：`次元虾`
 - Android 包名：`com.agent.cyx`
 - 版本名：`2.0.50`
-- 构建号：`135`
+- 构建号：`140`
 - 发布产物前缀：`CiYuanXia-v`
 - Dart 包名仍保留为 `openclaw`，用于兼容现有 Flutter 测试导入。
 

@@ -129,9 +129,11 @@ class BrowserAutomationService extends ChangeNotifier {
   static const _bridgeOnlyActions = {
     'get_state',
     'script_list',
+    'script_stage',
     'script_save',
     'script_rename',
     'script_delete',
+    'script_clear_pending',
   };
   static const _recordableScriptActions = {
     'open',
@@ -174,10 +176,12 @@ class BrowserAutomationService extends ChangeNotifier {
     'browser_capture_snapshot': 'capture_snapshot',
     'browser_eval': 'eval',
     'browser_script_list': 'script_list',
+    'browser_script_stage': 'script_stage',
     'browser_script_save': 'script_save',
     'browser_script_run': 'script_run',
     'browser_script_rename': 'script_rename',
     'browser_script_delete': 'script_delete',
+    'browser_script_clear_pending': 'script_clear_pending',
     'browser_get_state': 'get_state',
   };
 
@@ -197,6 +201,7 @@ class BrowserAutomationService extends ChangeNotifier {
   String _pendingOpenUrl = '';
   Completer<void>? _delegateReadyCompleter;
   final List<BrowserActionLogEntry> _recentActions = [];
+  BrowserAutomationScriptDraft? _pendingScriptDraft;
 
   bool get isRunning => _server != null;
   bool get isBrowserAttached => _delegate != null;
@@ -212,6 +217,7 @@ class BrowserAutomationService extends ChangeNotifier {
   int get panelRequestNonce => _panelRequestNonce;
   bool get hasPendingPanelRequest => _panelRequestNonce > 0;
   String get pendingOpenUrl => _pendingOpenUrl;
+  BrowserAutomationScriptDraft? get pendingScriptDraft => _pendingScriptDraft;
   List<BrowserActionLogEntry> get recentActions =>
       List<BrowserActionLogEntry>.unmodifiable(_recentActions);
 
@@ -307,6 +313,34 @@ class BrowserAutomationService extends ChangeNotifier {
       'sourceUrl': _currentUrl,
       'sourceTitle': _currentTitle,
     });
+  }
+
+  Future<Map<String, dynamic>> savePendingScript({
+    required String fileName,
+    required String description,
+    bool overwrite = false,
+  }) {
+    final draft = _pendingScriptDraft;
+    if (draft == null) {
+      return Future.value({
+        'ok': false,
+        'message': 'There is no pending browser script draft to save.',
+      });
+    }
+    return _invokeAction('script_save', {
+      'fileName': fileName,
+      'description': description,
+      'steps': [for (final step in draft.steps) step.toJson()],
+      'variables': draft.variables,
+      'sourceUrl': draft.sourceUrl,
+      'sourceTitle': draft.sourceTitle,
+      'overwrite': overwrite,
+      'clearPending': true,
+    });
+  }
+
+  Future<Map<String, dynamic>> clearPendingScriptDraft() {
+    return _invokeAction('script_clear_pending', const <String, dynamic>{});
   }
 
   Future<Map<String, dynamic>> runScript(String id) {
@@ -678,12 +712,16 @@ class BrowserAutomationService extends ChangeNotifier {
         };
       case 'script_list':
         return _listScripts(payload);
+      case 'script_stage':
+        return _stageScriptDraft(payload);
       case 'script_save':
         return _saveScript(payload);
       case 'script_rename':
         return _renameScript(payload);
       case 'script_delete':
         return _deleteScript(payload);
+      case 'script_clear_pending':
+        return _clearPendingScriptDraft();
       default:
         return {
           'ok': false,
@@ -719,10 +757,11 @@ class BrowserAutomationService extends ChangeNotifier {
       'scripts': [
         for (final script in filtered) script.toJson(includeCommand: true),
       ],
+      'pendingDraft': _pendingScriptDraft?.toJson(),
     };
   }
 
-  Future<Map<String, dynamic>> _saveScript(
+  Future<Map<String, dynamic>> _stageScriptDraft(
     Map<String, dynamic> payload,
   ) async {
     final explicitSteps = _scriptStepsFromPayload(payload['steps']);
@@ -735,6 +774,78 @@ class BrowserAutomationService extends ChangeNotifier {
       return {
         'ok': false,
         'message':
+            'No repeatable browser actions are available to stage. Provide explicit steps or run repeatable browser actions first.',
+      };
+    }
+
+    final sourceUrl = _stringOrFallback(payload['sourceUrl'], fallback: _currentUrl);
+    final sourceTitle = _stringOrFallback(
+      payload['sourceTitle'],
+      fallback: _currentTitle,
+    );
+    final draft = BrowserAutomationScriptDraft(
+      fileName: BrowserAutomationScript.normalizeFileName(
+        _stringOrFallback(
+          payload['fileName'],
+          fallback: _defaultDraftFileName(
+            description: _string(payload['description']),
+            sourceTitle: sourceTitle,
+            sourceUrl: sourceUrl,
+          ),
+        ),
+      ),
+      description: _stringOrFallback(
+        payload['description'],
+        fallback: _defaultDraftDescription(
+          steps: steps,
+          sourceTitle: sourceTitle,
+          sourceUrl: sourceUrl,
+        ),
+      ),
+      steps: steps,
+      variables: _stringList(payload['variables']),
+      sourceUrl: sourceUrl,
+      sourceTitle: sourceTitle,
+      updatedAt: DateTime.now().toUtc(),
+      autoGenerated: payload['autoGenerated'] == true,
+    );
+    _pendingScriptDraft = draft;
+    return {
+      'ok': true,
+      'message': 'Browser script draft staged: ${draft.fileName}',
+      'pendingDraft': draft.toJson(),
+    };
+  }
+
+  Future<Map<String, dynamic>> _clearPendingScriptDraft() async {
+    final hadDraft = _pendingScriptDraft != null;
+    _pendingScriptDraft = null;
+    return {
+      'ok': true,
+      'message': hadDraft
+          ? 'Pending browser script draft cleared.'
+          : 'There was no pending browser script draft.',
+      'pendingDraft': null,
+    };
+  }
+
+  Future<Map<String, dynamic>> _saveScript(
+    Map<String, dynamic> payload,
+  ) async {
+    final explicitSteps = _scriptStepsFromPayload(payload['steps']);
+    final recentSteps = _recentScriptSteps(
+      maxSteps: _int(payload['maxRecentSteps'], fallback: 16),
+    );
+    final pendingDraft = _pendingScriptDraft;
+    final steps = explicitSteps.isNotEmpty
+        ? explicitSteps
+        : recentSteps.isNotEmpty
+            ? recentSteps
+            : pendingDraft?.steps ?? const <BrowserAutomationScriptStep>[];
+    if (steps.isEmpty) {
+      return {
+        'ok': false,
+        'message':
             'No repeatable browser actions are available to save. Run browser_open, click, type, wait, scroll, key, or select actions first.',
       };
     }
@@ -743,22 +854,30 @@ class BrowserAutomationService extends ChangeNotifier {
       id: _string(payload['id']),
       fileName: _stringOrFallback(
         payload['fileName'],
-        fallback:
+        fallback: pendingDraft?.fileName ??
             'browser-script-${DateTime.now().millisecondsSinceEpoch}.browser.json',
       ),
       description: _stringOrFallback(
         payload['description'],
-        fallback: 'Reusable browser automation script',
+        fallback: pendingDraft?.description ?? 'Reusable browser automation script',
       ),
       steps: steps,
-      variables: _stringList(payload['variables']),
-      sourceUrl: _stringOrFallback(payload['sourceUrl'], fallback: _currentUrl),
+      variables: payload.containsKey('variables')
+          ? _stringList(payload['variables'])
+          : pendingDraft?.variables ?? const <String>[],
+      sourceUrl: _stringOrFallback(
+        payload['sourceUrl'],
+        fallback: pendingDraft?.sourceUrl ?? _currentUrl,
+      ),
       sourceTitle: _stringOrFallback(
         payload['sourceTitle'],
-        fallback: _currentTitle,
+        fallback: pendingDraft?.sourceTitle ?? _currentTitle,
       ),
       overwrite: payload['overwrite'] == true,
     );
+    if (payload['clearPending'] == true) {
+      _pendingScriptDraft = null;
+    }
     return {
       'ok': true,
       'message': 'Browser script saved: ${script.fileName}',
@@ -1056,6 +1175,7 @@ class BrowserAutomationService extends ChangeNotifier {
       'activeToolCalls': _activeToolCalls,
       'lastToolName': _lastToolName,
       'lastToolCallAt': _lastToolCallAt?.toIso8601String(),
+      'pendingScriptDraft': _pendingScriptDraft?.toJson(),
       'recentActions': [
         for (final entry in _recentActions)
           {
@@ -1132,6 +1252,99 @@ class BrowserAutomationService extends ChangeNotifier {
     if (_recentActions.length > 20) {
       _recentActions.removeRange(20, _recentActions.length);
     }
+    if (ok && _recordableScriptActions.contains(action)) {
+      _refreshAutoPendingScriptDraft();
+    }
+  }
+
+  void _refreshAutoPendingScriptDraft() {
+    final existing = _pendingScriptDraft;
+    final latestActionAt = _latestSuccessfulRecordableActionAt();
+    if (existing != null &&
+        !existing.autoGenerated &&
+        latestActionAt != null &&
+        existing.updatedAt.isAfter(latestActionAt)) {
+      return;
+    }
+    final steps = _recentScriptSteps(maxSteps: 16);
+    if (steps.isEmpty) {
+      return;
+    }
+    _pendingScriptDraft = BrowserAutomationScriptDraft(
+      fileName: BrowserAutomationScript.normalizeFileName(
+        _defaultDraftFileName(
+          sourceTitle: _currentTitle,
+          sourceUrl: _currentUrl,
+        ),
+      ),
+      description: _defaultDraftDescription(
+        steps: steps,
+        sourceTitle: _currentTitle,
+        sourceUrl: _currentUrl,
+      ),
+      steps: steps,
+      sourceUrl: _currentUrl,
+      sourceTitle: _currentTitle,
+      updatedAt: DateTime.now().toUtc(),
+      autoGenerated: true,
+    );
+  }
+
+  DateTime? _latestSuccessfulRecordableActionAt() {
+    for (final entry in _recentActions) {
+      if (entry.ok && _recordableScriptActions.contains(entry.action)) {
+        return entry.at;
+      }
+    }
+    return null;
+  }
+
+  String _defaultDraftFileName({
+    String description = '',
+    String sourceTitle = '',
+    String sourceUrl = '',
+  }) {
+    final candidates = [
+      description,
+      sourceTitle,
+      Uri.tryParse(sourceUrl.trim())?.host ?? '',
+      'browser-task',
+    ];
+    var slug = candidates
+        .map((item) => item.trim().toLowerCase())
+        .firstWhere((item) => item.isNotEmpty, orElse: () => 'browser-task')
+        .replaceAll(RegExp(r'[^a-z0-9]+'), '-')
+        .replaceAll(RegExp(r'-+'), '-')
+        .replaceAll(RegExp(r'^-|-$'), '');
+    if (slug.isEmpty) {
+      slug = 'browser-task';
+    }
+    if (slug.length > 48) {
+      slug = slug.substring(0, 48).replaceAll(RegExp(r'-$'), '');
+    }
+    return '$slug.browser.json';
+  }
+
+  String _defaultDraftDescription({
+    required List<BrowserAutomationScriptStep> steps,
+    String sourceTitle = '',
+    String sourceUrl = '',
+  }) {
+    final title = sourceTitle.trim();
+    final host = Uri.tryParse(sourceUrl.trim())?.host ?? '';
+    final target = title.isNotEmpty
+        ? title
+        : host.isNotEmpty
+            ? host
+            : '当前网页';
+    final actions = steps
+        .map((step) => step.action)
+        .where((action) => action.isNotEmpty)
+        .toSet()
+        .take(4)
+        .join(', ');
+    final actionNote = actions.isEmpty ? '' : '，包含 $actions';
+    return '复用 $target 的浏览器操作流程，共 ${steps.length} 步$actionNote。';
   }
 
   void _writeJson(

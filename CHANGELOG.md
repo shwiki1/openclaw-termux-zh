@@ -5,7 +5,7 @@
 ### 关键改动
 
 - **品牌与包名统一**：应用显示名统一为“次元虾”，Android `applicationId`、`namespace`、Kotlin 包声明和 MethodChannel 均统一为 `com.agent.cyx`。
-- **版本元数据统一**：Flutter、应用常量、Node 兼容包和发布文档统一到 `2.0.50+139`，构建产物使用 `CiYuanXia-v` 前缀。
+- **版本元数据统一**：Flutter、应用常量、Node 兼容包和发布文档统一到 `2.0.50+140`，构建产物使用 `CiYuanXia-v` 前缀。
 - **运行时资源对齐**：默认 Node.js 版本对齐随包资源 `24.14.1`，避免常量指向未随包提供的资源版本。
 - **OpenClaw 推荐版本跟随 latest 稳定版**：首次安装和版本选择默认推荐 npm `openclaw@latest` 的稳定版本；版本列表过滤 beta、rc、test、preview 等预发布版本。
 - **运行时要求已按最新 OpenClaw 核对**：当前 npm `openclaw@latest` 为 `2026.6.11`，要求 Node.js `>=22.19.0`；初始化环境文案同步为 Ubuntu 24.04.3、Node.js 24.14.1（arm64/x86_64）与 Node.js 22.22.2（armv7）。
@@ -14,6 +14,7 @@
 - **Codex 浏览器侧栏保持连接**：移动端终端右侧浏览器侧栏改为隐藏时保持 WebView 挂载，关闭侧滑后不会断开 Codex 浏览器自动化连接。
 - **Codex 浏览器默认说明页**：浏览器侧栏首次打开时不再自动加载 Gateway 控制台地址，改为显示浏览器自动化控制说明页，只有用户输入网址或 Codex 工具请求时才访问目标网页。
 - **Codex 浏览器脚本助手**：浏览器侧栏新增脚本目录按钮，支持把 Codex 浏览器操作流程保存为本地脚本、重命名、运行、删除，并复制 `browser-script run <id>` 快捷命令或 Codex 提示词；生成的 browser MCP 同步新增脚本列表、保存、运行、重命名和删除工具。
+- **Codex 浏览器桌面页与脚本草稿**：浏览器默认使用桌面端 UA、保留缩放能力并固定 Android text zoom；脚本助手新增待保存草稿区，Codex 完成可复用浏览器流程后可用 `browser_script_stage` 自动填好文件名和用途说明，用户确认后再保存为脚本。
 - **Codex 浏览器控制入口加固**：生成的 browser MCP 新增稳定单入口 `browser_control`，`browser-script` 新增通用 `call/control` 与 open、snapshot、interactables、type、click 等常用兜底命令，避免细粒度工具暴露不稳定时只能导航、不能连续表单自动化。
 - **Codex 终端与浏览器侧栏性能优化**：浏览器侧栏头部移除低频使用的后退/前进按钮，移动端侧栏动画改为位移动画；Codex 终端可视滚回缓冲收敛到 1200 行，并对原生终端重绘做帧节流，侧栏打开时暂停终端绘制，降低长对话输出和侧滑切换卡顿。
 - **自定义模型支持推理强度**：自定义模型提供商新增可选“模型推理强度”，保存为模型配置字段 `thinking`，支持 `off`、`minimal`、`low`、`medium`、`high`、`xhigh`、`adaptive`、`max`。
