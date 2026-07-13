@@ -48,6 +48,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7.0.0
+        with:
+          lfs: true
 
       - name: Setup Java 17
         uses: actions/setup-java@v5.5.0
@@ -103,6 +105,23 @@ jobs:
         run: |
           set -euo pipefail
           bash scripts/publish-prebuilt-rootfs-asset.sh --arch arm64 --release-tag basic-resource
+
+      - name: Verify bundled OpenClaw rootfs
+        run: |
+          set -euo pipefail
+          ROOTFS=flutter_app/assets/bootstrap/openclaw-rootfs-noble-arm64.tar.gz
+          test -s "$ROOTFS"
+          if head -c 128 "$ROOTFS" | grep -aq 'git-lfs.github.com/spec/v1'; then
+            echo "ERROR: $ROOTFS is still a Git LFS pointer. Ensure checkout pulled LFS files or enable BUILD_BUNDLED_ROOTFS."
+            exit 1
+          fi
+          gzip -t "$ROOTFS"
+          SIZE_MB=$(du -m "$ROOTFS" | cut -f1)
+          if [ "$SIZE_MB" -lt 80 ]; then
+            echo "ERROR: bundled rootfs looks too small (${SIZE_MB} MB)"
+            exit 1
+          fi
+          echo "Bundled rootfs verified: ${SIZE_MB} MB"
 
       - name: Install Android SDK packages
         run: |
