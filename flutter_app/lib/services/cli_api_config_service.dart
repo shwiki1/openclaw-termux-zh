@@ -1499,6 +1499,16 @@ const PROTOCOL_VERSION = "2025-06-18";
 
 const TOOL_DEFS = [
   {
+    name: "browser_self_test",
+    description:
+      "Open the OpenClaw in-app browser panel if needed and verify the bridge, WebView loading, and JavaScript execution using a local test page.",
+    inputSchema: {
+      type: "object",
+      properties: {},
+      additionalProperties: false,
+    },
+  },
+  {
     name: "browser_open",
     description:
       "Open a URL in the OpenClaw in-app browser panel. Use this before clicking or extracting page content.",
@@ -1735,6 +1745,7 @@ const TOOL_DEFS = [
 ];
 
 const TOOL_TO_ACTION = {
+  browser_self_test: "self_test",
   browser_open: "open",
   browser_back: "back",
   browser_forward: "forward",
@@ -2020,14 +2031,15 @@ Use this skill when the user asks you to inspect a webpage, click through a flow
 
 Rules:
 1. Start with `browser_get_state` so you know whether the browser panel is attached.
-2. If the tool reports that the browser panel is unavailable, stop and tell the user to open the browser panel from the terminal screen.
-3. Prefer `browser_open`, `browser_wait_for_text`, `browser_list_interactables`, `browser_highlight`, `browser_click`, `browser_type`, and `browser_extract` over `browser_eval`.
-4. Use stable CSS selectors. Avoid fragile positional selectors unless there is no better choice.
-5. Before any action that could submit a form, log in, send a message, spend money, or change user data, ask for confirmation.
-6. After a navigation or form submit, wait with `browser_wait_for_text` before assuming the page is ready.
-7. When extracting content, keep the result focused. Use `selector` whenever possible instead of dumping the whole page.
-8. If the next selector is unclear, call `browser_list_interactables` or `browser_list_links` first and choose from the returned candidates.
-9. If a selector is risky, call `browser_highlight` before clicking so the user can visually confirm the target.
+2. Use `browser_self_test` when checking whether the browser bridge is working or after an attachment/navigation failure.
+3. If the tool reports that the browser panel is unavailable, stop and tell the user to open the browser panel from the terminal screen.
+4. Prefer `browser_open`, `browser_wait_for_text`, `browser_list_interactables`, `browser_highlight`, `browser_click`, `browser_type`, and `browser_extract` over `browser_eval`.
+5. Use stable CSS selectors. Avoid fragile positional selectors unless there is no better choice.
+6. Before any action that could submit a form, log in, send a message, spend money, or change user data, ask for confirmation.
+7. After a navigation or form submit, wait with `browser_wait_for_text` before assuming the page is ready.
+8. When extracting content, keep the result focused. Use `selector` whenever possible instead of dumping the whole page.
+9. If the next selector is unclear, call `browser_list_interactables` or `browser_list_links` first and choose from the returned candidates.
+10. If a selector is risky, call `browser_highlight` before clicking so the user can visually confirm the target.
 
 Typical flow:
 1. `browser_open`

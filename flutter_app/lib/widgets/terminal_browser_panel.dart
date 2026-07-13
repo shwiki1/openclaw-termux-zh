@@ -74,6 +74,48 @@ class _TerminalBrowserPanelState extends State<TerminalBrowserPanel>
 </html>
 ''';
 
+  static const _selfTestHtml = '''
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OpenClaw Browser Self Test</title>
+    <style>
+      :root { color-scheme: dark; }
+      html, body {
+        margin: 0;
+        min-height: 100%;
+        background: #0a0a0a;
+        color: #f7f7f7;
+        font-family: sans-serif;
+      }
+      body {
+        display: grid;
+        place-items: center;
+      }
+      main {
+        width: min(88vw, 420px);
+        border: 1px solid rgba(255,255,255,0.12);
+        border-radius: 8px;
+        padding: 20px;
+      }
+      h1 { margin: 0 0 8px; font-size: 20px; }
+      p { margin: 0; color: #d6d6d6; line-height: 1.5; }
+    </style>
+    <script>
+      window.__openclawBrowserSelfTest = 'ready';
+    </script>
+  </head>
+  <body>
+    <main data-openclaw-self-test="ready">
+      <h1>Browser self-test ready</h1>
+      <p>The embedded browser loaded local HTML and JavaScript is available.</p>
+    </main>
+  </body>
+</html>
+''';
+
   final _service = BrowserAutomationService.instance;
   final _urlController = TextEditingController();
   late final WebViewController _controller;
@@ -113,6 +155,9 @@ class _TerminalBrowserPanelState extends State<TerminalBrowserPanel>
   Future<void> _initializeBrowser() async {
     final pendingUrl = _service.takePendingOpenUrl().trim();
     if (pendingUrl.isNotEmpty) {
+      if (pendingUrl == 'about:blank') {
+        return;
+      }
       await _loadUrl(pendingUrl);
       return;
     }
@@ -338,6 +383,94 @@ class _TerminalBrowserPanelState extends State<TerminalBrowserPanel>
   Future<Map<String, dynamic>> getState() {
     return _pageSnapshot(
       message: 'Browser state loaded.',
+    );
+  }
+
+  @override
+  Future<Map<String, dynamic>> selfTest() async {
+    if (mounted) {
+      setState(() {
+        _title = 'OpenClaw Browser Self Test';
+        _currentUrl = 'about:blank';
+        _urlController.text = _currentUrl;
+        _error = '';
+        _loading = true;
+      });
+    }
+    _service.updateObservedState(
+      url: 'about:blank',
+      title: 'OpenClaw Browser Self Test',
+      loading: true,
+      error: '',
+    );
+
+    try {
+      _navigationCompleter = Completer<void>();
+      await _controller.loadHtmlString(_selfTestHtml);
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+    } catch (error) {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _error = error.toString();
+        });
+      }
+      return _pageSnapshot(
+        ok: false,
+        message: 'Failed to load the browser self-test page.',
+      );
+    }
+
+    final raw = await _runStringJs('''
+(() => {
+  const marker = document.querySelector('[data-openclaw-self-test="ready"]');
+  return JSON.stringify({
+    ok: Boolean(marker) && window.__openclawBrowserSelfTest === 'ready',
+    title: document.title || '',
+    markerText: marker ? (marker.textContent || '').trim().slice(0, 160) : '',
+    href: location.href || ''
+  });
+})();
+''');
+    if (raw == null) {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+        });
+      }
+      return _pageSnapshot(
+        ok: false,
+        message: 'Self-test page loaded, but JavaScript evaluation failed.',
+      );
+    }
+
+    Map<String, dynamic> decoded;
+    try {
+      decoded = jsonDecode(raw) as Map<String, dynamic>;
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+        });
+      }
+      return _pageSnapshot(
+        ok: false,
+        message: 'Self-test JavaScript returned an unreadable result.',
+      );
+    }
+    final passed = decoded['ok'] == true;
+    if (mounted) {
+      setState(() {
+        _loading = false;
+        _error = '';
+      });
+    }
+    return _pageSnapshot(
+      ok: passed,
+      message: passed
+          ? 'Browser self-test passed.'
+          : 'Self-test page loaded, but the readiness marker was not found.',
+      extra: {'actionResult': decoded},
     );
   }
 

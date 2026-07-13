@@ -13,6 +13,8 @@ abstract class BrowserAutomationDelegate {
 
   Future<Map<String, dynamic>> getState();
 
+  Future<Map<String, dynamic>> selfTest();
+
   Future<Map<String, dynamic>> open(String url);
 
   Future<Map<String, dynamic>> back();
@@ -98,6 +100,7 @@ class BrowserAutomationService extends ChangeNotifier {
   String _currentUrl = '';
   String _currentTitle = '';
   String _lastError = '';
+  String _lastSuccessfulUrl = '';
   bool _loading = false;
   String _lastToolName = '';
   int _activeToolCalls = 0;
@@ -113,6 +116,7 @@ class BrowserAutomationService extends ChangeNotifier {
   String get lastToolName => _lastToolName;
   String get currentUrl => _currentUrl;
   String get currentTitle => _currentTitle;
+  String get lastSuccessfulUrl => _lastSuccessfulUrl;
   bool get loading => _loading;
   String get lastError => _lastError;
   String get bridgeUrl => 'http://$_host:$_port';
@@ -180,6 +184,12 @@ class BrowserAutomationService extends ChangeNotifier {
       _lastError = error;
       changed = true;
     }
+    final remembered = _rememberSuccessfulUrl(
+      url: url,
+      loading: loading,
+      error: error,
+    );
+    changed = changed || remembered;
     if (changed) {
       notifyListeners();
     }
@@ -378,6 +388,9 @@ class BrowserAutomationService extends ChangeNotifier {
         case 'get_state':
           state = await delegate.getState();
           break;
+        case 'self_test':
+          state = await delegate.selfTest();
+          break;
         case 'open':
           state = await delegate.open(_string(payload['url']));
           break;
@@ -498,7 +511,11 @@ class BrowserAutomationService extends ChangeNotifier {
       return existing;
     }
 
-    final preferredUrl = action == 'open' ? _string(payload['url']) : '';
+    final preferredUrl = switch (action) {
+      'open' => _string(payload['url']),
+      'self_test' => 'about:blank',
+      _ => '',
+    };
     _requestBrowserPanel(initialUrl: preferredUrl);
 
     final completer = _delegateReadyCompleter;
@@ -517,7 +534,7 @@ class BrowserAutomationService extends ChangeNotifier {
   }
 
   void _requestBrowserPanel({String initialUrl = ''}) {
-    final normalizedUrl = initialUrl.trim();
+    final normalizedUrl = _panelBootstrapUrl(initialUrl);
     if (normalizedUrl.isNotEmpty) {
       _pendingOpenUrl = normalizedUrl;
     }
@@ -529,7 +546,6 @@ class BrowserAutomationService extends ChangeNotifier {
     final normalizedUrl = _nullableString(state['url']);
     final normalizedTitle = _nullableString(state['title']);
     final normalizedLoading = state['loading'] == true;
-    final normalizedError = _nullableString(state['error']);
     if (normalizedUrl != null) {
       _currentUrl = normalizedUrl;
     }
@@ -537,9 +553,10 @@ class BrowserAutomationService extends ChangeNotifier {
       _currentTitle = normalizedTitle;
     }
     _loading = normalizedLoading;
-    if (normalizedError != null) {
-      _lastError = normalizedError;
+    if (state.containsKey('error')) {
+      _lastError = state['error']?.toString().trim() ?? '';
     }
+    _rememberSuccessfulUrl();
   }
 
   Map<String, dynamic> _snapshot() {
@@ -549,6 +566,7 @@ class BrowserAutomationService extends ChangeNotifier {
       'sessionLabel': sessionLabel,
       'url': _currentUrl,
       'title': _currentTitle,
+      'lastSuccessfulUrl': _lastSuccessfulUrl,
       'loading': _loading,
       'lastError': _lastError,
       'activeToolCalls': _activeToolCalls,
@@ -564,6 +582,50 @@ class BrowserAutomationService extends ChangeNotifier {
           },
       ],
     };
+  }
+
+  String _panelBootstrapUrl(String initialUrl) {
+    final requestedUrl = initialUrl.trim();
+    if (requestedUrl.isNotEmpty) {
+      return requestedUrl;
+    }
+    final rememberedUrl = _lastSuccessfulUrl.trim();
+    if (_isRestorableUrl(rememberedUrl)) {
+      return rememberedUrl;
+    }
+    final currentUrl = _currentUrl.trim();
+    if (_lastError.trim().isEmpty && _isRestorableUrl(currentUrl)) {
+      return currentUrl;
+    }
+    return '';
+  }
+
+  bool _rememberSuccessfulUrl({
+    String? url,
+    bool? loading,
+    String? error,
+  }) {
+    final candidate = (url ?? _currentUrl).trim();
+    if (candidate.isEmpty ||
+        !_isRestorableUrl(candidate) ||
+        (loading ?? _loading) ||
+        (error ?? _lastError).trim().isNotEmpty) {
+      return false;
+    }
+    if (candidate == _lastSuccessfulUrl) {
+      return false;
+    }
+    _lastSuccessfulUrl = candidate;
+    return true;
+  }
+
+  bool _isRestorableUrl(String value) {
+    final uri = Uri.tryParse(value.trim());
+    if (uri == null || !uri.hasScheme) {
+      return false;
+    }
+    final scheme = uri.scheme.toLowerCase();
+    return scheme == 'http' || scheme == 'https';
   }
 
   void _recordAction({
