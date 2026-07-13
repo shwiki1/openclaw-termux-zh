@@ -20,6 +20,7 @@ Add a Codex browser automation script assistant so completed browser control flo
 - Updated `cli_api_config_service_test.dart`, `CHANGELOG.md`, and `.codex-app/` memory.
 - Bumped Flutter build metadata from `2.0.50+135` to `2.0.50+136` in `flutter_app/pubspec.yaml`, `flutter_app/lib/constants.dart`, `STRUCTURE.md`, and `CHANGELOG.md` to prepare the next cloud build.
 - GitHub Actions run `29277705784` failed before artifact upload because Flutter release compilation rejected `Colors.white45`; replaced it with `Colors.white.withAlpha(115)` and bumped source metadata again to `2.0.50+137` for the retry.
+- GitHub Actions run `29278136954` succeeded from remote commit `1b0778b16da29083eea6d3101dfc50b69f93ede8`; downloaded `CiYuanXia-v2.0.50-138-arm64-v8a.apk` and verified ZIP integrity, arm64 PRoot libraries, APK SHA256, and manifest version fields.
 
 ## Checks Run
 
@@ -27,6 +28,8 @@ Add a Codex browser automation script assistant so completed browser control flo
 - `npm test`: passed, 11 checks passed and 0 failed after the final bridge-only `browser_get_state` fix.
 - `npm run lint -- --no-warn-ignored`: passed after the final bridge-only `browser_get_state` fix.
 - App memory validation: passed with no errors and no warnings.
+- GitHub Actions run `29278136954`: passed; `flutter analyze --no-fatal-infos`, release APK build, native PRoot binary verification, artifact collection, and artifact upload all completed successfully.
+- Artifact verification: `sha256sum` returned `e8de3ae0f9b6553c3f64c280da713c397658c8df28e197500cc73cd44755f775`; `unzip -t` passed; `unzip -l` confirmed `libproot.so`, `libprootloader.so`, `libprootloader32.so`, `libtalloc.so`, and `libandroid-shmem.so`; `aapt dump badging` reported `versionCode=2138`, `versionName=2.0.50`.
 - `command -v dart` and `command -v flutter`: no local SDK paths returned, so Flutter analyze/test were not run locally.
 - `git diff --check`: passed after the version bump prep and memory updates.
 
@@ -37,7 +40,8 @@ Add a Codex browser automation script assistant so completed browser control flo
 ## Version And Artifacts
 
 - Source metadata is now `2.0.50+137` after cloud-build retry prep.
-- Latest prior cloud artifact remains run `29272795310`, APK `CiYuanXia-v2.0.50-136-arm64-v8a.apk`.
+- Latest cloud artifact is run `29278136954`, APK `CiYuanXia-v2.0.50-138-arm64-v8a.apk`.
+- Local artifact path: `artifacts/github-run-29278136954/CiYuanXia-v2.0.50-138-arm64-v8a.apk`.
 
 ## Known Risks
 

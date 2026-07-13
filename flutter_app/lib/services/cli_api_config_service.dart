@@ -1516,6 +1516,36 @@ const TOOL_DEFS = [
     },
   },
   {
+    name: "browser_control",
+    description:
+      "Stable single-entry browser automation tool. Use this when fine-grained browser tools are not exposed reliably; pass action such as open, list_interactables, type, click, capture_snapshot, or a browser_* tool name, plus payload.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        action: {
+          type: "string",
+          description:
+            "Bridge action or browser_* tool name, for example open, browser_open, list_interactables, browser_type, click, or capture_snapshot.",
+        },
+        tool: {
+          type: "string",
+          description: "Alias for action.",
+        },
+        payload: {
+          type: "object",
+          description: "Payload for the selected action.",
+          additionalProperties: true,
+        },
+        arguments: {
+          type: "object",
+          description: "Alias for payload, useful when copying an existing MCP tool call.",
+          additionalProperties: true,
+        },
+      },
+      additionalProperties: true,
+    },
+  },
+  {
     name: "browser_open",
     description:
       "Open a URL in the OpenClaw in-app browser panel. Use this before clicking or extracting page content.",
@@ -2012,6 +2042,21 @@ const TOOL_TO_ACTION = {
   browser_get_state: "get_state",
 };
 
+function normalizeBridgeAction(value) {
+  const raw = String(value || "").trim();
+  if (!raw) {
+    return "";
+  }
+  return TOOL_TO_ACTION[raw] || raw;
+}
+
+function objectPayload(value) {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    return value;
+  }
+  return {};
+}
+
 const HEADER_DELIMITER = Buffer.from("\\r\\n\\r\\n");
 const NEWLINE = Buffer.from("\\n");
 let stdinBuffer = Buffer.alloc(0);
@@ -2119,10 +2164,10 @@ async function onRequest(message) {
       },
       serverInfo: {
         name: "openclaw-browser",
-        version: "1.2.0",
+        version: "1.3.0",
       },
       instructions:
-        "Use the OpenClaw browser tools for deterministic page navigation, scrolling, clicking, typing, selection, waiting, extraction, and reusable saved browser scripts inside the in-app browser panel.",
+        "Use the OpenClaw browser tools for deterministic page navigation, scrolling, clicking, typing, selection, waiting, extraction, and reusable saved browser scripts inside the in-app browser panel. If individual tools are not exposed, use browser_control with action and payload.",
     });
     return;
   }
@@ -2144,7 +2189,37 @@ async function onRequest(message) {
   if (method === "tools/call") {
     const params = message.params || {};
     const toolName = (params.name || "").trim();
-    const action = TOOL_TO_ACTION[toolName];
+    const toolArguments = objectPayload(params.arguments || {});
+    let action = TOOL_TO_ACTION[toolName];
+    let payload = toolArguments;
+    if (toolName === "browser_control") {
+      action = normalizeBridgeAction(toolArguments.action || toolArguments.tool);
+      payload = objectPayload(toolArguments.payload ?? toolArguments.arguments);
+      if (Object.keys(payload).length === 0) {
+        const {
+          action: _action,
+          tool: _tool,
+          payload: _payload,
+          arguments: _arguments,
+          ...rest
+        } = toolArguments;
+        payload = objectPayload(rest);
+      }
+      if (!action) {
+        reply(id, {
+          content: asToolContent({
+            ok: false,
+            message: "browser_control requires an action.",
+          }),
+          structuredContent: {
+            ok: false,
+            message: "browser_control requires an action.",
+          },
+          isError: true,
+        });
+        return;
+      }
+    }
     if (!action) {
       reply(id, {
         content: asToolContent({
@@ -2156,7 +2231,7 @@ async function onRequest(message) {
       return;
     }
     try {
-      const result = await callBridge(action, params.arguments || {});
+      const result = await callBridge(action, payload);
       reply(id, {
         content: asToolContent(result),
         structuredContent: result,
@@ -2280,6 +2355,19 @@ ENV_PATH=${_shQuote(_browserBridgeEnvPath)}
 usage() {
   cat <<'USAGE'
 Usage:
+  browser-script state
+  browser-script self-test
+  browser-script call <action-or-browser_tool> [json-payload]
+  browser-script control <action-or-browser_tool> [json-payload]
+  browser-script open <url>
+  browser-script interactables [filter] [maxItems]
+  browser-script snapshot [selector] [maxLength]
+  browser-script click <selector>
+  browser-script type <selector> <text> [submit]
+  browser-script wait-selector <selector> [timeoutMs]
+  browser-script wait-text <text> [timeoutMs]
+  browser-script scroll [direction] [pixels] [selector]
+  browser-script press-key <key> [selector]
   browser-script list [filter]
   browser-script show <script-id-or-filename>
   browser-script run <script-id>
@@ -2304,6 +2392,79 @@ if [ "\$#" -gt 0 ]; then
 fi
 
 case "\$command_name" in
+  state|get-state)
+    bridge_action="get_state"
+    payload="{}"
+    ;;
+  self-test|self_test)
+    bridge_action="self_test"
+    payload="{}"
+    ;;
+  call|control|action)
+    bridge_action="\${1:-}"
+    [ -n "\$bridge_action" ] || { usage >&2; exit 2; }
+    payload="\${2:-{}}"
+    ;;
+  open)
+    url="\${1:-}"
+    [ -n "\$url" ] || { usage >&2; exit 2; }
+    bridge_action="open"
+    payload=\$(node -e 'process.stdout.write(JSON.stringify({ url: process.argv[1] || "" }))' "\$url")
+    ;;
+  interactables|list-interactables)
+    filter="\${1:-}"
+    max_items="\${2:-}"
+    bridge_action="list_interactables"
+    payload=\$(node -e 'const maxItems = Number.parseInt(process.argv[2] || "", 10); const payload = { filter: process.argv[1] || "" }; if (Number.isFinite(maxItems)) payload.maxItems = maxItems; process.stdout.write(JSON.stringify(payload));' "\$filter" "\$max_items")
+    ;;
+  snapshot|capture-snapshot)
+    selector="\${1:-}"
+    max_length="\${2:-}"
+    bridge_action="capture_snapshot"
+    payload=\$(node -e 'const maxLength = Number.parseInt(process.argv[2] || "", 10); const payload = {}; if (process.argv[1]) payload.selector = process.argv[1]; if (Number.isFinite(maxLength)) payload.maxLength = maxLength; process.stdout.write(JSON.stringify(payload));' "\$selector" "\$max_length")
+    ;;
+  click)
+    selector="\${1:-}"
+    [ -n "\$selector" ] || { usage >&2; exit 2; }
+    bridge_action="click"
+    payload=\$(node -e 'process.stdout.write(JSON.stringify({ selector: process.argv[1] || "" }))' "\$selector")
+    ;;
+  type)
+    selector="\${1:-}"
+    text="\${2:-}"
+    submit="\${3:-false}"
+    [ -n "\$selector" ] || { usage >&2; exit 2; }
+    bridge_action="type"
+    payload=\$(node -e 'const submit = /^(1|true|yes|submit)$/i.test(process.argv[3] || ""); process.stdout.write(JSON.stringify({ selector: process.argv[1] || "", text: process.argv[2] || "", submit }))' "\$selector" "\$text" "\$submit")
+    ;;
+  wait-selector|wait_for_selector)
+    selector="\${1:-}"
+    timeout_ms="\${2:-}"
+    [ -n "\$selector" ] || { usage >&2; exit 2; }
+    bridge_action="wait_for_selector"
+    payload=\$(node -e 'const timeoutMs = Number.parseInt(process.argv[2] || "", 10); const payload = { selector: process.argv[1] || "" }; if (Number.isFinite(timeoutMs)) payload.timeoutMs = timeoutMs; process.stdout.write(JSON.stringify(payload));' "\$selector" "\$timeout_ms")
+    ;;
+  wait-text|wait_for_text)
+    text="\${1:-}"
+    timeout_ms="\${2:-}"
+    [ -n "\$text" ] || { usage >&2; exit 2; }
+    bridge_action="wait_for_text"
+    payload=\$(node -e 'const timeoutMs = Number.parseInt(process.argv[2] || "", 10); const payload = { text: process.argv[1] || "" }; if (Number.isFinite(timeoutMs)) payload.timeoutMs = timeoutMs; process.stdout.write(JSON.stringify(payload));' "\$text" "\$timeout_ms")
+    ;;
+  scroll)
+    direction="\${1:-down}"
+    pixels="\${2:-}"
+    selector="\${3:-}"
+    bridge_action="scroll"
+    payload=\$(node -e 'const pixels = Number.parseInt(process.argv[2] || "", 10); const payload = { direction: process.argv[1] || "down" }; if (Number.isFinite(pixels)) payload.pixels = pixels; if (process.argv[3]) payload.selector = process.argv[3]; process.stdout.write(JSON.stringify(payload));' "\$direction" "\$pixels" "\$selector")
+    ;;
+  press-key|press_key)
+    key="\${1:-}"
+    selector="\${2:-}"
+    [ -n "\$key" ] || { usage >&2; exit 2; }
+    bridge_action="press_key"
+    payload=\$(node -e 'const payload = { key: process.argv[1] || "" }; if (process.argv[2]) payload.selector = process.argv[2]; process.stdout.write(JSON.stringify(payload));' "\$key" "\$selector")
+    ;;
   list)
     filter="\${1:-}"
     bridge_action="script_list"
@@ -2339,8 +2500,42 @@ esac
 
 node - "\$base_url" "\$token" "\$bridge_action" "\$payload" <<'NODE'
 const [baseUrl, token, action, payloadText] = process.argv.slice(2);
+const ACTION_ALIASES = {
+  browser_control: "browser_control",
+  browser_self_test: "self_test",
+  browser_open: "open",
+  browser_back: "back",
+  browser_forward: "forward",
+  browser_reload: "reload",
+  browser_click: "click",
+  browser_type: "type",
+  browser_wait_for_text: "wait_for_text",
+  browser_wait_for_selector: "wait_for_selector",
+  browser_scroll: "scroll",
+  browser_press_key: "press_key",
+  browser_select_option: "select_option",
+  browser_extract: "extract",
+  browser_list_links: "list_links",
+  browser_list_interactables: "list_interactables",
+  browser_highlight: "highlight",
+  browser_capture_snapshot: "capture_snapshot",
+  browser_eval: "eval",
+  browser_script_list: "script_list",
+  browser_script_save: "script_save",
+  browser_script_run: "script_run",
+  browser_script_rename: "script_rename",
+  browser_script_delete: "script_delete",
+  browser_get_state: "get_state",
+};
 
 (async () => {
+  let normalizedAction = ACTION_ALIASES[String(action || "").trim()] || String(action || "").trim();
+  if (!normalizedAction) {
+    console.error("Missing browser bridge action.");
+    process.exitCode = 2;
+    return;
+  }
+
   let payload = {};
   try {
     payload = payloadText ? JSON.parse(payloadText) : {};
@@ -2350,7 +2545,48 @@ const [baseUrl, token, action, payloadText] = process.argv.slice(2);
     return;
   }
 
-  const response = await fetch(baseUrl.replace(/\\/\$/, "") + "/" + action, {
+  if (normalizedAction === "browser_control") {
+    const nestedActionRaw = String(
+      payload.action || payload.tool || "",
+    ).trim();
+    const nestedAction =
+      ACTION_ALIASES[nestedActionRaw] || nestedActionRaw;
+    if (!nestedAction) {
+      console.error("browser_control requires an action.");
+      process.exitCode = 2;
+      return;
+    }
+    if (nestedAction === "browser_control") {
+      console.error("browser_control cannot call itself.");
+      process.exitCode = 2;
+      return;
+    }
+    normalizedAction = nestedAction;
+    if (payload && typeof payload === "object" && !Array.isArray(payload)) {
+      const {
+        action: _action,
+        tool: _tool,
+        payload: nestedPayload,
+        arguments: nestedArguments,
+        ...rest
+      } = payload;
+      if (nestedPayload && typeof nestedPayload === "object" && !Array.isArray(nestedPayload)) {
+        payload = nestedPayload;
+      } else if (
+        nestedArguments &&
+        typeof nestedArguments === "object" &&
+        !Array.isArray(nestedArguments)
+      ) {
+        payload = nestedArguments;
+      } else {
+        payload = rest;
+      }
+    } else {
+      payload = {};
+    }
+  }
+
+  const response = await fetch(baseUrl.replace(/\\/\$/, "") + "/" + normalizedAction, {
     method: "POST",
     headers: {
       "content-type": "application/json",
@@ -2388,18 +2624,20 @@ Rules:
 1. Start with `browser_get_state` so you know whether the browser panel is attached.
 2. Use `browser_self_test` when checking whether the browser bridge is working or after an attachment/navigation failure.
 3. If the tool reports that the browser panel is unavailable, stop and tell the user to open the browser panel from the terminal screen.
-4. Prefer `browser_open`, `browser_wait_for_text`, `browser_wait_for_selector`, `browser_scroll`, `browser_list_interactables`, `browser_highlight`, `browser_click`, `browser_type`, `browser_select_option`, `browser_press_key`, and `browser_extract` over `browser_eval`.
-5. Use stable CSS selectors. Avoid fragile positional selectors unless there is no better choice.
-6. Before any action that could submit a form, log in, send a message, spend money, or change user data, ask for confirmation.
-7. After a navigation or form submit, wait with `browser_wait_for_text` or `browser_wait_for_selector` before assuming the page is ready.
-8. When extracting content, keep the result focused. Use `selector` whenever possible instead of dumping the whole page.
-9. If the next selector is unclear, call `browser_list_interactables` or `browser_list_links` first and choose from the returned candidates.
-10. If a selector is risky, call `browser_highlight` before clicking so the user can visually confirm the target.
-11. Use `browser_scroll` for below-the-fold content before falling back to broad extraction.
-12. Use `browser_press_key` for keyboard-driven UI and `browser_select_option` for native dropdowns.
-13. Before repeating a known workflow, call `browser_script_list` and prefer `browser_script_run` when a matching script exists.
-14. After completing a repeatable workflow, offer to save it with `browser_script_save`; include a clear filename and short purpose description.
-15. Saved scripts replay deterministic browser actions. Do not save secrets in descriptions, filenames, or variable names; use `{{name}}` placeholders for values that should change per run.
+4. If fine-grained MCP tools are not exposed reliably, use `browser_control` with an `action` plus `payload`, for example `{ "action": "type", "payload": { "selector": "#email", "text": "user@example.com" } }`.
+5. If MCP tools are unavailable, use the shell fallback: `browser-script call <action-or-browser_tool> '<json-payload>'`, or shortcuts such as `browser-script interactables`, `browser-script snapshot`, `browser-script type`, and `browser-script click`.
+6. Prefer `browser_open`, `browser_wait_for_text`, `browser_wait_for_selector`, `browser_scroll`, `browser_list_interactables`, `browser_highlight`, `browser_click`, `browser_type`, `browser_select_option`, `browser_press_key`, and `browser_extract` over `browser_eval`.
+7. Use stable CSS selectors. Avoid fragile positional selectors unless there is no better choice.
+8. Before any action that could submit a form, log in, send a message, spend money, or change user data, ask for confirmation.
+9. After a navigation or form submit, wait with `browser_wait_for_text` or `browser_wait_for_selector` before assuming the page is ready.
+10. When extracting content, keep the result focused. Use `selector` whenever possible instead of dumping the whole page.
+11. If the next selector is unclear, call `browser_list_interactables` or `browser_list_links` first and choose from the returned candidates.
+12. If a selector is risky, call `browser_highlight` before clicking so the user can visually confirm the target.
+13. Use `browser_scroll` for below-the-fold content before falling back to broad extraction.
+14. Use `browser_press_key` for keyboard-driven UI and `browser_select_option` for native dropdowns.
+15. Before repeating a known workflow, call `browser_script_list` and prefer `browser_script_run` when a matching script exists.
+16. After completing a repeatable workflow, offer to save it with `browser_script_save`; include a clear filename and short purpose description.
+17. Saved scripts replay deterministic browser actions. Do not save secrets in descriptions, filenames, or variable names; use `{{name}}` placeholders for values that should change per run.
 
 Typical flow:
 1. `browser_open`
@@ -2411,6 +2649,7 @@ Typical flow:
 7. `browser_capture_snapshot` or `browser_extract`
 8. `browser_script_save` when the successful flow is reusable.
 9. Fall back to `browser_eval` only if the built-in actions are insufficient.
+10. If any listed tool is missing from the callable tools, run the same step through `browser_control`.
 
 Script flow:
 1. `browser_script_list` with a short filter from the user request.

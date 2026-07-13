@@ -5,6 +5,8 @@
 - Lint/static analysis: `npm run lint -- --no-warn-ignored` passed on 2026-07-13 after Codex browser script assistant changes and the bridge-only `browser_get_state` fix.
 - Typecheck/analyze: local `dart`/`flutter` commands are unavailable; run `cd flutter_app && flutter analyze` in a Flutter SDK environment or GitHub Actions.
 - Unit tests: `npm test` passed on 2026-07-13 with 11 passed, 0 failed after Codex browser script assistant changes and the bridge-only `browser_get_state` fix; Flutter tests exist in `flutter_app/test/` but were not run locally.
+- Browser control hardening: `git diff --check` passed; `npm test` passed with 11 checks; `npm run lint -- --no-warn-ignored` passed after adding `browser_control`, `browser-script` fallback commands, and bridge action normalization.
+- Terminal sidecar/performance polish: `git diff --check` passed; `npm test` passed with 11 checks; `npm run lint -- --no-warn-ignored` passed after removing browser sidecar header back/forward buttons, adding terminal display repaint throttling, and reducing Codex terminal display transcript rows. Local `dart`, `flutter`, and `kotlinc` commands were unavailable, and no executable `flutter_app/android/gradlew` was present.
 
 ## GitHub Cloud Build
 - Repository remotes: `origin` Gitee and `shwiki` GitHub. Confirm target remote before push/build operations.
@@ -17,14 +19,14 @@
 ## Version Management
 - Canonical version file: `flutter_app/pubspec.yaml` for Flutter app version/build, plus root `package.json` for npm package version. Keep them aligned for releases.
 - Current user-facing version: `2.0.50`.
-- Current build number: `137` in `flutter_app/pubspec.yaml`.
-- Known drift: none for current `2.0.50+137` metadata after 2026-07-13 browser cloud-build retry prep.
-- Last cloud build version: source metadata `2.0.50+135`; GitHub Actions run `29272795310` generated CI version `2.0.50+136` for the arm64 split APK, and `aapt dump xmltree` reported manifest `versionCode=2136`.
-- Last cloud build artifact: `ciyuanxia-apks` artifact ID `8288274347`, containing `CiYuanXia-v2.0.50-136-arm64-v8a.apk`, downloaded to `artifacts/github-run-29272795310/ciyuanxia-apks/`.
+- Current build number: `138` in `flutter_app/pubspec.yaml`.
+- Known drift: none for current `2.0.50+138` metadata after 2026-07-13 browser/terminal cloud-build prep.
+- Last cloud build version: source metadata `2.0.50+137`; GitHub Actions run `29278136954` generated CI version `2.0.50+138` for the arm64 split APK, and `aapt dump badging` reported manifest `versionCode=2138`, `versionName=2.0.50`.
+- Last cloud build artifact: `ciyuanxia-apks` artifact ID `8290313722`, containing `CiYuanXia-v2.0.50-138-arm64-v8a.apk`, downloaded to `artifacts/github-run-29278136954/`.
 - Version bump policy: Increment build number for every new cloud build; bump user-facing version only for release changes.
 - Workflow version policy: CI derives version name from `pubspec.yaml`, then sets versionCode to `GITHUB_RUN_NUMBER` if greater than pubspec build, otherwise `pubspec build + 1`.
-- Failed cloud build: GitHub Actions run `29277705784` used remote commit `989e200f1388`, CI `APP_VERSION_CODE=137`, and failed before artifact upload because `Colors.white45` is not a Flutter color constant.
-- Next expected cloud build version: `2.0.50+138` or higher.
+- Failed cloud build: GitHub Actions run `29277705784` used remote commit `989e200f1388`, CI `APP_VERSION_CODE=137`, and failed before artifact upload because `Colors.white45` is not a Flutter color constant. Fixed by remote commit `1b0778b16da29083eea6d3101dfc50b69f93ede8`.
+- Next expected cloud build source metadata: `2.0.50+138`; expected CI artifact code `139` or higher.
 
 ## Dependencies And Release Safety
 - Package manager and lockfile: npm with `package-lock.json`; Flutter uses `pubspec.yaml` and intentionally ignores `pubspec.lock`.
@@ -33,12 +35,12 @@
 - Android dependencies: Termux terminal-view, RecyclerView, Media3, ffmpeg-kit-full, commons-compress, xz, zstd-jni.
 - Signing: workflow accepts `KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD`; if absent, release artifacts use debug signing fallback.
 - Release artifact naming: `CiYuanXia-v<version>-<versionCode>-arm64-v8a.apk`.
-- Last successful artifact checksum: APK SHA256 `c3b7985b80b0db156a51f617533298d5916161b26232d3539bf82ea9730361d7`; artifact ZIP digest `sha256:351c9dce99a033293bc9160c6fdf22a5dabbc6e7bd7fe476e0f13871878f549c`.
+- Last successful artifact checksum: APK SHA256 `e8de3ae0f9b6553c3f64c280da713c397658c8df28e197500cc73cd44755f775`; artifact ZIP digest `sha256:d10afef19e209374a41c7fcdce9672784822561cdbca7faabf7914277412f731`.
 - Secret hygiene: `.gitignore` excludes `.env`, `flutter_app/android/key.properties`, `*.jks`, `*.keystore`, local configs with API keys, and build output.
 - Runtime assets: `openclaw-rootfs-noble-arm64.tar.gz` is currently a Git LFS pointer; `basic-resource` Release stores large runtime assets and SHA256 values.
 
 ## Test Matrix
-- Static checks: npm ESLint passed again after the browser script assistant changes; `git diff --check` passed; GitHub Actions `flutter analyze --no-fatal-infos` completed successfully in run `29272795310`.
+- Static checks: npm ESLint passed again after the browser script assistant changes; `git diff --check` passed; GitHub Actions `flutter analyze --no-fatal-infos` completed successfully in run `29278136954`.
 - Unit tests: Node self-test passed again after the test fix; Flutter tests were not run locally or in the current workflow, which only runs analyze and the APK build.
 - Integration/E2E tests: no Flutter `integration_test`, Maestro, Appium, or emulator test workflow found.
 - Device/emulator/browser smoke target: none run in this session. Use Android 10+ arm64 device/emulator for install/setup/gateway smoke.

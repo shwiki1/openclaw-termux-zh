@@ -1468,14 +1468,6 @@ class _TerminalBrowserPanelState extends State<TerminalBrowserPanel>
     );
   }
 
-  Future<void> _handleBackButton() async {
-    await back();
-  }
-
-  Future<void> _handleForwardButton() async {
-    await forward();
-  }
-
   Future<void> _handleReloadButton() async {
     await reload();
   }
@@ -2015,20 +2007,6 @@ class _TerminalBrowserPanelState extends State<TerminalBrowserPanel>
                         ),
                       ),
                       const SizedBox(width: 6),
-                      _buildActionIcon(
-                        icon: Icons.arrow_back,
-                        enabled: _canGoBack,
-                        onTap: _canGoBack
-                            ? () => unawaited(_handleBackButton())
-                            : null,
-                      ),
-                      _buildActionIcon(
-                        icon: Icons.arrow_forward,
-                        enabled: _canGoForward,
-                        onTap: _canGoForward
-                            ? () => unawaited(_handleForwardButton())
-                            : null,
-                      ),
                       _buildActionIcon(
                         icon: Icons.refresh,
                         tooltip: 'Reload',

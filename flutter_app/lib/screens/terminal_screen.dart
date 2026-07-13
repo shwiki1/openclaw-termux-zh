@@ -28,6 +28,8 @@ class TerminalScreen extends StatefulWidget {
 }
 
 class _TerminalScreenState extends State<TerminalScreen> {
+  static const _defaultTerminalTranscriptRows = 3000;
+  static const _codexTerminalTranscriptRows = 1200;
   static final Map<String, List<_TerminalSessionTab>> _savedSessions = {};
   static final Map<String, int> _savedActiveIndexes = {};
 
@@ -441,6 +443,8 @@ class _TerminalScreenState extends State<TerminalScreen> {
 
   Widget _buildTerminal(_NativeTerminalConfig config) {
     final screenWidth = MediaQuery.sizeOf(context).width;
+    final compactCodexBrowser = _isCodexSession && screenWidth < 960;
+    final pauseTerminalRendering = compactCodexBrowser && _browserPanelOpen;
 
     final terminal = Column(
       children: [
@@ -454,6 +458,10 @@ class _TerminalScreenState extends State<TerminalScreen> {
             environment: config.environment,
             restart: _restartOnCreate,
             keepAlive: true,
+            renderingPaused: pauseTerminalRendering,
+            transcriptRows: _isCodexSession
+                ? _codexTerminalTranscriptRows
+                : _defaultTerminalTranscriptRows,
             fontSize: 18,
           ),
         ),
@@ -549,14 +557,22 @@ class _TerminalScreenState extends State<TerminalScreen> {
           ),
         ),
         if (shouldKeepBrowserMounted)
-          AnimatedPositioned(
-            duration: const Duration(milliseconds: 240),
-            curve: Curves.easeOutCubic,
+          Positioned(
             top: 0,
             bottom: 0,
-            right: _browserPanelOpen ? 0 : -panelWidth,
+            right: 0,
             width: panelWidth,
-            child: _buildPersistentBrowserPanel(),
+            child: IgnorePointer(
+              ignoring: !_browserPanelOpen,
+              child: AnimatedSlide(
+                offset: _browserPanelOpen ? Offset.zero : const Offset(1, 0),
+                duration: const Duration(milliseconds: 220),
+                curve: Curves.easeOutCubic,
+                child: RepaintBoundary(
+                  child: _buildPersistentBrowserPanel(),
+                ),
+              ),
+            ),
           ),
         if (!_browserPanelOpen)
           Positioned(

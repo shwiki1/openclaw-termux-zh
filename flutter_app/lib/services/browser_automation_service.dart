@@ -155,6 +155,7 @@ class BrowserAutomationService extends ChangeNotifier {
     'capture_snapshot',
   };
   static const _toolActionAliases = {
+    'browser_self_test': 'self_test',
     'browser_open': 'open',
     'browser_back': 'back',
     'browser_forward': 'forward',
@@ -172,6 +173,12 @@ class BrowserAutomationService extends ChangeNotifier {
     'browser_highlight': 'highlight',
     'browser_capture_snapshot': 'capture_snapshot',
     'browser_eval': 'eval',
+    'browser_script_list': 'script_list',
+    'browser_script_save': 'script_save',
+    'browser_script_run': 'script_run',
+    'browser_script_rename': 'script_rename',
+    'browser_script_delete': 'script_delete',
+    'browser_get_state': 'get_state',
   };
 
   HttpServer? _server;
@@ -437,7 +444,8 @@ class BrowserAutomationService extends ChangeNotifier {
     final action = request.uri.pathSegments.isNotEmpty
         ? request.uri.pathSegments.last.trim()
         : '';
-    if (action.isEmpty) {
+    final normalizedAction = _normalizeAction(action);
+    if (normalizedAction.isEmpty) {
       _writeJson(
         request.response,
         statusCode: HttpStatus.notFound,
@@ -450,7 +458,7 @@ class BrowserAutomationService extends ChangeNotifier {
     }
 
     final payload = await _readJsonBody(request);
-    final result = await _invokeAction(action, payload);
+    final result = await _invokeAction(normalizedAction, payload);
     _writeJson(request.response, body: result);
   }
 
@@ -828,7 +836,7 @@ class BrowserAutomationService extends ChangeNotifier {
     final stepResults = <Map<String, dynamic>>[];
     for (var i = 0; i < script.steps.length; i++) {
       final step = script.steps[i];
-      final action = _normalizeScriptAction(step.action);
+      final action = _normalizeAction(step.action);
       if (!_runnableScriptActions.contains(action)) {
         final result = {
           'index': i + 1,
@@ -921,7 +929,7 @@ class BrowserAutomationService extends ChangeNotifier {
         continue;
       }
       final json = rawStep.map((key, value) => MapEntry(key.toString(), value));
-      final action = _normalizeScriptAction(
+      final action = _normalizeAction(
         json['action']?.toString() ?? json['tool']?.toString() ?? '',
       );
       final payload = json.containsKey('payload')
@@ -941,7 +949,7 @@ class BrowserAutomationService extends ChangeNotifier {
     return steps;
   }
 
-  String _normalizeScriptAction(String action) {
+  String _normalizeAction(String action) {
     final normalized = action.trim();
     if (normalized.isEmpty) {
       return '';

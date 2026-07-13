@@ -90,6 +90,7 @@ void main() {
 
     final browserMcp = rootfsFiles['/root/.openclaw/browser-mcp.mjs']!;
     expect(browserMcp, contains('browser_get_state'));
+    expect(browserMcp, contains('browser_control'));
     expect(browserMcp, contains('browser_open'));
     expect(browserMcp, contains('browser_wait_for_selector'));
     expect(browserMcp, contains('browser_scroll'));
@@ -105,7 +106,9 @@ void main() {
     expect(browserMcp, contains('browser_press_key: "press_key"'));
     expect(browserMcp, contains('browser_select_option: "select_option"'));
     expect(browserMcp, contains('browser_script_run: "script_run"'));
-    expect(browserMcp, contains('version: "1.2.0"'));
+    expect(browserMcp, contains('function normalizeBridgeAction'));
+    expect(browserMcp, contains('toolName === "browser_control"'));
+    expect(browserMcp, contains('version: "1.3.0"'));
     expect(
       browserMcp,
       contains('process.stdout.write(payload.toString("utf8") + "\\n")'),
@@ -114,13 +117,26 @@ void main() {
 
     final browserScriptLauncher =
         rootfsFiles['/root/.openclaw/bin/browser-script']!;
+    expect(
+      browserScriptLauncher,
+      contains('browser-script call <action-or-browser_tool> [json-payload]'),
+    );
+    expect(
+      browserScriptLauncher,
+      contains('browser-script interactables [filter] [maxItems]'),
+    );
     expect(browserScriptLauncher, contains('browser-script run <script-id>'));
+    expect(browserScriptLauncher, contains('bridge_action="capture_snapshot"'));
     expect(browserScriptLauncher, contains('bridge_action="script_run"'));
+    expect(browserScriptLauncher, contains('const ACTION_ALIASES = {'));
+    expect(browserScriptLauncher, contains('browser_type: "type"'));
     expect(browserScriptLauncher, contains('OPENCLAW_BROWSER_BRIDGE_TOKEN'));
 
     final browserSkill =
         rootfsFiles['/root/.codex/skills/browser-operator/SKILL.md']!;
     expect(browserSkill, contains('browser_get_state'));
+    expect(browserSkill, contains('browser_control'));
+    expect(browserSkill, contains('browser-script call'));
     expect(browserSkill, contains('browser_wait_for_selector'));
     expect(browserSkill, contains('browser_scroll'));
     expect(browserSkill, contains('browser_press_key'));
