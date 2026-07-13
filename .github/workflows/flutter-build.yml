@@ -80,7 +80,7 @@ jobs:
           fi
 
       - name: Build bundled OpenClaw rootfs
-        if: ${{ vars.BUILD_BUNDLED_ROOTFS == 'true' && steps.restore_rootfs.outputs.restored != 'true' }}
+        if: ${{ steps.restore_rootfs.outputs.restored != 'true' }}
         run: |
           set -euo pipefail
           bash scripts/build-prebuilt-rootfs.sh --no-docker --arch arm64 --mirror http://mirrors.ustc.edu.cn/ubuntu-ports
