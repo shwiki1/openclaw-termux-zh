@@ -31,6 +31,7 @@ class _TerminalScreenState extends State<TerminalScreen> {
   static final Map<String, List<_TerminalSessionTab>> _savedSessions = {};
   static final Map<String, int> _savedActiveIndexes = {};
 
+  final _scaffoldKey = GlobalKey<ScaffoldState>();
   var _terminalKey = GlobalKey<NativeTerminalViewState>();
   final _browserService = BrowserAutomationService.instance;
   late final TerminalInputController _terminalInput;
@@ -44,12 +45,21 @@ class _TerminalScreenState extends State<TerminalScreen> {
 
   _TerminalSessionTab get _activeSession => _sessions[_activeIndex];
 
+  bool get _isCodexSession {
+    final command = widget.initialCommand?.toLowerCase() ?? '';
+    return widget.sessionId.toLowerCase().contains('codex') ||
+        widget.title.toLowerCase().contains('codex') ||
+        command.contains('codex');
+  }
+
   @override
   void initState() {
     super.initState();
     NativeBridge.startTerminalService().catchError((_) => false);
-    _browserService.ensureStarted().catchError((_) => false);
-    _browserService.addListener(_handleBrowserAutomationUpdate);
+    if (_isCodexSession) {
+      _browserService.ensureStarted().catchError((_) => false);
+      _browserService.addListener(_handleBrowserAutomationUpdate);
+    }
     if (widget.restartOnOpen) {
       _savedSessions.remove(widget.sessionId);
       _savedActiveIndexes.remove(widget.sessionId);
@@ -88,7 +98,9 @@ class _TerminalScreenState extends State<TerminalScreen> {
     if (!_closedAllSessions) {
       _persistSessionTabs();
     }
-    _browserService.removeListener(_handleBrowserAutomationUpdate);
+    if (_isCodexSession) {
+      _browserService.removeListener(_handleBrowserAutomationUpdate);
+    }
     _terminalInput.dispose();
     super.dispose();
   }
@@ -103,11 +115,15 @@ class _TerminalScreenState extends State<TerminalScreen> {
     }
     _lastBrowserPanelRequestNonce = requestNonce;
     final screenWidth = MediaQuery.sizeOf(context).width;
-    if (screenWidth >= 960 || _browserPanelOpen) {
+    final drawerOpen =
+        _scaffoldKey.currentState?.isEndDrawerOpen ?? _browserPanelOpen;
+    if (screenWidth >= 960 || drawerOpen) {
       return;
     }
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || _browserPanelOpen) {
+      final drawerOpen =
+          _scaffoldKey.currentState?.isEndDrawerOpen ?? _browserPanelOpen;
+      if (!mounted || drawerOpen) {
         return;
       }
       _openBrowserPanel(autoRequested: true);
@@ -188,8 +204,21 @@ class _TerminalScreenState extends State<TerminalScreen> {
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.sizeOf(context).width;
     final compactActions = screenWidth < 420;
+    final hasDrawerBrowser = _isCodexSession && screenWidth < 960;
     return Scaffold(
+      key: _scaffoldKey,
       backgroundColor: Colors.black,
+      endDrawer: hasDrawerBrowser ? _buildBrowserDrawer(screenWidth) : null,
+      endDrawerEnableOpenDragGesture: hasDrawerBrowser,
+      drawerScrimColor: Colors.black54,
+      onEndDrawerChanged: (opened) {
+        if (!mounted || _browserPanelOpen == opened) {
+          return;
+        }
+        setState(() {
+          _browserPanelOpen = opened;
+        });
+      },
       appBar: AppBar(
         backgroundColor: Colors.black,
         foregroundColor: Colors.white,
@@ -261,11 +290,12 @@ class _TerminalScreenState extends State<TerminalScreen> {
 
   List<Widget> _buildToolbarActions() {
     return [
-      IconButton(
-        icon: const Icon(Icons.language),
-        tooltip: 'Browser panel',
-        onPressed: _openBrowserPanel,
-      ),
+      if (_isCodexSession)
+        IconButton(
+          icon: const Icon(Icons.language),
+          tooltip: 'Browser panel',
+          onPressed: _openBrowserPanel,
+        ),
       IconButton(
         icon: const Icon(Icons.add),
         tooltip: 'New session',
@@ -317,8 +347,10 @@ class _TerminalScreenState extends State<TerminalScreen> {
         }
       },
       itemBuilder: (context) => [
-        const PopupMenuItem(value: 'browser', child: Text('Browser panel')),
-        const PopupMenuDivider(),
+        if (_isCodexSession) ...[
+          const PopupMenuItem(value: 'browser', child: Text('Browser panel')),
+          const PopupMenuDivider(),
+        ],
         const PopupMenuItem(value: 'new', child: Text('New session')),
         const PopupMenuDivider(),
         for (var i = 0; i < _sessions.length; i++)
@@ -415,7 +447,7 @@ class _TerminalScreenState extends State<TerminalScreen> {
 
     final terminal = Column(
       children: [
-        _buildBrowserStatusBanner(screenWidth),
+        if (_isCodexSession) _buildBrowserStatusBanner(screenWidth),
         Expanded(
           child: NativeTerminalView(
             key: _terminalKey,
@@ -436,11 +468,11 @@ class _TerminalScreenState extends State<TerminalScreen> {
       ],
     );
 
-    if (screenWidth < 960) {
+    if (!_isCodexSession || screenWidth < 960) {
       return terminal;
     }
 
-    final browserWidth = screenWidth >= 1320 ? 420.0 : 360.0;
+    final browserWidth = screenWidth >= 1320 ? 520.0 : 420.0;
     return Row(
       children: [
         Expanded(child: terminal),
@@ -453,6 +485,9 @@ class _TerminalScreenState extends State<TerminalScreen> {
   }
 
   void _openBrowserPanel({bool autoRequested = false}) {
+    if (!_isCodexSession) {
+      return;
+    }
     final screenWidth = MediaQuery.sizeOf(context).width;
     if (screenWidth >= 960) {
       if (!autoRequested) {
@@ -465,16 +500,28 @@ class _TerminalScreenState extends State<TerminalScreen> {
       return;
     }
 
-    _browserPanelOpen = true;
-    Navigator.of(context)
-        .push(
-      MaterialPageRoute(
-        builder: (_) => const _TerminalBrowserPage(),
+    final scaffold = _scaffoldKey.currentState;
+    if (scaffold == null || scaffold.isEndDrawerOpen) {
+      return;
+    }
+    scaffold.openEndDrawer();
+  }
+
+  Widget _buildBrowserDrawer(double screenWidth) {
+    final drawerWidth = screenWidth < 600 ? screenWidth * 0.94 : 560.0;
+    return Drawer(
+      width: drawerWidth > screenWidth ? screenWidth : drawerWidth,
+      backgroundColor: Colors.black,
+      elevation: 12,
+      shape: const RoundedRectangleBorder(),
+      child: TerminalBrowserPanel(
+        onClose: () {
+          if (_scaffoldKey.currentState?.isEndDrawerOpen ?? false) {
+            Navigator.of(context).pop();
+          }
+        },
       ),
-    )
-        .whenComplete(() {
-          _browserPanelOpen = false;
-        });
+    );
   }
 
   Widget _buildBrowserStatusBanner(double screenWidth) {
@@ -612,23 +659,4 @@ class _TerminalSessionTab {
     required this.id,
     required this.title,
   });
-}
-
-class _TerminalBrowserPage extends StatelessWidget {
-  const _TerminalBrowserPage();
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.black,
-      appBar: AppBar(
-        backgroundColor: Colors.black,
-        foregroundColor: Colors.white,
-        title: const Text('Browser Panel'),
-      ),
-      body: const TerminalBrowserPanel(
-        standalone: true,
-      ),
-    );
-  }
 }

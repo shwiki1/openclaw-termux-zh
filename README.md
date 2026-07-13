@@ -27,7 +27,7 @@
 - 应用名：`次元虾`
 - Android 包名：`com.agent.cyx`
 - 版本名：`2.0.50`
-- 构建号：`126`
+- 构建号：`133`
 - 发布产物前缀：`CiYuanXia-v`
 - Dart 包名仍保留为 `openclaw`，用于兼容现有 Flutter 测试导入。
 
@@ -103,13 +103,13 @@ flutter build apk --release
 生成发布目录：
 
 ```bash
-python scripts/build_release.py --version 2.0.50 --build-number 126
+python scripts/build_release.py --version 2.0.50 --build-number 133
 ```
 
 GitHub Actions 构建产物命名：
 
 ```text
-CiYuanXia-v2.0.50-126-arm64-v8a.apk
+CiYuanXia-v2.0.50-133-arm64-v8a.apk
 ```
 
 ## 验证

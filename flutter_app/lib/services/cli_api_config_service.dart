@@ -1613,6 +1613,107 @@ const TOOL_DEFS = [
     },
   },
   {
+    name: "browser_wait_for_selector",
+    description:
+      "Wait until a CSS selector exists, and by default is visible, on the current page.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        selector: {
+          type: "string",
+          description: "CSS selector that must appear on the page.",
+        },
+        timeoutMs: {
+          type: "integer",
+          description: "Maximum wait time in milliseconds.",
+          minimum: 500,
+          maximum: 120000,
+        },
+        visible: {
+          type: "boolean",
+          description: "Whether the element must also be visible. Defaults to true.",
+        },
+      },
+      required: ["selector"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "browser_scroll",
+    description:
+      "Scroll the page or a scrollable CSS-selected element. Useful before searching for below-the-fold controls.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        selector: {
+          type: "string",
+          description: "Optional CSS selector for a scrollable element. Omit to scroll the page.",
+        },
+        direction: {
+          type: "string",
+          enum: ["down", "up", "left", "right", "top", "bottom"],
+          description: "Scroll direction. Defaults to down.",
+        },
+        pixels: {
+          type: "integer",
+          description: "Scroll distance in pixels for relative directions.",
+          minimum: 50,
+          maximum: 5000,
+        },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "browser_press_key",
+    description:
+      "Press a keyboard key on the active element or a CSS-selected element, such as Enter, Escape, Tab, or ArrowDown.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        selector: {
+          type: "string",
+          description: "Optional CSS selector to focus before pressing the key.",
+        },
+        key: {
+          type: "string",
+          description: "Keyboard key value, for example Enter, Escape, Tab, ArrowDown, or a single character.",
+        },
+      },
+      required: ["key"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "browser_select_option",
+    description:
+      "Select an option in a native HTML select element by value, visible label, or zero-based index.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        selector: {
+          type: "string",
+          description: "CSS selector for the select element.",
+        },
+        value: {
+          type: "string",
+          description: "Option value to select.",
+        },
+        label: {
+          type: "string",
+          description: "Visible option label or text to select.",
+        },
+        index: {
+          type: "integer",
+          description: "Zero-based option index to select.",
+          minimum: 0,
+        },
+      },
+      required: ["selector"],
+      additionalProperties: false,
+    },
+  },
+  {
     name: "browser_extract",
     description:
       "Extract readable text, HTML, and top links from the current page or from a CSS-selected subtree.",
@@ -1753,6 +1854,10 @@ const TOOL_TO_ACTION = {
   browser_click: "click",
   browser_type: "type",
   browser_wait_for_text: "wait_for_text",
+  browser_wait_for_selector: "wait_for_selector",
+  browser_scroll: "scroll",
+  browser_press_key: "press_key",
+  browser_select_option: "select_option",
   browser_extract: "extract",
   browser_list_links: "list_links",
   browser_list_interactables: "list_interactables",
@@ -1869,10 +1974,10 @@ async function onRequest(message) {
       },
       serverInfo: {
         name: "openclaw-browser",
-        version: "1.0.0",
+        version: "1.1.0",
       },
       instructions:
-        "Use the OpenClaw browser tools for deterministic page navigation, clicking, typing, waiting, and extraction inside the in-app browser panel.",
+        "Use the OpenClaw browser tools for deterministic page navigation, scrolling, clicking, typing, selection, waiting, and extraction inside the in-app browser panel.",
     });
     return;
   }
@@ -2033,22 +2138,25 @@ Rules:
 1. Start with `browser_get_state` so you know whether the browser panel is attached.
 2. Use `browser_self_test` when checking whether the browser bridge is working or after an attachment/navigation failure.
 3. If the tool reports that the browser panel is unavailable, stop and tell the user to open the browser panel from the terminal screen.
-4. Prefer `browser_open`, `browser_wait_for_text`, `browser_list_interactables`, `browser_highlight`, `browser_click`, `browser_type`, and `browser_extract` over `browser_eval`.
+4. Prefer `browser_open`, `browser_wait_for_text`, `browser_wait_for_selector`, `browser_scroll`, `browser_list_interactables`, `browser_highlight`, `browser_click`, `browser_type`, `browser_select_option`, `browser_press_key`, and `browser_extract` over `browser_eval`.
 5. Use stable CSS selectors. Avoid fragile positional selectors unless there is no better choice.
 6. Before any action that could submit a form, log in, send a message, spend money, or change user data, ask for confirmation.
-7. After a navigation or form submit, wait with `browser_wait_for_text` before assuming the page is ready.
+7. After a navigation or form submit, wait with `browser_wait_for_text` or `browser_wait_for_selector` before assuming the page is ready.
 8. When extracting content, keep the result focused. Use `selector` whenever possible instead of dumping the whole page.
 9. If the next selector is unclear, call `browser_list_interactables` or `browser_list_links` first and choose from the returned candidates.
 10. If a selector is risky, call `browser_highlight` before clicking so the user can visually confirm the target.
+11. Use `browser_scroll` for below-the-fold content before falling back to broad extraction.
+12. Use `browser_press_key` for keyboard-driven UI and `browser_select_option` for native dropdowns.
 
 Typical flow:
 1. `browser_open`
-2. `browser_wait_for_text`
+2. `browser_wait_for_text` or `browser_wait_for_selector`
 3. `browser_list_interactables`
-4. `browser_highlight`
-5. `browser_click` or `browser_type`
-6. `browser_capture_snapshot` or `browser_extract`
-7. Fall back to `browser_eval` only if the built-in actions are insufficient.
+4. `browser_scroll` if the needed element is not visible
+5. `browser_highlight`
+6. `browser_click`, `browser_type`, `browser_select_option`, or `browser_press_key`
+7. `browser_capture_snapshot` or `browser_extract`
+8. Fall back to `browser_eval` only if the built-in actions are insufficient.
 ''';
   }
 

@@ -9,7 +9,7 @@ CiYuanXia is a community-maintained Android integration app for OpenClaw, focuse
 - App name: `次元虾`
 - Android package: `com.agent.cyx`
 - Version name: `2.0.50`
-- Build number: `126`
+- Build number: `133`
 - Release artifact prefix: `CiYuanXia-v`
 - The Dart package name remains `openclaw` for compatibility with existing Flutter test imports.
 
@@ -46,13 +46,13 @@ flutter build apk --release
 Release helper:
 
 ```bash
-python scripts/build_release.py --version 2.0.50 --build-number 126
+python scripts/build_release.py --version 2.0.50 --build-number 133
 ```
 
 GitHub Actions artifact naming:
 
 ```text
-CiYuanXia-v2.0.50-126-arm64-v8a.apk
+CiYuanXia-v2.0.50-133-arm64-v8a.apk
 ```
 
 ## Verification

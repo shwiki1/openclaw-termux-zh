@@ -91,6 +91,15 @@ void main() {
     final browserMcp = rootfsFiles['/root/.openclaw/browser-mcp.mjs']!;
     expect(browserMcp, contains('browser_get_state'));
     expect(browserMcp, contains('browser_open'));
+    expect(browserMcp, contains('browser_wait_for_selector'));
+    expect(browserMcp, contains('browser_scroll'));
+    expect(browserMcp, contains('browser_press_key'));
+    expect(browserMcp, contains('browser_select_option'));
+    expect(browserMcp, contains('browser_wait_for_selector: "wait_for_selector"'));
+    expect(browserMcp, contains('browser_scroll: "scroll"'));
+    expect(browserMcp, contains('browser_press_key: "press_key"'));
+    expect(browserMcp, contains('browser_select_option: "select_option"'));
+    expect(browserMcp, contains('version: "1.1.0"'));
     expect(
       browserMcp,
       contains('process.stdout.write(payload.toString("utf8") + "\\n")'),
@@ -100,6 +109,10 @@ void main() {
     final browserSkill =
         rootfsFiles['/root/.codex/skills/browser-operator/SKILL.md']!;
     expect(browserSkill, contains('browser_get_state'));
+    expect(browserSkill, contains('browser_wait_for_selector'));
+    expect(browserSkill, contains('browser_scroll'));
+    expect(browserSkill, contains('browser_press_key'));
+    expect(browserSkill, contains('browser_select_option'));
   });
 
   test('Codex API key without custom base URL still uses API auth', () async {

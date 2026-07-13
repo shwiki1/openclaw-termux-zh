@@ -5,11 +5,12 @@
 ### 关键改动
 
 - **品牌与包名统一**：应用显示名统一为“次元虾”，Android `applicationId`、`namespace`、Kotlin 包声明和 MethodChannel 均统一为 `com.agent.cyx`。
-- **版本元数据统一**：Flutter、应用常量、Node 兼容包和发布文档统一到 `2.0.50+126`，构建产物使用 `CiYuanXia-v` 前缀。
+- **版本元数据统一**：Flutter、应用常量、Node 兼容包和发布文档统一到 `2.0.50+133`，构建产物使用 `CiYuanXia-v` 前缀。
 - **运行时资源对齐**：默认 Node.js 版本对齐随包资源 `24.14.1`，避免常量指向未随包提供的资源版本。
 - **OpenClaw 推荐版本跟随 latest 稳定版**：首次安装和版本选择默认推荐 npm `openclaw@latest` 的稳定版本；版本列表过滤 beta、rc、test、preview 等预发布版本。
 - **运行时要求已按最新 OpenClaw 核对**：当前 npm `openclaw@latest` 为 `2026.6.11`，要求 Node.js `>=22.19.0`；初始化环境文案同步为 Ubuntu 24.04.3、Node.js 24.14.1（arm64/x86_64）与 Node.js 22.22.2（armv7）。
 - **新增 Android 推荐预配置**：安装完成后可直接写入 Android 友好的 `openclaw.json`，包含本地网关、随机 token、工作区、节点能力白名单和 Web 控制台设置，减少用户面对终端初始化问答的负担。
+- **Codex 浏览器自动化增强**：内置 browser MCP 新增等待选择器、滚动页面、键盘按键和下拉选择工具，提升 Codex CLI 在移动端 WebView 内处理登录、搜索、长页面和表单流程的稳定性。
 - **自定义模型支持推理强度**：自定义模型提供商新增可选“模型推理强度”，保存为模型配置字段 `thinking`，支持 `off`、`minimal`、`low`、`medium`、`high`、`xhigh`、`adaptive`、`max`。
 - **测试覆盖补强**：新增 OpenClaw 稳定版过滤测试，以及推荐预配置生成测试，防止后续改动重新暴露测试版本或破坏免初始化配置。
 

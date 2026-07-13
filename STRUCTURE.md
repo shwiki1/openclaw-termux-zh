@@ -1,6 +1,6 @@
 # 次元虾 — 源码结构文档
 
-> 版本：v2.0.50+126 | 协议：MIT | 更新日期：2026-07-12
+> 版本：v2.0.50+133 | 协议：MIT | 更新日期：2026-07-13
 >
 > 本文档用于二次开发前的源码理解，按"从外到内"的方式组织：先看项目全貌，再逐层深入。本文已按当前工作区源码重新核对。
 
@@ -597,16 +597,16 @@ context.l10n.t('gateway.start')     // → "启动网关"
 ### 9.1 环境要求
 
 - Flutter SDK >= 3.2.0
-- Android SDK（NDK 支持多架构）
+- Android SDK（当前发布目标为 `arm64-v8a`）
 - Node.js >= 18（用于 CLI 部分）
 - Python 3（用于构建脚本）
 - bash（用于 `scripts/fetch-proot-binaries.sh` 等脚本）
 
 当前工作区核对结果：
 
-- `node` / `npm` 可用，本机 Node.js 为 `v24.14.1`。
+- `node` / `npm` 可用，本机 Node.js 为 `v24.14.1`，npm 为 `11.13.0`。
 - 当前 shell 环境未找到 `flutter` / `dart`，因此本机暂不能直接运行 Flutter 测试或 APK 构建。
-- 当前目录不是 Git 仓库；二次开发前建议先初始化 Git 或重新 clone 上游仓库。
+- 当前目录是 Git 仓库，当前分支为 `codex-termux-runtime-fix`。
 - 项目根目录尚未安装 `node_modules` 时，`npm run lint` 会因为找不到 `eslint` 失败；普通文件系统先执行 `npm install` 或 `npm ci`。
 - 如果项目位于 Android 共享存储（如 `/storage/emulated/0/...`），该文件系统通常不支持 npm 创建 `.bin` symlink；请使用 `npm ci --no-bin-links`，再用 `node node_modules/eslint/bin/eslint.js . --no-warn-ignored` 运行 lint。
 
@@ -664,13 +664,13 @@ bash scripts/build-prebuilt-rootfs.sh
 
 ### 9.4 CI/CD
 
-`.github/workflows/flutter-build.yml` — GitHub Actions 自动构建多架构 APK。
+`.github/workflows/flutter-build.yml` — GitHub Actions 自动构建 `arm64-v8a` APK。
 
 ### 9.5 APK 分发包
 
 | 文件名 | ABI | 大小 |
 |---|---|---|
-| `CiYuanXia-v2.0.50-126-arm64-v8a.apk` | 64 位 ARM | 以实际构建结果为准 |
+| `CiYuanXia-v2.0.50-133-arm64-v8a.apk` | 64 位 ARM | 以实际构建结果为准 |
 
 ---
 
@@ -840,9 +840,9 @@ flutter pub get
 flutter analyze
 flutter test
 
-# 远程：构建 APK / AAB
+# 远程：构建 arm64-v8a APK
 cd ~/openclaw-termux-zh
-python scripts/build_release.py --version 2.0.50 --build-number 126
+python scripts/build_release.py --version 2.0.50 --build-number 133
 ```
 
 远程构建机首次准备建议：

@@ -35,23 +35,47 @@ abstract class BrowserAutomationDelegate {
 
   Future<Map<String, dynamic>> waitForText({
     required String text,
-    int timeoutMs,
+    int timeoutMs = 10000,
+  });
+
+  Future<Map<String, dynamic>> waitForSelector({
+    required String selector,
+    int timeoutMs = 10000,
+    bool visible = true,
+  });
+
+  Future<Map<String, dynamic>> scroll({
+    String? selector,
+    String direction = 'down',
+    int pixels = 700,
+  });
+
+  Future<Map<String, dynamic>> pressKey({
+    String? selector,
+    required String key,
+  });
+
+  Future<Map<String, dynamic>> selectOption({
+    required String selector,
+    String? value,
+    String? label,
+    int? index,
   });
 
   Future<Map<String, dynamic>> extract({
     String? selector,
     String? prompt,
-    int maxLength,
+    int maxLength = 4000,
   });
 
   Future<Map<String, dynamic>> listLinks({
     String? filter,
-    int maxItems,
+    int maxItems = 12,
   });
 
   Future<Map<String, dynamic>> listInteractables({
     String? filter,
-    int maxItems,
+    int maxItems = 16,
   });
 
   Future<Map<String, dynamic>> highlight({
@@ -60,7 +84,7 @@ abstract class BrowserAutomationDelegate {
 
   Future<Map<String, dynamic>> captureSnapshot({
     String? selector,
-    int maxLength,
+    int maxLength = 8000,
   });
 
   Future<Map<String, dynamic>> eval({
@@ -419,6 +443,39 @@ class BrowserAutomationService extends ChangeNotifier {
           state = await delegate.waitForText(
             text: _string(payload['text']),
             timeoutMs: _int(payload['timeoutMs'], fallback: 10000),
+          );
+          break;
+        case 'wait_for_selector':
+          state = await delegate.waitForSelector(
+            selector: _string(payload['selector']),
+            timeoutMs: _int(payload['timeoutMs'], fallback: 10000),
+            visible: payload['visible'] != false,
+          );
+          break;
+        case 'scroll':
+          state = await delegate.scroll(
+            selector: _nullableString(payload['selector']),
+            direction: _stringOrFallback(
+              payload['direction'],
+              fallback: 'down',
+            ),
+            pixels: _int(payload['pixels'], fallback: 700),
+          );
+          break;
+        case 'press_key':
+          state = await delegate.pressKey(
+            selector: _nullableString(payload['selector']),
+            key: _string(payload['key']),
+          );
+          break;
+        case 'select_option':
+          state = await delegate.selectOption(
+            selector: _string(payload['selector']),
+            value: _nullableString(payload['value']),
+            label: _nullableString(payload['label']),
+            index: payload.containsKey('index')
+                ? _int(payload['index'], fallback: -1)
+                : null,
           );
           break;
         case 'extract':

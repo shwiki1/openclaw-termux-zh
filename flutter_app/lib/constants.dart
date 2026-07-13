@@ -3,7 +3,7 @@ class AppConstants {
   static const String version =
       String.fromEnvironment('APP_VERSION_NAME', defaultValue: '2.0.50');
   static const String buildNumber =
-      String.fromEnvironment('APP_VERSION_CODE', defaultValue: '126');
+      String.fromEnvironment('APP_VERSION_CODE', defaultValue: '133');
   static const String fullVersion = '$version+$buildNumber';
   static const String displayVersion =
       buildNumber == '1' ? version : fullVersion;

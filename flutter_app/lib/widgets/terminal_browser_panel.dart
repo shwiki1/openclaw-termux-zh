@@ -13,10 +13,12 @@ import '../services/preferences_service.dart';
 
 class TerminalBrowserPanel extends StatefulWidget {
   final bool standalone;
+  final VoidCallback? onClose;
 
   const TerminalBrowserPanel({
     super.key,
     this.standalone = false,
+    this.onClose,
   });
 
   @override
@@ -679,6 +681,329 @@ class _TerminalBrowserPanelState extends State<TerminalBrowserPanel>
     return _pageSnapshot(
       ok: false,
       message: 'Timed out while waiting for the requested text.',
+    );
+  }
+
+  @override
+  Future<Map<String, dynamic>> waitForSelector({
+    required String selector,
+    int timeoutMs = 10000,
+    bool visible = true,
+  }) async {
+    if (selector.trim().isEmpty) {
+      return _pageSnapshot(
+        ok: false,
+        message: 'The selector argument cannot be empty.',
+      );
+    }
+    final deadline = DateTime.now().millisecondsSinceEpoch + timeoutMs;
+    while (DateTime.now().millisecondsSinceEpoch < deadline) {
+      final script = '''
+(() => {
+  const selector = ${jsonEncode(selector)};
+  const requireVisible = ${visible ? 'true' : 'false'};
+  const element = document.querySelector(selector);
+  if (!element) {
+    return JSON.stringify({ ok: false, found: false, visible: false });
+  }
+  const rect = element.getBoundingClientRect();
+  const style = window.getComputedStyle(element);
+  const isVisible = rect.width > 0 &&
+    rect.height > 0 &&
+    style.visibility !== 'hidden' &&
+    style.display !== 'none' &&
+    Number(style.opacity || '1') > 0;
+  return JSON.stringify({
+    ok: requireVisible ? isVisible : true,
+    found: true,
+    visible: isVisible,
+    tag: element.tagName || '',
+    text: (element.innerText || element.textContent || element.value || '')
+      .trim()
+      .slice(0, 240),
+    rect: {
+      x: Math.round(rect.x),
+      y: Math.round(rect.y),
+      width: Math.round(rect.width),
+      height: Math.round(rect.height)
+    }
+  });
+})();
+''';
+      final raw = await _runStringJs(script);
+      if (raw != null) {
+        final decoded = jsonDecode(raw) as Map<String, dynamic>;
+        if (decoded['ok'] == true) {
+          return _pageSnapshot(
+            message: visible
+                ? 'Found the visible selector on the page.'
+                : 'Found the requested selector on the page.',
+            extra: {'actionResult': decoded},
+          );
+        }
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+    }
+    return _pageSnapshot(
+      ok: false,
+      message: visible
+          ? 'Timed out while waiting for the visible selector.'
+          : 'Timed out while waiting for the requested selector.',
+    );
+  }
+
+  @override
+  Future<Map<String, dynamic>> scroll({
+    String? selector,
+    String direction = 'down',
+    int pixels = 700,
+  }) async {
+    final safePixels = pixels.clamp(50, 5000);
+    final safeDirection = direction.trim().toLowerCase().isEmpty
+        ? 'down'
+        : direction.trim().toLowerCase();
+    final script = '''
+(() => {
+  const selector = ${jsonEncode(selector?.trim() ?? '')};
+  const direction = ${jsonEncode(safeDirection)};
+  const pixels = $safePixels;
+  const root = document.scrollingElement || document.documentElement || document.body;
+  const target = selector ? document.querySelector(selector) : root;
+  if (!target) {
+    return JSON.stringify({ ok: false, message: `Selector not found: \${selector}` });
+  }
+
+  const isPage = target === root || target === document.body || target === document.documentElement;
+  const before = {
+    x: isPage ? window.scrollX : target.scrollLeft,
+    y: isPage ? window.scrollY : target.scrollTop
+  };
+  let dx = 0;
+  let dy = 0;
+  let absolute = false;
+  let top = 0;
+  let left = 0;
+  switch (direction) {
+    case 'up':
+      dy = -pixels;
+      break;
+    case 'left':
+      dx = -pixels;
+      break;
+    case 'right':
+      dx = pixels;
+      break;
+    case 'top':
+      absolute = true;
+      top = 0;
+      left = before.x;
+      break;
+    case 'bottom':
+      absolute = true;
+      top = isPage ? root.scrollHeight : target.scrollHeight;
+      left = before.x;
+      break;
+    case 'down':
+    default:
+      dy = pixels;
+      break;
+  }
+
+  if (isPage) {
+    if (absolute) {
+      window.scrollTo({ left, top, behavior: 'instant' });
+    } else {
+      window.scrollBy({ left: dx, top: dy, behavior: 'instant' });
+    }
+  } else if (absolute) {
+    target.scrollTo({ left, top, behavior: 'instant' });
+  } else {
+    target.scrollBy({ left: dx, top: dy, behavior: 'instant' });
+  }
+
+  const after = {
+    x: isPage ? window.scrollX : target.scrollLeft,
+    y: isPage ? window.scrollY : target.scrollTop
+  };
+  return JSON.stringify({
+    ok: true,
+    message: `Scrolled \${direction}.`,
+    selector: selector || null,
+    before,
+    after,
+    max: {
+      width: isPage ? root.scrollWidth : target.scrollWidth,
+      height: isPage ? root.scrollHeight : target.scrollHeight
+    }
+  });
+})();
+''';
+    final raw = await _runStringJs(script);
+    if (raw == null) {
+      return _pageSnapshot(
+        ok: false,
+        message: 'Failed to run the scroll action in WebView.',
+      );
+    }
+    final decoded = jsonDecode(raw) as Map<String, dynamic>;
+    return _pageSnapshot(
+      ok: decoded['ok'] != false,
+      message: decoded['message']?.toString() ?? 'Scrolled page.',
+      extra: {'actionResult': decoded},
+    );
+  }
+
+  @override
+  Future<Map<String, dynamic>> pressKey({
+    String? selector,
+    required String key,
+  }) async {
+    if (key.trim().isEmpty) {
+      return _pageSnapshot(
+        ok: false,
+        message: 'The key argument cannot be empty.',
+      );
+    }
+    final script = '''
+(() => {
+  const selector = ${jsonEncode(selector?.trim() ?? '')};
+  const key = ${jsonEncode(key.trim())};
+  let target = selector ? document.querySelector(selector) : document.activeElement;
+  if (selector && !target) {
+    return JSON.stringify({ ok: false, message: `Selector not found: \${selector}` });
+  }
+  if (!target || target === document.body || target === document.documentElement) {
+    target = document.querySelector('input, textarea, select, button, a[href], [tabindex], [contenteditable="true"]') || document.body;
+  }
+  if (typeof target.focus === 'function') {
+    target.focus();
+  }
+
+  const code = key.length === 1 ? `Key\${key.toUpperCase()}` : key;
+  const eventInit = { key, code, bubbles: true, cancelable: true };
+  const down = target.dispatchEvent(new KeyboardEvent('keydown', eventInit));
+  target.dispatchEvent(new KeyboardEvent('keypress', eventInit));
+  const up = target.dispatchEvent(new KeyboardEvent('keyup', eventInit));
+
+  if (key === 'Enter' && down !== false) {
+    const form = target.form || target.closest?.('form');
+    if (form && typeof form.requestSubmit === 'function') {
+      form.requestSubmit();
+    }
+  }
+
+  return JSON.stringify({
+    ok: true,
+    message: `Pressed \${key}.`,
+    selector: selector || null,
+    canceled: down === false || up === false,
+    activeTag: document.activeElement?.tagName || '',
+    activeText: (
+      document.activeElement?.innerText ||
+      document.activeElement?.textContent ||
+      document.activeElement?.value ||
+      ''
+    ).trim().slice(0, 160)
+  });
+})();
+''';
+    final raw = await _runStringJs(script);
+    if (raw == null) {
+      return _pageSnapshot(
+        ok: false,
+        message: 'Failed to run the key press action in WebView.',
+      );
+    }
+    final decoded = jsonDecode(raw) as Map<String, dynamic>;
+    return _pageSnapshot(
+      ok: decoded['ok'] != false,
+      message: decoded['message']?.toString() ?? 'Key pressed.',
+      extra: {'actionResult': decoded},
+    );
+  }
+
+  @override
+  Future<Map<String, dynamic>> selectOption({
+    required String selector,
+    String? value,
+    String? label,
+    int? index,
+  }) async {
+    if (selector.trim().isEmpty) {
+      return _pageSnapshot(
+        ok: false,
+        message: 'The selector argument cannot be empty.',
+      );
+    }
+    final hasValue = value?.trim().isNotEmpty ?? false;
+    final hasLabel = label?.trim().isNotEmpty ?? false;
+    final hasIndex = index != null && index >= 0;
+    if (!hasValue && !hasLabel && !hasIndex) {
+      return _pageSnapshot(
+        ok: false,
+        message: 'Provide value, label, or index for the option to select.',
+      );
+    }
+    final script = '''
+(() => {
+  const selector = ${jsonEncode(selector)};
+  const value = ${jsonEncode(value?.trim() ?? '')};
+  const label = ${jsonEncode(label?.trim() ?? '')};
+  const index = ${index == null ? 'null' : index.toString()};
+  const select = document.querySelector(selector);
+  if (!select) {
+    return JSON.stringify({ ok: false, message: `Selector not found: \${selector}` });
+  }
+  if (select.tagName !== 'SELECT') {
+    return JSON.stringify({ ok: false, message: 'Target element is not a select.' });
+  }
+
+  const options = Array.from(select.options || []);
+  const normalizedLabel = label.toLowerCase();
+  let option = null;
+  if (value) {
+    option = options.find((item) => item.value === value);
+  }
+  if (!option && label) {
+    option = options.find((item) =>
+      (item.label || item.text || '').trim().toLowerCase() === normalizedLabel
+    ) || options.find((item) =>
+      (item.label || item.text || '').trim().toLowerCase().includes(normalizedLabel)
+    );
+  }
+  if (!option && Number.isInteger(index) && index >= 0 && index < options.length) {
+    option = options[index];
+  }
+  if (!option) {
+    return JSON.stringify({ ok: false, message: 'Matching option was not found.' });
+  }
+
+  select.value = option.value;
+  option.selected = true;
+  select.dispatchEvent(new Event('input', { bubbles: true }));
+  select.dispatchEvent(new Event('change', { bubbles: true }));
+  return JSON.stringify({
+    ok: true,
+    message: 'Option selected.',
+    selector,
+    selectedIndex: select.selectedIndex,
+    value: select.value,
+    text: (option.label || option.text || '').trim()
+  });
+})();
+''';
+    final raw = await _runStringJs(script);
+    if (raw == null) {
+      return _pageSnapshot(
+        ok: false,
+        message: 'Failed to run the select action in WebView.',
+      );
+    }
+    final decoded = jsonDecode(raw) as Map<String, dynamic>;
+    return _pageSnapshot(
+      ok: decoded['ok'] != false,
+      message: decoded['message']?.toString() ?? 'Option selected.',
+      extra: {'actionResult': decoded},
     );
   }
 
@@ -1548,120 +1873,170 @@ class _TerminalBrowserPanelState extends State<TerminalBrowserPanel>
   }
 
   Widget _buildHeader(ThemeData theme) {
-    return ColoredBox(
-      color: const Color(0xFF090909),
-      child: SafeArea(
-        bottom: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxWidth < 380;
+        return ColoredBox(
+          color: const Color(0xFF090909),
+          child: SafeArea(
+            bottom: false,
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(
+                compact ? 10 : 12,
+                10,
+                compact ? 10 : 12,
+                10,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Icon(Icons.language, color: Colors.white, size: 18),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      _title,
+                  Row(
+                    children: [
+                      if (!compact) ...[
+                        const Icon(Icons.language, color: Colors.white, size: 18),
+                        const SizedBox(width: 8),
+                      ],
+                      Expanded(
+                        child: Text(
+                          _title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.titleSmall?.copyWith(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      _buildActionIcon(
+                        icon: Icons.arrow_back,
+                        enabled: _canGoBack,
+                        onTap: _canGoBack
+                            ? () => unawaited(_handleBackButton())
+                            : null,
+                      ),
+                      _buildActionIcon(
+                        icon: Icons.arrow_forward,
+                        enabled: _canGoForward,
+                        onTap: _canGoForward
+                            ? () => unawaited(_handleForwardButton())
+                            : null,
+                      ),
+                      _buildActionIcon(
+                        icon: Icons.refresh,
+                        onTap: () => unawaited(_handleReloadButton()),
+                      ),
+                      _buildActionIcon(
+                        icon: Icons.download_rounded,
+                        onTap: () => unawaited(_exportSnapshot()),
+                      ),
+                      if (widget.onClose != null)
+                        _buildActionIcon(
+                          icon: Icons.close,
+                          onTap: widget.onClose,
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _urlController,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 13,
+                          ),
+                          cursorColor: Colors.white,
+                          textInputAction: TextInputAction.go,
+                          onSubmitted: (_) => unawaited(_submitAddress()),
+                          decoration: InputDecoration(
+                            isDense: true,
+                            filled: true,
+                            fillColor: Colors.white.withAlpha(8),
+                            hintText: 'Enter URL',
+                            hintStyle: const TextStyle(color: Colors.white54),
+                            contentPadding: EdgeInsets.symmetric(
+                              horizontal: compact ? 10 : 12,
+                              vertical: 12,
+                            ),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                              borderSide: BorderSide(
+                                color: Colors.white.withAlpha(22),
+                              ),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                              borderSide: BorderSide(
+                                color: Colors.white.withAlpha(18),
+                              ),
+                            ),
+                            focusedBorder: const OutlineInputBorder(
+                              borderRadius: BorderRadius.all(
+                                Radius.circular(8),
+                              ),
+                              borderSide: BorderSide(color: AppColors.accent),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      _buildAddressSubmitButton(compact: compact),
+                    ],
+                  ),
+                  if (_currentUrl.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      _currentUrl,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.titleSmall?.copyWith(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w700,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: Colors.white60,
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  _buildActionIcon(
-                    icon: Icons.arrow_back,
-                    enabled: _canGoBack,
-                    onTap: _canGoBack ? () => unawaited(_handleBackButton()) : null,
-                  ),
-                  _buildActionIcon(
-                    icon: Icons.arrow_forward,
-                    enabled: _canGoForward,
-                    onTap:
-                        _canGoForward ? () => unawaited(_handleForwardButton()) : null,
-                  ),
-                  _buildActionIcon(
-                    icon: Icons.refresh,
-                    onTap: () => unawaited(_handleReloadButton()),
-                  ),
-                  _buildActionIcon(
-                    icon: Icons.download_rounded,
-                    onTap: () => unawaited(_exportSnapshot()),
-                  ),
+                  ],
                 ],
               ),
-              const SizedBox(height: 10),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _urlController,
-                      style: const TextStyle(color: Colors.white, fontSize: 13),
-                      cursorColor: Colors.white,
-                      textInputAction: TextInputAction.go,
-                      onSubmitted: (_) => unawaited(_submitAddress()),
-                      decoration: InputDecoration(
-                        isDense: true,
-                        filled: true,
-                        fillColor: Colors.white.withAlpha(8),
-                        hintText: 'Enter URL',
-                        hintStyle: const TextStyle(color: Colors.white54),
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 12,
-                        ),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(
-                            color: Colors.white.withAlpha(22),
-                          ),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(
-                            color: Colors.white.withAlpha(18),
-                          ),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: AppColors.accent),
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  FilledButton(
-                    onPressed: () => unawaited(_submitAddress()),
-                    style: FilledButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 12,
-                      ),
-                      backgroundColor: AppColors.accent,
-                    ),
-                    child: const Text('Open'),
-                  ),
-                ],
-              ),
-              if (_currentUrl.isNotEmpty) ...[
-                const SizedBox(height: 8),
-                Text(
-                  _currentUrl,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: Colors.white60,
-                  ),
-                ),
-              ],
-            ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildAddressSubmitButton({required bool compact}) {
+    if (compact) {
+      return IconButton.filled(
+        tooltip: 'Open URL',
+        onPressed: () => unawaited(_submitAddress()),
+        icon: const Icon(Icons.arrow_forward, size: 18),
+        style: IconButton.styleFrom(
+          backgroundColor: AppColors.accent,
+          foregroundColor: Colors.white,
+          fixedSize: const Size(42, 42),
+          minimumSize: const Size(42, 42),
+          padding: EdgeInsets.zero,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
           ),
         ),
+      );
+    }
+    return FilledButton.icon(
+      onPressed: () => unawaited(_submitAddress()),
+      style: FilledButton.styleFrom(
+        padding: const EdgeInsets.symmetric(
+          horizontal: 12,
+          vertical: 12,
+        ),
+        backgroundColor: AppColors.accent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+        ),
       ),
+      icon: const Icon(Icons.arrow_forward, size: 16),
+      label: const Text('Open'),
     );
   }
 
@@ -1689,8 +2064,11 @@ class _TerminalBrowserPanelState extends State<TerminalBrowserPanel>
       visualDensity: VisualDensity.compact,
       style: IconButton.styleFrom(
         backgroundColor: Colors.white.withAlpha(10),
+        fixedSize: const Size(34, 34),
+        minimumSize: const Size(34, 34),
+        padding: EdgeInsets.zero,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(8),
           side: BorderSide(color: Colors.white.withAlpha(14)),
         ),
       ),
