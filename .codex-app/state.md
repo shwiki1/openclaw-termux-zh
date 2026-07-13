@@ -1,6 +1,6 @@
 # Current App State
 
-Last updated: 2026-07-13 19:10 UTC
+Last updated: 2026-07-13 19:19 UTC
 
 ## Current Truth
 - App: `次元虾`, a Chinese Android integration for OpenClaw Gateway without a Termux app dependency.
@@ -10,10 +10,10 @@ Last updated: 2026-07-13 19:10 UTC
 - Active branch: `codex-termux-runtime-fix`.
 - Remotes: `origin` is Gitee `https://gitee.com/cds-y-code/openclaw-termux-zh.git`; `shwiki` is GitHub `https://github.com/shwiki1/openclaw-termux-zh.git`.
 - Cloud build: `.github/workflows/flutter-build.yml` builds an `arm64-v8a` APK and can create a GitHub Release.
-- Current source version: root `package.json` `2.0.50`; Flutter `pubspec.yaml` `2.0.50+136`.
+- Current source version: root `package.json` `2.0.50`; Flutter `pubspec.yaml` `2.0.50+137`.
 - App version: `2.0.50`.
-- Build number: `136` in `flutter_app/pubspec.yaml`; CI may use a higher GitHub run number.
-- Version metadata is aligned to `2.0.50+136` in Flutter defaults, README files, STRUCTURE, and CHANGELOG.
+- Build number: `137` in `flutter_app/pubspec.yaml`; CI may use a higher GitHub run number.
+- Version metadata is aligned to `2.0.50+137` in Flutter defaults, README files, STRUCTURE, and CHANGELOG.
 - Last artifact: GitHub Actions run `29272795310` produced `CiYuanXia-v2.0.50-136-arm64-v8a.apk` from `shwiki/codex-termux-runtime-fix` head `42762fd6a4d240c6441234ea89a4ad9cc57db6ce`; local download path is `artifacts/github-run-29272795310/ciyuanxia-apks/CiYuanXia-v2.0.50-136-arm64-v8a.apk`; APK SHA256 `c3b7985b80b0db156a51f617533298d5916161b26232d3539bf82ea9730361d7`; `aapt dump xmltree` reports Android manifest `versionCode=2136` for the arm64 split APK.
 
 ## Active Task
@@ -46,6 +46,7 @@ Last updated: 2026-07-13 19:10 UTC
 - Updated `CliApiConfigService` to generate browser MCP script tools for saved scripts and a `/root/.openclaw/bin/browser-script` shortcut launcher.
 - Updated `browser-operator` generated skill guidance and `CHANGELOG.md` for the script assistant.
 - Corrected `browser_get_state` so Codex can inspect browser attachment/state without forcing the browser panel to attach first, and normalized saved-script run responses to include state under a `state` field.
+- Fixed the failed cloud-build compile error by replacing invalid `Colors.white45` with `Colors.white.withAlpha(115)`, then bumped Flutter source metadata from `2.0.50+136` to `2.0.50+137` for the retry.
 
 ## Checks
 - `rg` consistency checks confirmed the new browser tools are present in the bridge, WebView delegate, MCP generator, generated skill text, and test assertions.
@@ -67,6 +68,7 @@ Last updated: 2026-07-13 19:10 UTC
 - Browser default instructions page checks: `rg` confirmed no `PreferencesService`/`dashboardUrl` reference remains in `terminal_browser_panel.dart`; `git diff --check` passed; `npm test` passed with 11 checks; `npm run lint -- --no-warn-ignored` passed; final app memory validation passed with no errors and no warnings; local Flutter analyze/test were not run because `dart` and `flutter` are unavailable.
 - New cloud build checks: `npm test` passed; `npm run lint -- --no-warn-ignored` passed; `gh run 29272795310` completed successfully; `gh run view` showed `APP_VERSION_CODE=136` and artifact upload success; `gh run download` pulled `CiYuanXia-v2.0.50-136-arm64-v8a.apk`; `sha256sum` matched `c3b7985b80b0db156a51f617533298d5916161b26232d3539bf82ea9730361d7`; `unzip -l` confirmed arm64 PRoot libraries; `aapt dump xmltree` reported manifest `versionCode=2136`.
 - Browser script assistant checks after the bridge-only `browser_get_state` fix: `git diff --check` passed; `npm test` passed with 11 checks; `npm run lint -- --no-warn-ignored` passed; app memory validation passed with no errors and no warnings; `command -v dart` and `command -v flutter` returned no local SDK paths, so Flutter analyze/test were not run locally.
+- GitHub Actions run `29277705784` on remote commit `989e200f1388` failed in `Build arm64-v8a APK` before artifact upload; CI set `APP_VERSION_CODE=137`; failure was `lib/widgets/terminal_browser_panel.dart:2723:29: Error: Member not found: 'white45'`.
 
 ## Memory Validation
 - Initial validation before filling memory passed with warnings for placeholder fields.
@@ -88,4 +90,4 @@ Last updated: 2026-07-13 19:10 UTC
 - In a Flutter SDK or GitHub Actions environment, run `cd flutter_app && flutter analyze && flutter test` for the browser script assistant changes.
 - Device-smoke the Codex browser script assistant on Android: perform a short browser flow, save recent actions, rename the script, copy `browser-script run <id>`, run it from the Codex terminal, delete the script, and verify the WebView remains attached.
 - Device-smoke the freshly built arm64 APK on Android: launch, setup/runtime bootstrap, gateway start/stop, terminal, Codex browser MCP tools, verify first browser open shows the `Codex 浏览器自动化控制` instructions page instead of Gateway, and verify closing/reopening the compact right browser sidecar keeps `浏览器已连接`.
-- For the next build, bump `flutter_app/pubspec.yaml` to at least `2.0.50+136` before creating another installable artifact.
+- For the next build, source metadata is already bumped to `2.0.50+137`; the next successful GitHub Actions artifact should use CI `APP_VERSION_CODE=138` or higher.

@@ -17,7 +17,7 @@
 
 ## Do Not Forget
 - Keep app version/build number updated before every new cloud build.
-- Current metadata is aligned at source `2.0.50+136`; the latest GitHub artifact was CI version `2.0.50+136` from run `29272795310`; the next cloud build should produce `2.0.50+137` or higher.
+- Current metadata is aligned at source `2.0.50+137`; the latest GitHub artifact was CI version `2.0.50+136` from run `29272795310`; failed run `29277705784` produced no artifact; the next cloud build should produce `2.0.50+138` or higher.
 - Update `.codex-app/state.md` and the latest session handoff after meaningful changes.
 - Preserve `AGENTS.md`: only build/release Android `arm64-v8a` APK unless explicitly asked.
 - Keep Codex/Claude CLI installation inside Ubuntu RootFS dedicated prefixes under `/opt/openclaw-cli/<tool>` with wrappers in `/usr/local/bin`.

@@ -19,6 +19,7 @@ Add a Codex browser automation script assistant so completed browser control flo
 - Updated generated browser MCP tooling in `CliApiConfigService` with `browser_script_*` tools, version `1.2.0`, generated `browser-script` launcher, and updated `browser-operator` skill guidance.
 - Updated `cli_api_config_service_test.dart`, `CHANGELOG.md`, and `.codex-app/` memory.
 - Bumped Flutter build metadata from `2.0.50+135` to `2.0.50+136` in `flutter_app/pubspec.yaml`, `flutter_app/lib/constants.dart`, `STRUCTURE.md`, and `CHANGELOG.md` to prepare the next cloud build.
+- GitHub Actions run `29277705784` failed before artifact upload because Flutter release compilation rejected `Colors.white45`; replaced it with `Colors.white.withAlpha(115)` and bumped source metadata again to `2.0.50+137` for the retry.
 
 ## Checks Run
 
@@ -35,7 +36,7 @@ Add a Codex browser automation script assistant so completed browser control flo
 
 ## Version And Artifacts
 
-- Source metadata is now `2.0.50+136` after cloud-build prep.
+- Source metadata is now `2.0.50+137` after cloud-build retry prep.
 - Latest prior cloud artifact remains run `29272795310`, APK `CiYuanXia-v2.0.50-136-arm64-v8a.apk`.
 
 ## Known Risks

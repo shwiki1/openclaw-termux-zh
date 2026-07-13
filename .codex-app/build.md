@@ -17,13 +17,14 @@
 ## Version Management
 - Canonical version file: `flutter_app/pubspec.yaml` for Flutter app version/build, plus root `package.json` for npm package version. Keep them aligned for releases.
 - Current user-facing version: `2.0.50`.
-- Current build number: `136` in `flutter_app/pubspec.yaml`.
-- Known drift: none for current `2.0.50+136` metadata after 2026-07-13 browser cloud-build prep.
+- Current build number: `137` in `flutter_app/pubspec.yaml`.
+- Known drift: none for current `2.0.50+137` metadata after 2026-07-13 browser cloud-build retry prep.
 - Last cloud build version: source metadata `2.0.50+135`; GitHub Actions run `29272795310` generated CI version `2.0.50+136` for the arm64 split APK, and `aapt dump xmltree` reported manifest `versionCode=2136`.
 - Last cloud build artifact: `ciyuanxia-apks` artifact ID `8288274347`, containing `CiYuanXia-v2.0.50-136-arm64-v8a.apk`, downloaded to `artifacts/github-run-29272795310/ciyuanxia-apks/`.
 - Version bump policy: Increment build number for every new cloud build; bump user-facing version only for release changes.
 - Workflow version policy: CI derives version name from `pubspec.yaml`, then sets versionCode to `GITHUB_RUN_NUMBER` if greater than pubspec build, otherwise `pubspec build + 1`.
-- Next expected cloud build version: `2.0.50+137` or higher.
+- Failed cloud build: GitHub Actions run `29277705784` used remote commit `989e200f1388`, CI `APP_VERSION_CODE=137`, and failed before artifact upload because `Colors.white45` is not a Flutter color constant.
+- Next expected cloud build version: `2.0.50+138` or higher.
 
 ## Dependencies And Release Safety
 - Package manager and lockfile: npm with `package-lock.json`; Flutter uses `pubspec.yaml` and intentionally ignores `pubspec.lock`.

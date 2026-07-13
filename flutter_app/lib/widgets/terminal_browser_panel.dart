@@ -2720,7 +2720,7 @@ class _BrowserScriptLibrarySheetState
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
             style: theme.textTheme.bodySmall?.copyWith(
-              color: Colors.white45,
+              color: Colors.white.withAlpha(115),
             ),
           ),
           if (script.sourceUrl.isNotEmpty) ...[
