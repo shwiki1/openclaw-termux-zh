@@ -48,6 +48,7 @@ class CliApiConfigService {
   static const _terminalThemePath = '/root/.openclaw/terminal-theme.sh';
   static const _browserBridgeEnvPath = '/root/.openclaw/browser-bridge.env';
   static const _browserMcpPath = '/root/.openclaw/browser-mcp.mjs';
+  static const _browserMcpStartupTimeoutSec = 60;
   static const _browserCodexSkillPath =
       '/root/.codex/skills/browser-operator/SKILL.md';
   static const _browserSkillPath =
@@ -930,7 +931,7 @@ codex_configure_browser_mcp() {
     printf '\n[mcp_servers.openclaw_browser]\n'
     printf 'command = "node"\n'
     printf 'args = [%s]\n' "$(codex_toml_string "$mcp_script")"
-    printf 'startup_timeout_sec = 10\n'
+    printf 'startup_timeout_sec = 60\n'
     printf 'tool_timeout_sec = 120\n'
   } >> "$file"
 }
@@ -1408,7 +1409,7 @@ esac
       ..add('[mcp_servers.openclaw_browser]')
       ..add('command = "node"')
       ..add('args = [${_tomlString(_browserMcpPath)}]')
-      ..add('startup_timeout_sec = 10')
+      ..add('startup_timeout_sec = $_browserMcpStartupTimeoutSec')
       ..add('tool_timeout_sec = 120');
     if (baseUrl.isNotEmpty) {
       lines
@@ -1751,10 +1752,16 @@ const TOOL_TO_ACTION = {
 };
 
 const HEADER_DELIMITER = Buffer.from("\\r\\n\\r\\n");
+const NEWLINE = Buffer.from("\\n");
 let stdinBuffer = Buffer.alloc(0);
+let outputMode = "line";
 
 function write(message) {
   const payload = Buffer.from(JSON.stringify(message), "utf8");
+  if (outputMode !== "content-length") {
+    process.stdout.write(payload.toString("utf8") + "\\n");
+    return;
+  }
   const header = Buffer.from(
     `Content-Length: \${payload.length}\\r\\nContent-Type: application/json\\r\\n\\r\\n`,
     "utf8",
@@ -1924,46 +1931,69 @@ function parseHeaders(text) {
   return headers;
 }
 
+function dispatchPayload(payloadText) {
+  if (!payloadText.trim()) {
+    return;
+  }
+
+  let message;
+  try {
+    message = JSON.parse(payloadText);
+  } catch (error) {
+    fail(null, -32700, "Invalid JSON received by browser MCP adapter", {
+      detail: error instanceof Error ? error.message : String(error),
+    });
+    return;
+  }
+
+  onRequest(message).catch((error) => {
+    fail(message?.id ?? null, -32000, "Unhandled browser MCP adapter error", {
+      detail: error instanceof Error ? error.message : String(error),
+    });
+  });
+}
+
 function pumpStdin() {
   while (true) {
-    const headerEnd = stdinBuffer.indexOf(HEADER_DELIMITER);
-    if (headerEnd < 0) {
-      return;
-    }
+    const preview = stdinBuffer
+      .slice(0, Math.min(stdinBuffer.length, 64))
+      .toString("utf8");
+    if (/^\\s*Content-Length:/i.test(preview)) {
+      outputMode = "content-length";
+      const headerEnd = stdinBuffer.indexOf(HEADER_DELIMITER);
+      if (headerEnd < 0) {
+        return;
+      }
 
-    const headerText = stdinBuffer.slice(0, headerEnd).toString("utf8");
-    const headers = parseHeaders(headerText);
-    const contentLength = Number.parseInt(headers["content-length"] || "", 10);
-    if (!Number.isFinite(contentLength) || contentLength < 0) {
-      fail(null, -32700, "Missing or invalid Content-Length in browser MCP adapter input");
-      stdinBuffer = Buffer.alloc(0);
-      return;
-    }
+      const headerText = stdinBuffer.slice(0, headerEnd).toString("utf8");
+      const headers = parseHeaders(headerText);
+      const contentLength = Number.parseInt(headers["content-length"] || "", 10);
+      if (!Number.isFinite(contentLength) || contentLength < 0) {
+        fail(null, -32700, "Missing or invalid Content-Length in browser MCP adapter input");
+        stdinBuffer = Buffer.alloc(0);
+        return;
+      }
 
-    const frameStart = headerEnd + HEADER_DELIMITER.length;
-    const frameEnd = frameStart + contentLength;
-    if (stdinBuffer.length < frameEnd) {
-      return;
-    }
+      const frameStart = headerEnd + HEADER_DELIMITER.length;
+      const frameEnd = frameStart + contentLength;
+      if (stdinBuffer.length < frameEnd) {
+        return;
+      }
 
-    const payloadText = stdinBuffer.slice(frameStart, frameEnd).toString("utf8");
-    stdinBuffer = stdinBuffer.slice(frameEnd);
-
-    let message;
-    try {
-      message = JSON.parse(payloadText);
-    } catch (error) {
-      fail(null, -32700, "Invalid JSON received by browser MCP adapter", {
-        detail: error instanceof Error ? error.message : String(error),
-      });
+      const payloadText = stdinBuffer.slice(frameStart, frameEnd).toString("utf8");
+      stdinBuffer = stdinBuffer.slice(frameEnd);
+      dispatchPayload(payloadText);
       continue;
     }
 
-    onRequest(message).catch((error) => {
-      fail(message?.id ?? null, -32000, "Unhandled browser MCP adapter error", {
-        detail: error instanceof Error ? error.message : String(error),
-      });
-    });
+    outputMode = "line";
+    const newlineIndex = stdinBuffer.indexOf(NEWLINE);
+    if (newlineIndex < 0) {
+      return;
+    }
+    const payloadText = stdinBuffer.slice(0, newlineIndex).toString("utf8");
+    stdinBuffer = stdinBuffer.slice(newlineIndex + NEWLINE.length);
+    dispatchPayload(payloadText);
   }
 }
 

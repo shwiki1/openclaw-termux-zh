@@ -501,7 +501,7 @@ codex_configure_browser_mcp() {
     printf '\n[mcp_servers.openclaw_browser]\n'
     printf 'command = "node"\n'
     printf 'args = [%s]\n' "$(codex_toml_string "$mcp_script")"
-    printf 'startup_timeout_sec = 10\n'
+    printf 'startup_timeout_sec = 60\n'
     printf 'tool_timeout_sec = 120\n'
   } >> "$file"
 }

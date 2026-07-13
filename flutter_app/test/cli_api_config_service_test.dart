@@ -63,6 +63,7 @@ void main() {
       codexConfig,
       contains('args = ["/root/.openclaw/browser-mcp.mjs"]'),
     );
+    expect(codexConfig, contains('startup_timeout_sec = 60'));
     expect(codexConfig, isNot(contains('does not manage Codex')));
 
     final helper = rootfsFiles['/root/.openclaw/codex-termux-runtime.sh']!;
@@ -90,6 +91,11 @@ void main() {
     final browserMcp = rootfsFiles['/root/.openclaw/browser-mcp.mjs']!;
     expect(browserMcp, contains('browser_get_state'));
     expect(browserMcp, contains('browser_open'));
+    expect(
+      browserMcp,
+      contains('process.stdout.write(payload.toString("utf8") + "\\n")'),
+    );
+    expect(browserMcp, contains('Content-Length:'));
 
     final browserSkill =
         rootfsFiles['/root/.codex/skills/browser-operator/SKILL.md']!;
@@ -164,6 +170,7 @@ void main() {
       codexConfig,
       contains('args = ["/root/.openclaw/browser-mcp.mjs"]'),
     );
+    expect(codexConfig, contains('startup_timeout_sec = 60'));
 
     final env = rootfsFiles['/root/.openclaw/cli-env-codex.sh']!;
     expect(env, contains("export OPENAI_API_KEY='sk-proxy'"));
@@ -206,6 +213,7 @@ void main() {
     expect(installCommand, contains('codex_configure_model_provider()'));
     expect(installCommand, contains('codex_configure_browser_mcp()'));
     expect(installCommand, contains('mcp_servers.openclaw_browser'));
+    expect(installCommand, contains('startup_timeout_sec = 60'));
     expect(installCommand, contains('approvals_reviewer'));
     expect(installCommand, contains('tui.terminal_title'));
   });
