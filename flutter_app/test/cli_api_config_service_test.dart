@@ -206,11 +206,14 @@ void main() {
 
     final helper = rootfsFiles['/root/.openclaw/codex-termux-runtime.sh']!;
     expect(helper, contains('OPENCLAW_CODEX_PROXY_UPSTREAM'));
-    expect(helper, contains('codex_configure_model_provider "$codex_config" "hhhl"'));
+    expect(
+      helper,
+      contains('codex_configure_model_provider "\$codex_config" "hhhl"'),
+    );
     expect(
       helper,
       contains(
-        'codex_configure_browser_mcp "$codex_config" "/root/.openclaw/browser-mcp.mjs"',
+        'codex_configure_browser_mcp "\$codex_config" "/root/.openclaw/browser-mcp.mjs"',
       ),
     );
   });

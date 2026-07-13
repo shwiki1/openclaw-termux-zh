@@ -12,6 +12,8 @@
 - Gateway boundary: Flutter `GatewayProvider`/`GatewayService` control Kotlin `GatewayService`, which starts OpenClaw inside the RootFS and emits logs.
 - Node capability boundary: `NodeProvider` connects to OpenClaw over WebSocket and dispatches capability requests to Dart handlers and native permissions.
 - Codex browser automation boundary: `BrowserAutomationService` exposes a loopback/token-protected bridge; `TerminalBrowserPanel` executes WebView actions; `CliApiConfigService` generates `/root/.openclaw/browser-mcp.mjs` and `browser-operator` skill files for Codex.
+- Codex browser default-page policy: `TerminalBrowserPanel` must load the built-in Codex browser automation instructions by default. Do not auto-load the Gateway dashboard URL or any token-bearing URL unless the user enters it or a Codex browser action explicitly requests it.
+- Compact Codex terminal browser sidecar policy: on screens under 960 px wide, `TerminalScreen` keeps `TerminalBrowserPanel` mounted in an in-page `Stack` and slides it offscreen when closed. Do not move this panel back into `Scaffold.endDrawer`, because drawer disposal can unbind the browser automation delegate and disconnect Codex browser tools.
 - Generated native platform folder policy: `flutter_app/android/` is committed and meaningful; local Flutter cache/wrapper/generated files are ignored by `.gitignore`.
 - Plugin/native module policy: adding Flutter plugins or native dependencies is release-sensitive because it can change permissions, Android SDK/NDK requirements, ProGuard/packaging, and store data-safety claims.
 
@@ -55,6 +57,8 @@
 - Do not introduce new architecture layers without recording a decision.
 - Verify facts from source files before changing shared structure.
 - Keep Flutter/Kotlin channel contracts in sync on both sides.
+- Keep the Codex browser default page as an automation instruction page, not the OpenClaw Gateway dashboard.
+- Keep the compact Codex browser sidecar mounted while hidden so browser automation remains attached after users close the right slide-in panel.
 - Build and release only `arm64-v8a` APK unless the user explicitly asks otherwise.
 - Install Codex/Claude CLI tooling inside the Ubuntu RootFS under `/opt/openclaw-cli/<tool>` with wrappers in `/usr/local/bin`; do not revert to fragile global npm installs.
 - Treat permissions, signing, app ID/package, JNI/PRoot binaries, RootFS assets, and dependency changes as release-critical.

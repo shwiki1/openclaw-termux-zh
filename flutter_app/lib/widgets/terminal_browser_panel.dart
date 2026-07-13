@@ -9,7 +9,6 @@ import 'package:webview_flutter_android/webview_flutter_android.dart';
 import '../app.dart';
 import '../services/browser_automation_service.dart';
 import '../services/native_bridge.dart';
-import '../services/preferences_service.dart';
 
 class TerminalBrowserPanel extends StatefulWidget {
   final bool standalone;
@@ -29,10 +28,11 @@ class _TerminalBrowserPanelState extends State<TerminalBrowserPanel>
     implements BrowserAutomationDelegate {
   static const _welcomeHtml = '''
 <!doctype html>
-<html>
+<html lang="zh-CN">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Codex 浏览器自动化控制</title>
     <style>
       :root { color-scheme: dark; }
       html, body {
@@ -44,34 +44,96 @@ class _TerminalBrowserPanelState extends State<TerminalBrowserPanel>
         min-height: 100%;
       }
       body {
-        display: flex;
-        align-items: center;
-        justify-content: center;
+        box-sizing: border-box;
+        padding: 18px;
       }
-      .card {
+      main {
         width: min(92vw, 520px);
+        margin: 0 auto;
+      }
+      .panel {
         border: 1px solid rgba(255,255,255,0.08);
-        border-radius: 18px;
+        border-radius: 8px;
         background: linear-gradient(180deg, #101010 0%, #070707 100%);
-        padding: 24px;
+        padding: 18px;
         box-sizing: border-box;
       }
-      h1 { margin: 0 0 12px; font-size: 24px; }
-      p { margin: 0 0 12px; line-height: 1.6; color: #d4d4d4; }
+      h1 { margin: 0 0 8px; font-size: 21px; line-height: 1.25; }
+      h2 { margin: 20px 0 8px; font-size: 14px; color: #ffffff; }
+      p, li { line-height: 1.6; color: #d4d4d4; font-size: 14px; }
+      p { margin: 0 0 12px; }
+      ul { margin: 0; padding-left: 18px; }
       code {
         display: inline-block;
-        padding: 2px 8px;
+        max-width: 100%;
+        padding: 2px 7px;
         border-radius: 999px;
         background: rgba(255,255,255,0.08);
+        color: #ffffff;
+        overflow-wrap: anywhere;
+      }
+      .status {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        margin: 0 0 14px;
+        padding: 5px 9px;
+        border: 1px solid rgba(34,197,94,0.42);
+        border-radius: 999px;
+        color: #bbf7d0;
+        background: rgba(34,197,94,0.1);
+        font-size: 12px;
+        font-weight: 700;
+      }
+      .dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 999px;
+        background: #22c55e;
+      }
+      .examples {
+        display: grid;
+        gap: 8px;
+      }
+      .example {
+        border: 1px solid rgba(255,255,255,0.08);
+        border-radius: 8px;
+        padding: 10px;
+        background: rgba(255,255,255,0.035);
+      }
+      .note {
+        margin-top: 16px;
+        padding-top: 14px;
+        border-top: 1px solid rgba(255,255,255,0.08);
+        color: #a3a3a3;
+        font-size: 13px;
       }
     </style>
   </head>
   <body>
-    <div class="card">
-      <h1>OpenClaw Browser Panel</h1>
-      <p>在这里打开网页后，Codex 就可以通过浏览器工具执行打开、点击、输入、提取页面内容等操作。</p>
-      <p>建议在终端里明确说明目标网址，并提示 Codex 使用 <code>browser-operator</code> 技能。</p>
-    </div>
+    <main>
+      <section class="panel">
+        <div class="status"><span class="dot"></span>浏览器自动化已就绪</div>
+        <h1>Codex 浏览器自动化控制</h1>
+        <p>这个浏览器用于打开你指定的网页，让 Codex 通过浏览器工具执行访问、点击、输入、滚动、选择、等待元素、提取页面内容和截图快照等操作。</p>
+
+        <h2>使用方式</h2>
+        <ul>
+          <li>在终端里告诉 Codex 目标网址和要完成的任务。</li>
+          <li>需要登录、搜索、填写表单或读取页面内容时，让 Codex 使用 <code>browser-operator</code>。</li>
+          <li>你也可以在上方地址栏手动输入网址，当前页面会被 Codex 接管。</li>
+        </ul>
+
+        <h2>提示示例</h2>
+        <div class="examples">
+          <div class="example">打开 https://example.com，提取首页主要标题。</div>
+          <div class="example">打开我给你的后台地址，点击登录并等待表单出现。</div>
+          <div class="example">在当前页面查找下载按钮，滚动到它的位置并截图。</div>
+        </div>
+
+        <p class="note">默认不会自动打开 OpenClaw Gateway 控制台。只有你输入网址，或 Codex 工具发起打开请求时，浏览器才会访问目标网页。</p>
+      </section>
+    </main>
   </body>
 </html>
 ''';
@@ -158,19 +220,48 @@ class _TerminalBrowserPanelState extends State<TerminalBrowserPanel>
     final pendingUrl = _service.takePendingOpenUrl().trim();
     if (pendingUrl.isNotEmpty) {
       if (pendingUrl == 'about:blank') {
+        await _loadWelcomePage();
         return;
       }
       await _loadUrl(pendingUrl);
       return;
     }
-    final prefs = PreferencesService();
-    await prefs.init();
-    final initialUrl = prefs.dashboardUrl?.trim() ?? '';
-    if (initialUrl.isNotEmpty) {
-      await _loadUrl(initialUrl);
+    await _loadWelcomePage();
+  }
+
+  Future<void> _loadWelcomePage() async {
+    if (mounted) {
+      setState(() {
+        _title = 'Codex 浏览器自动化控制';
+        _currentUrl = 'about:blank';
+        _urlController.text = _currentUrl;
+        _error = '';
+        _loading = true;
+      });
+    }
+    _service.updateObservedState(
+      url: 'about:blank',
+      title: 'Codex 浏览器自动化控制',
+      loading: true,
+      error: '',
+    );
+    await _controller.loadHtmlString(_welcomeHtml);
+    if (!mounted) {
       return;
     }
-    await _controller.loadHtmlString(_welcomeHtml);
+    setState(() {
+      _title = 'Codex 浏览器自动化控制';
+      _currentUrl = 'about:blank';
+      _urlController.text = _currentUrl;
+      _loading = false;
+      _error = '';
+    });
+    _service.updateObservedState(
+      url: 'about:blank',
+      title: _title,
+      loading: false,
+      error: '',
+    );
   }
 
   WebViewController _createController() {

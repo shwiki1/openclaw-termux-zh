@@ -31,7 +31,6 @@ class _TerminalScreenState extends State<TerminalScreen> {
   static final Map<String, List<_TerminalSessionTab>> _savedSessions = {};
   static final Map<String, int> _savedActiveIndexes = {};
 
-  final _scaffoldKey = GlobalKey<ScaffoldState>();
   var _terminalKey = GlobalKey<NativeTerminalViewState>();
   final _browserService = BrowserAutomationService.instance;
   late final TerminalInputController _terminalInput;
@@ -41,6 +40,7 @@ class _TerminalScreenState extends State<TerminalScreen> {
   var _restartOnCreate = false;
   var _closedAllSessions = false;
   var _browserPanelOpen = false;
+  var _browserPanelCreated = false;
   var _lastBrowserPanelRequestNonce = 0;
 
   _TerminalSessionTab get _activeSession => _sessions[_activeIndex];
@@ -115,15 +115,11 @@ class _TerminalScreenState extends State<TerminalScreen> {
     }
     _lastBrowserPanelRequestNonce = requestNonce;
     final screenWidth = MediaQuery.sizeOf(context).width;
-    final drawerOpen =
-        _scaffoldKey.currentState?.isEndDrawerOpen ?? _browserPanelOpen;
-    if (screenWidth >= 960 || drawerOpen) {
+    if (screenWidth >= 960 || _browserPanelOpen) {
       return;
     }
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final drawerOpen =
-          _scaffoldKey.currentState?.isEndDrawerOpen ?? _browserPanelOpen;
-      if (!mounted || drawerOpen) {
+      if (!mounted || _browserPanelOpen) {
         return;
       }
       _openBrowserPanel(autoRequested: true);
@@ -177,6 +173,11 @@ class _TerminalScreenState extends State<TerminalScreen> {
   }
 
   Future<void> _closeSession() async {
+    if (_browserPanelOpen) {
+      setState(() {
+        _browserPanelOpen = false;
+      });
+    }
     await _terminalKey.currentState?.close();
     if (!context.mounted) {
       return;
@@ -204,86 +205,82 @@ class _TerminalScreenState extends State<TerminalScreen> {
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.sizeOf(context).width;
     final compactActions = screenWidth < 420;
-    final hasDrawerBrowser = _isCodexSession && screenWidth < 960;
-    return Scaffold(
-      key: _scaffoldKey,
-      backgroundColor: Colors.black,
-      endDrawer: hasDrawerBrowser ? _buildBrowserDrawer(screenWidth) : null,
-      endDrawerEnableOpenDragGesture: hasDrawerBrowser,
-      drawerScrimColor: Colors.black54,
-      onEndDrawerChanged: (opened) {
-        if (!mounted || _browserPanelOpen == opened) {
-          return;
+    final usesCompactBrowserPanel = _isCodexSession && screenWidth < 960;
+    return PopScope<bool>(
+      canPop: !usesCompactBrowserPanel || !_browserPanelOpen,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop && usesCompactBrowserPanel && _browserPanelOpen) {
+          _closeBrowserPanel();
         }
-        setState(() {
-          _browserPanelOpen = opened;
-        });
       },
-      appBar: AppBar(
+      child: Scaffold(
         backgroundColor: Colors.black,
-        foregroundColor: Colors.white,
-        surfaceTintColor: Colors.black,
-        toolbarHeight: compactActions ? 54 : 60,
-        titleSpacing: compactActions ? 8 : 16,
-        title: _buildTitle(),
-        actions:
-            compactActions ? [_buildOverflowMenu()] : _buildToolbarActions(),
-      ),
-      body: FutureBuilder<_NativeTerminalConfig>(
-        future: _configFuture,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState != ConnectionState.done) {
-            return ColoredBox(
-              color: Colors.black,
-              child: ResponsiveLayout.scrollableCenter(
-                child: const Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    CircularProgressIndicator(),
-                    SizedBox(height: 16),
-                    Text(
-                      'Starting native terminal...',
-                      style: TextStyle(color: Colors.white),
-                    ),
-                  ],
+        appBar: AppBar(
+          backgroundColor: Colors.black,
+          foregroundColor: Colors.white,
+          surfaceTintColor: Colors.black,
+          toolbarHeight: compactActions ? 54 : 60,
+          titleSpacing: compactActions ? 8 : 16,
+          title: _buildTitle(),
+          actions:
+              compactActions ? [_buildOverflowMenu()] : _buildToolbarActions(),
+        ),
+        body: FutureBuilder<_NativeTerminalConfig>(
+          future: _configFuture,
+          builder: (context, snapshot) {
+            if (snapshot.connectionState != ConnectionState.done) {
+              return ColoredBox(
+                color: Colors.black,
+                child: ResponsiveLayout.scrollableCenter(
+                  child: const Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      CircularProgressIndicator(),
+                      SizedBox(height: 16),
+                      Text(
+                        'Starting native terminal...',
+                        style: TextStyle(color: Colors.white),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            );
-          }
+              );
+            }
 
-          final error = snapshot.error;
-          if (error != null || !snapshot.hasData) {
-            return ColoredBox(
-              color: Colors.black,
-              child: ResponsiveLayout.scrollableCenter(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(
-                      Icons.error_outline,
-                      size: 48,
-                      color: Colors.redAccent,
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      error?.toString() ?? 'Failed to start terminal',
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(color: Colors.white),
-                    ),
-                    const SizedBox(height: 16),
-                    FilledButton.icon(
-                      onPressed: _restart,
-                      icon: const Icon(Icons.refresh),
-                      label: const Text('Retry'),
-                    ),
-                  ],
+            final error = snapshot.error;
+            if (error != null || !snapshot.hasData) {
+              return ColoredBox(
+                color: Colors.black,
+                child: ResponsiveLayout.scrollableCenter(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.error_outline,
+                        size: 48,
+                        color: Colors.redAccent,
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        error?.toString() ?? 'Failed to start terminal',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(color: Colors.white),
+                      ),
+                      const SizedBox(height: 16),
+                      FilledButton.icon(
+                        onPressed: _restart,
+                        icon: const Icon(Icons.refresh),
+                        label: const Text('Retry'),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            );
-          }
+              );
+            }
 
-          return _buildTerminal(snapshot.data!);
-        },
+            return _buildTerminal(snapshot.data!);
+          },
+        ),
       ),
     );
   }
@@ -468,8 +465,15 @@ class _TerminalScreenState extends State<TerminalScreen> {
       ],
     );
 
-    if (!_isCodexSession || screenWidth < 960) {
+    if (!_isCodexSession) {
       return terminal;
+    }
+
+    if (screenWidth < 960) {
+      return _buildCompactBrowserLayout(
+        terminal: terminal,
+        screenWidth: screenWidth,
+      );
     }
 
     final browserWidth = screenWidth >= 1320 ? 520.0 : 420.0;
@@ -500,26 +504,108 @@ class _TerminalScreenState extends State<TerminalScreen> {
       return;
     }
 
-    final scaffold = _scaffoldKey.currentState;
-    if (scaffold == null || scaffold.isEndDrawerOpen) {
+    if (_browserPanelOpen) {
       return;
     }
-    scaffold.openEndDrawer();
+    setState(() {
+      _browserPanelCreated = true;
+      _browserPanelOpen = true;
+    });
   }
 
-  Widget _buildBrowserDrawer(double screenWidth) {
-    final drawerWidth = screenWidth < 600 ? screenWidth * 0.94 : 560.0;
-    return Drawer(
-      width: drawerWidth > screenWidth ? screenWidth : drawerWidth,
-      backgroundColor: Colors.black,
+  void _closeBrowserPanel() {
+    if (!_browserPanelOpen) {
+      return;
+    }
+    setState(() {
+      _browserPanelOpen = false;
+    });
+  }
+
+  Widget _buildCompactBrowserLayout({
+    required Widget terminal,
+    required double screenWidth,
+  }) {
+    final panelWidth = _browserPanelWidth(screenWidth);
+    final shouldKeepBrowserMounted =
+        _browserPanelCreated || _browserService.isBrowserAttached;
+
+    return Stack(
+      children: [
+        Positioned.fill(child: terminal),
+        Positioned.fill(
+          child: IgnorePointer(
+            ignoring: !_browserPanelOpen,
+            child: AnimatedOpacity(
+              opacity: _browserPanelOpen ? 1 : 0,
+              duration: const Duration(milliseconds: 180),
+              curve: Curves.easeOut,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: _closeBrowserPanel,
+                child: Container(color: Colors.black54),
+              ),
+            ),
+          ),
+        ),
+        if (shouldKeepBrowserMounted)
+          AnimatedPositioned(
+            duration: const Duration(milliseconds: 240),
+            curve: Curves.easeOutCubic,
+            top: 0,
+            bottom: 0,
+            right: _browserPanelOpen ? 0 : -panelWidth,
+            width: panelWidth,
+            child: _buildPersistentBrowserPanel(),
+          ),
+        if (!_browserPanelOpen)
+          Positioned(
+            top: 0,
+            right: 0,
+            bottom: 0,
+            width: 24,
+            child: GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onHorizontalDragEnd: (details) {
+                final velocity = details.primaryVelocity ?? 0;
+                if (velocity < -180) {
+                  _openBrowserPanel();
+                }
+              },
+            ),
+          ),
+      ],
+    );
+  }
+
+  double _browserPanelWidth(double screenWidth) {
+    final width = screenWidth < 600 ? screenWidth * 0.94 : 560.0;
+    return width > screenWidth ? screenWidth : width;
+  }
+
+  Widget _buildPersistentBrowserPanel() {
+    return Material(
+      color: Colors.black,
       elevation: 12,
-      shape: const RoundedRectangleBorder(),
-      child: TerminalBrowserPanel(
-        onClose: () {
-          if (_scaffoldKey.currentState?.isEndDrawerOpen ?? false) {
-            Navigator.of(context).pop();
-          }
-        },
+      child: Stack(
+        children: [
+          TerminalBrowserPanel(onClose: _closeBrowserPanel),
+          Positioned(
+            left: 0,
+            top: 0,
+            bottom: 0,
+            width: 18,
+            child: GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onHorizontalDragEnd: (details) {
+                final velocity = details.primaryVelocity ?? 0;
+                if (velocity > 180) {
+                  _closeBrowserPanel();
+                }
+              },
+            ),
+          ),
+        ],
       ),
     );
   }

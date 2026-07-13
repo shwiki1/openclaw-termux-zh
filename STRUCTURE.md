@@ -1,6 +1,6 @@
 # 次元虾 — 源码结构文档
 
-> 版本：v2.0.50+134 | 协议：MIT | 更新日期：2026-07-13
+> 版本：v2.0.50+135 | 协议：MIT | 更新日期：2026-07-13
 >
 > 本文档用于二次开发前的源码理解，按"从外到内"的方式组织：先看项目全貌，再逐层深入。本文已按当前工作区源码重新核对。
 
@@ -670,7 +670,7 @@ bash scripts/build-prebuilt-rootfs.sh
 
 | 文件名 | ABI | 大小 |
 |---|---|---|
-| `CiYuanXia-v2.0.50-134-arm64-v8a.apk` | 64 位 ARM | 以实际构建结果为准 |
+| `CiYuanXia-v2.0.50-135-arm64-v8a.apk` | 64 位 ARM | 以实际构建结果为准 |
 
 ---
 
@@ -842,7 +842,7 @@ flutter test
 
 # 远程：构建 arm64-v8a APK
 cd ~/openclaw-termux-zh
-python scripts/build_release.py --version 2.0.50 --build-number 134
+python scripts/build_release.py --version 2.0.50 --build-number 135
 ```
 
 远程构建机首次准备建议：
