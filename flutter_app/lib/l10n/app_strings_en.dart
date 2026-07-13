@@ -613,7 +613,7 @@ const Map<String, String> appStringsEn = {
   'packageCpolarRecentLogsTitle': 'Recent Logs',
   'setupWizardTitle': 'Setup OpenClaw',
   'setupWizardIntroIdle':
-      'This will download Ubuntu 24.04.3, Node.js 24.14.1 (arm64/x86_64; armv7 uses 22.22.2), and the latest stable OpenClaw into a self-contained environment.',
+      'This will download Ubuntu 24.04.3, Node.js 24.15.0 (arm64/x86_64; armv7 uses 22.22.2), and the latest stable OpenClaw into a self-contained environment.',
   'setupWizardIntroRunning':
       'Setting up the environment. Keep the app in the foreground.',
   'setupWizardConfigureApiKeys': 'Configure API Keys',

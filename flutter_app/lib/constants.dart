@@ -53,7 +53,7 @@ class AppConstants {
 
   // Node.js binary tarball is downloaded by Flutter and extracted by Java.
   // Bypasses curl/gpg/NodeSource which fail inside proot.
-  static const String nodeVersion = '24.14.1';
+  static const String nodeVersion = '24.15.0';
   static const String nodeArmv7Version = '22.22.2';
   static const String openClawEstimatedSize = '~95 MB';
   static const String nodePrimaryMirrorBaseUrl =
