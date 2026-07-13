@@ -19,14 +19,15 @@
 ## Version Management
 - Canonical version file: `flutter_app/pubspec.yaml` for Flutter app version/build, plus root `package.json` for npm package version. Keep them aligned for releases.
 - Current user-facing version: `2.0.50`.
-- Current build number: `138` in `flutter_app/pubspec.yaml`.
-- Known drift: none for current `2.0.50+138` metadata after 2026-07-13 browser/terminal cloud-build prep.
+- Current build number: `139` in `flutter_app/pubspec.yaml`.
+- Known drift: none for current `2.0.50+139` metadata after 2026-07-13 browser/terminal cloud-build retry prep.
 - Last cloud build version: source metadata `2.0.50+137`; GitHub Actions run `29278136954` generated CI version `2.0.50+138` for the arm64 split APK, and `aapt dump badging` reported manifest `versionCode=2138`, `versionName=2.0.50`.
 - Last cloud build artifact: `ciyuanxia-apks` artifact ID `8290313722`, containing `CiYuanXia-v2.0.50-138-arm64-v8a.apk`, downloaded to `artifacts/github-run-29278136954/`.
 - Version bump policy: Increment build number for every new cloud build; bump user-facing version only for release changes.
 - Workflow version policy: CI derives version name from `pubspec.yaml`, then sets versionCode to `GITHUB_RUN_NUMBER` if greater than pubspec build, otherwise `pubspec build + 1`.
 - Failed cloud build: GitHub Actions run `29277705784` used remote commit `989e200f1388`, CI `APP_VERSION_CODE=137`, and failed before artifact upload because `Colors.white45` is not a Flutter color constant. Fixed by remote commit `1b0778b16da29083eea6d3101dfc50b69f93ede8`.
-- Next expected cloud build source metadata: `2.0.50+138`; expected CI artifact code `139` or higher.
+- Failed cloud build: GitHub Actions run `29282846337` used remote commit `3559fd14e369`, CI `APP_VERSION_CODE=139`, and failed before artifact upload because a generated shell script regex in `CliApiConfigService` used an unescaped Dart `$` in `browser-script type`.
+- Next expected cloud build source metadata: `2.0.50+139`; expected CI artifact code `140` or higher.
 
 ## Dependencies And Release Safety
 - Package manager and lockfile: npm with `package-lock.json`; Flutter uses `pubspec.yaml` and intentionally ignores `pubspec.lock`.

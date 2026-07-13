@@ -1,6 +1,6 @@
 # Current App State
 
-Last updated: 2026-07-13 20:40 UTC
+Last updated: 2026-07-13 20:44 UTC
 
 ## Current Truth
 - App: `次元虾`, a Chinese Android integration for OpenClaw Gateway without a Termux app dependency.
@@ -10,14 +10,14 @@ Last updated: 2026-07-13 20:40 UTC
 - Active branch: `codex-termux-runtime-fix`.
 - Remotes: `origin` is Gitee `https://gitee.com/cds-y-code/openclaw-termux-zh.git`; `shwiki` is GitHub `https://github.com/shwiki1/openclaw-termux-zh.git`.
 - Cloud build: `.github/workflows/flutter-build.yml` builds an `arm64-v8a` APK and can create a GitHub Release.
-- Current source version: root `package.json` `2.0.50`; Flutter `pubspec.yaml` `2.0.50+138`.
+- Current source version: root `package.json` `2.0.50`; Flutter `pubspec.yaml` `2.0.50+139`.
 - App version: `2.0.50`.
-- Build number: `138` in `flutter_app/pubspec.yaml`; CI may use a higher GitHub run number.
-- Version metadata is aligned to `2.0.50+138` in Flutter defaults, README files, STRUCTURE, and CHANGELOG.
+- Build number: `139` in `flutter_app/pubspec.yaml`; CI may use a higher GitHub run number.
+- Version metadata is aligned to `2.0.50+139` in Flutter defaults, README files, STRUCTURE, and CHANGELOG.
 - Last artifact: GitHub Actions run `29278136954` produced `CiYuanXia-v2.0.50-138-arm64-v8a.apk` from `shwiki/codex-termux-runtime-fix` head `1b0778b16da29083eea6d3101dfc50b69f93ede8`; local download path is `artifacts/github-run-29278136954/CiYuanXia-v2.0.50-138-arm64-v8a.apk`; APK SHA256 `e8de3ae0f9b6553c3f64c280da713c397658c8df28e197500cc73cd44755f775`; artifact ZIP digest `sha256:d10afef19e209374a41c7fcdce9672784822561cdbca7faabf7914277412f731`; `aapt dump badging` reports Android manifest `versionCode=2138` and `versionName=2.0.50` for the arm64 split APK.
 
 ## Active Task
-- Submit a new GitHub Actions arm64 APK build for the browser control stability and terminal sidecar performance changes using source metadata `2.0.50+138`.
+- Retry the GitHub Actions arm64 APK build for the browser control stability and terminal sidecar performance changes using source metadata `2.0.50+139`.
 
 ## Recently Changed
 - Extended Codex browser automation with `browser_wait_for_selector`, `browser_scroll`, `browser_press_key`, and `browser_select_option`.
@@ -57,6 +57,7 @@ Last updated: 2026-07-13 20:40 UTC
 - Added `NativeTerminalView.renderingPaused` and `transcriptRows` controls; Codex terminal display uses 1200 transcript rows while other terminals keep the previous 3000-row display buffer.
 - Added native `TerminalView` repaint throttling at roughly one update per 32 ms and paused terminal repainting while the compact browser sidecar is open.
 - Bumped Flutter source/build metadata from `2.0.50+137` to `2.0.50+138` before submitting the next cloud build.
+- GitHub Actions run `29282846337` failed before artifact upload because `browser-script type` generated a JavaScript regex containing an unescaped Dart `$`; fixed the string escaping and bumped source metadata to `2.0.50+139` for the retry.
 
 ## Checks
 - `rg` consistency checks confirmed the new browser tools are present in the bridge, WebView delegate, MCP generator, generated skill text, and test assertions.
@@ -80,6 +81,7 @@ Last updated: 2026-07-13 20:40 UTC
 - Browser script assistant checks after the bridge-only `browser_get_state` fix: `git diff --check` passed; `npm test` passed with 11 checks; `npm run lint -- --no-warn-ignored` passed; app memory validation passed with no errors and no warnings; `command -v dart` and `command -v flutter` returned no local SDK paths, so Flutter analyze/test were not run locally.
 - GitHub Actions run `29277705784` on remote commit `989e200f1388` failed in `Build arm64-v8a APK` before artifact upload; CI set `APP_VERSION_CODE=137`; failure was `lib/widgets/terminal_browser_panel.dart:2723:29: Error: Member not found: 'white45'`.
 - GitHub Actions run `29278136954`: completed successfully; CI `APP_VERSION_CODE=138`; artifact `ciyuanxia-apks` ID `8290313722`; artifact ZIP digest `sha256:d10afef19e209374a41c7fcdce9672784822561cdbca7faabf7914277412f731`; downloaded APK `CiYuanXia-v2.0.50-138-arm64-v8a.apk`; APK SHA256 `e8de3ae0f9b6553c3f64c280da713c397658c8df28e197500cc73cd44755f775`; `unzip -t` passed; `unzip -l` confirmed arm64 PRoot libraries; `aapt dump badging` reported `versionCode=2138`, `versionName=2.0.50`.
+- GitHub Actions run `29282846337`: failed in `Build arm64-v8a APK` after Dart analyze passed; CI `APP_VERSION_CODE=139`; failure was `cli_api_config_service.dart:2438:62` unescaped `$` inside a generated JavaScript regex; no artifact was uploaded.
 - Browser control stability hardening checks: `git diff --check` passed; `npm test` passed with 11 checks; `npm run lint -- --no-warn-ignored` passed; `command -v dart` and `command -v flutter` returned no local SDK paths, so Flutter analyze/test were not run locally.
 - Terminal sidecar/performance polish checks: `git diff --check` passed; `npm test` passed with 11 checks; `npm run lint -- --no-warn-ignored` passed; `command -v dart`, `command -v flutter`, and `command -v kotlinc` returned no local SDK/compiler paths, and no executable `flutter_app/android/gradlew` is available in this environment.
 

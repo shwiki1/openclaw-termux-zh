@@ -2435,7 +2435,7 @@ case "\$command_name" in
     submit="\${3:-false}"
     [ -n "\$selector" ] || { usage >&2; exit 2; }
     bridge_action="type"
-    payload=\$(node -e 'const submit = /^(1|true|yes|submit)$/i.test(process.argv[3] || ""); process.stdout.write(JSON.stringify({ selector: process.argv[1] || "", text: process.argv[2] || "", submit }))' "\$selector" "\$text" "\$submit")
+    payload=\$(node -e 'const submit = /^(1|true|yes|submit)\$/i.test(process.argv[3] || ""); process.stdout.write(JSON.stringify({ selector: process.argv[1] || "", text: process.argv[2] || "", submit }))' "\$selector" "\$text" "\$submit")
     ;;
   wait-selector|wait_for_selector)
     selector="\${1:-}"

@@ -19,7 +19,7 @@
 
 ## Do Not Forget
 - Keep app version/build number updated before every new cloud build.
-- Current metadata is aligned at source `2.0.50+138`; the latest GitHub artifact was CI version `2.0.50+138` from run `29278136954`; failed run `29277705784` produced no artifact; the next cloud build should produce CI version `2.0.50+139` or higher.
+- Current metadata is aligned at source `2.0.50+139`; the latest GitHub artifact was CI version `2.0.50+138` from run `29278136954`; failed runs `29277705784` and `29282846337` produced no artifact; the next cloud build should produce CI version `2.0.50+140` or higher.
 - Keep the stable `browser_control` MCP entrypoint and `browser-script call/control` fallbacks in sync with the bridge action aliases.
 - Keep terminal display throttling scoped to rendering/scrollback only; do not route CLI context management through Flutter terminal display text.
 - Update `.codex-app/state.md` and the latest session handoff after meaningful changes.

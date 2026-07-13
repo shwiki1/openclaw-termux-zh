@@ -5,7 +5,7 @@
 ### 关键改动
 
 - **品牌与包名统一**：应用显示名统一为“次元虾”，Android `applicationId`、`namespace`、Kotlin 包声明和 MethodChannel 均统一为 `com.agent.cyx`。
-- **版本元数据统一**：Flutter、应用常量、Node 兼容包和发布文档统一到 `2.0.50+138`，构建产物使用 `CiYuanXia-v` 前缀。
+- **版本元数据统一**：Flutter、应用常量、Node 兼容包和发布文档统一到 `2.0.50+139`，构建产物使用 `CiYuanXia-v` 前缀。
 - **运行时资源对齐**：默认 Node.js 版本对齐随包资源 `24.14.1`，避免常量指向未随包提供的资源版本。
 - **OpenClaw 推荐版本跟随 latest 稳定版**：首次安装和版本选择默认推荐 npm `openclaw@latest` 的稳定版本；版本列表过滤 beta、rc、test、preview 等预发布版本。
 - **运行时要求已按最新 OpenClaw 核对**：当前 npm `openclaw@latest` 为 `2026.6.11`，要求 Node.js `>=22.19.0`；初始化环境文案同步为 Ubuntu 24.04.3、Node.js 24.14.1（arm64/x86_64）与 Node.js 22.22.2（armv7）。
