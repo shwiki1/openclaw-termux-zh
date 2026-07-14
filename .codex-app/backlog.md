@@ -1,9 +1,9 @@
 # Backlog
 
 ## Priority Now
-- Produce the first APK under the new display-version scheme and verify build `144` shows installer/app version `2.5` while keeping a separate numeric build code.
+- Publish a follow-up APK with the native terminal IME input-strip fix, because device feedback confirmed `CiYuanXia-v2.5-144-arm64-v8a.apk` still leaves terminal input behind the keyboard; the next build should be `145` with installer/app version `2.6`.
 - Add `flutter test` to the GitHub Actions gate or run it in a dedicated Flutter SDK environment before the next release candidate; the repo already has Flutter tests, but the current green APK workflow does not execute them.
-- Device-smoke `artifacts/github-run-29323908852/CiYuanXia-v2.0.50-143-arm64-v8a.apk` on Android, prioritizing first-run bootstrap, install/update behavior, browser multi-tab, UA switching, script assistant, browser fallbacks, and compact sidecar reconnect behavior.
+- Device-smoke the follow-up `CiYuanXia-v2.6-145-arm64-v8a.apk` on Android, prioritizing terminal input visibility above the IME, browser address-bar/readability checks, first-run bootstrap, browser multi-tab, UA switching, script assistant, browser fallbacks, and compact sidecar reconnect behavior.
 - Decide the release promotion path for the next build: which branch is authoritative, which remote is used for cloud builds, who bumps the build number, and where changelog/release notes are cut from.
 
 ## Ready
@@ -27,8 +27,9 @@
 
 ## Do Not Forget
 - Keep app version/build number updated before every new cloud build.
-- Current source metadata anchor is `2.5.0+143`, with user-visible display version `2.5`; latest successful GitHub artifact is still the pre-fix APK `2.0.50+143` from run `29323908852`, commit `97c7861608daca62c22a9ae1c1259d7abe7e02c3`.
+- Current source metadata anchor is `2.5.0+143`; latest successful GitHub Release asset is `CiYuanXia-v2.5-144-arm64-v8a.apk`, but user device testing says that build still does not pan the native terminal prompt above the keyboard.
 - Future user-facing builds now derive automatically from the target build number: `144 -> 2.5`, `145 -> 2.6`, `146 -> 2.7`, `147 -> 2.8`, `148 -> 2.9`, `149 -> 3.0`.
+- The next fresh build should be `145 -> 2.6` and must include the native terminal bottom-focus-strip IME follow-up in `NativeTerminalView.kt`.
 - Current browser automation work is being submitted to GitHub Actions; after the APK is available, the next browser smoke target is Android device verification of tab/UA/mobile-desktop behavior.
 - The current APK workflow is green without running `flutter test`; keep that gap visible until CI or a dedicated SDK environment closes it.
 - Keep Node.js `24.15.0` for arm64/x86_64 and `22.22.3` for armv7 aligned across constants, RootFS scripts, setup l10n copy, docs, bootstrap resource names, license/source notices, legacy installer URLs, and `lib/test.js` unless a future task upgrades the runtime asset set.

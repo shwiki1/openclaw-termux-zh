@@ -1,6 +1,6 @@
 # Current App State
 
-Last updated: 2026-07-14 14:32 UTC
+Last updated: 2026-07-14 17:24 UTC
 
 ## Current Truth
 - App: `次元虾`, a Chinese Android integration for OpenClaw Gateway without a Termux app dependency.
@@ -10,7 +10,7 @@ Last updated: 2026-07-14 14:32 UTC
 - Active branch: `codex-termux-runtime-fix`.
 - Remotes: `origin` is Gitee `https://gitee.com/cds-y-code/openclaw-termux-zh.git`; `shwiki` is GitHub `https://github.com/shwiki1/openclaw-termux-zh.git`.
 - Cloud build: `.github/workflows/flutter-build.yml` builds an `arm64-v8a` APK and can create a GitHub Release.
-- GitHub Actions currently runs checkout, rootfs restore/build, `flutter analyze --no-fatal-infos`, and APK packaging, but does not run `flutter test`.
+- GitHub Actions currently runs checkout, rootfs restore/build, `flutter analyze --no-fatal-infos`, APK packaging, and GitHub Release publication, but does not run `flutter test`.
 - Current source version: root `package.json` `2.5.0`; Flutter `pubspec.yaml` `2.5.0+143`.
 - App version: `2.5` (installer/app display) as the current fixed `0.0` display-series anchor.
 - Build number: anchor `143` in `flutter_app/pubspec.yaml`; local/CI artifacts derive higher build numbers from there.
@@ -22,21 +22,25 @@ Last updated: 2026-07-14 14:32 UTC
 - Browser automation now supports in-memory multi-tab sessions, active-tab state snapshots, UI/MCP/browser-script UA switching, desktop UA request headers, WebView wide-viewport/text-zoom normalization, and a best-effort desktop viewport hint for responsive pages.
 - Browser automation keeps reusable workflow staging in a pending-save script draft before the user confirms saving.
 - Last recorded successful artifact before the browser tabs/UA build submission: GitHub Actions run `29293286907` produced `CiYuanXia-v2.0.50-141-arm64-v8a.apk` from `shwiki/codex-termux-runtime-fix` head `459a63536bdcbff5d5f05f96f3a81dc6d4d6889b`; artifact ID `8295917288`; artifact ZIP digest `sha256:153c4b895a1bf1838985266fd6dfcd4fb32e021d7704e70e16ed53ccaf7dbfe8`. The previous locally downloaded artifact remains `artifacts/github-run-29283260131/CiYuanXia-v2.0.50-140-arm64-v8a.apk`.
-- Latest Codex browser tabs/UA cloud build retry: GitHub Actions run `29323908852` completed successfully from remote commit `97c7861608daca62c22a9ae1c1259d7abe7e02c3`.
-- Latest downloaded artifact: `artifacts/github-run-29323908852/CiYuanXia-v2.0.50-143-arm64-v8a.apk`; APK SHA256 `dedeed3176251da991d9e55435b633a6034d8e9cb80a2549054d12f75df48010`.
-- Latest artifact ZIP: `artifacts/github-run-29323908852/ciyuanxia-apks.zip`; GitHub artifact ID `8307231575`; artifact ZIP digest/SHA256 `sha256:c64c3f6a539b77b506a799f8dc224ae96f51851b577bc58c7688b531c62b17b0`.
-- Management status: requested cloud build was submitted, completed, downloaded, and verified.
+- Latest IME/browser/version cloud build: GitHub Actions run `29343651061` completed successfully from remote commit `ff961e903cd9c04ac1a8523f8751c33c4f12f638` and published GitHub Release `v2.5.0`.
+- Latest GitHub Release asset: `CiYuanXia-v2.5-144-arm64-v8a.apk`; APK SHA256 `2c283b7d810b11d9c7abb381d358aca492419a86726743730148b9cbd1947f31`; Actions artifact ID `8315303372`; artifact ZIP digest/SHA256 `sha256:108950af36fc43196b1d81da56c3a8fa7819d2392c37413f21bdbe708d1f6235`.
+- User device feedback on that `144` release: browser/header/version fixes shipped, but the native terminal prompt still is not panned above the keyboard and typed terminal input remains hidden.
+- Latest locally downloaded artifact remains `artifacts/github-run-29323908852/CiYuanXia-v2.0.50-143-arm64-v8a.apk`; APK SHA256 `dedeed3176251da991d9e55435b633a6034d8e9cb80a2549054d12f75df48010`.
+- Management status: the previously published IME/browser/version build fixed the browser/header/version work but not the native terminal IME visibility bug; source now includes a Kotlin-side terminal input-strip follow-up and its regression test, pending a fresh cloud build/device smoke.
 - Project phase: feature work for Codex browser automation is ahead of validation; the immediate management focus is release-stabilization, not another feature branch.
-- Release topology note: local branch `codex-termux-runtime-fix` currently tracks `shwiki/main` and is ahead by 16 commits; future build/promotion work should name the exact remote and branch on purpose.
-- Next artifact expectation: the next fresh APK build (`144`) should show installer/app version `2.5` and use the short artifact name `CiYuanXia-v2.5-144-arm64-v8a.apk`.
+- Release topology note: local branch `codex-termux-runtime-fix` currently tracks `shwiki/main` and is ahead by 18 commits; future build/promotion work should name the exact remote and branch on purpose.
+- Next artifact expectation: the next fresh APK build (`145`) should show installer/app version `2.6` and use the short artifact name `CiYuanXia-v2.6-145-arm64-v8a.apk`.
 
 ## Active Task
-- Reduce terminal/input-method lag when Codex browser automation and the native terminal are visible together, without regressing the new browser header contrast/layout or the version-display mapping.
-- Next verification is Android device smoke for terminal keyboard open/close on compact and wide Codex terminal layouts.
+- Publish a follow-up cloud build that includes the native terminal bottom-focus-strip IME fix in `NativeTerminalView.kt`.
+- Device-smoke the follow-up `145` / `2.6` APK on Android, confirming terminal input is lifted above the keyboard, browser inputs remain visible, and installer/settings still show the derived short version correctly.
 
 ## Recently Changed
 - Locked `TerminalScreen` to `resizeToAvoidBottomInset: false` and switched the terminal route to Android `adjustPan` while it is visible, so IME open/close keeps terminal/browser inputs visible without relayouting both platform views together.
+- Added `ImeAwareTerminalView` in `NativeTerminalView.kt` so the native terminal reports a bottom input-strip focus rect and repeatedly requests that strip onto the screen while opening the IME, instead of relying on `adjustPan` alone.
+- Restored `OnlineModelCatalogService._userAgent` to a `const` after GitHub Actions run `29343049542` failed on a non-constant Dart map literal.
 - Added a root Node self-test guard for the terminal IME layout policy so future refactors do not accidentally re-enable whole-screen keyboard resizing on the terminal page.
+- Extended the root Node self-test to guard the native terminal bottom input-strip IME behavior in `NativeTerminalView.kt`.
 - Reworked `TerminalBrowserPanel` header layout so the address bar now always gets its own full-width row instead of sharing width with navigation/tool buttons on wide layouts.
 - Raised Codex browser header contrast by using explicit black-surface/white-text tokens for the address bar, nav buttons, UA switch, and more-menu trigger.
 - Replaced the browser more-menu `ListTile` entries with explicit high-contrast menu rows so popup menu icons/text no longer inherit the app-wide muted dark icon color on the black browser surface.
@@ -44,6 +48,7 @@ Last updated: 2026-07-14 14:32 UTC
 - Switched the source semantic version from `2.0.50` to the `2.5.0+143` series anchor, keeping `2.5` as the current display baseline.
 - Added a shared `scripts/versioning.py` helper and rewired local APK builds, the release helper, GitHub Actions, docs, and Node self-tests so build `144` shows `2.5`, build `145` shows `2.6`, and installer/app/release metadata stay synchronized.
 - Updated APK artifact naming examples and release helper examples to the derived short form, starting with `CiYuanXia-v2.5-144-arm64-v8a.apk`.
+- Pushed the IME/browser/version follow-up through the GitHub API as remote commit `ff961e903cd9c04ac1a8523f8751c33c4f12f638`; GitHub Actions run `29343651061` succeeded and published release `v2.5.0` with asset `CiYuanXia-v2.5-144-arm64-v8a.apk`.
 - Re-verified project memory against `package.json`, `flutter_app/pubspec.yaml`, `flutter_app/android/app/build.gradle`, `.github/workflows/flutter-build.yml`, `AGENTS.md`, current git branch/status, and the current Flutter screen/service/test inventories.
 - Identified the current project-management gap: Flutter tests exist in-repo but are not executed either locally in this Termux session or by the GitHub Actions APK workflow.
 - Re-prioritized project management work toward CI test gating, Android device smoke, and release-path clarity before the next new feature/build cycle.
@@ -111,6 +116,8 @@ Last updated: 2026-07-14 14:32 UTC
 - GitHub Actions run `29283260131` succeeded from remote commit `7d9773731764`; downloaded `CiYuanXia-v2.0.50-140-arm64-v8a.apk` and verified ZIP integrity, arm64 PRoot libraries, APK SHA256, and manifest version fields.
 
 ## Checks
+- 2026-07-14 terminal native IME input-strip follow-up: `npm test` passed with 23 checks; `npm run lint -- --no-warn-ignored` passed; `git diff --check` passed; `gh auth status` confirmed the authenticated `shwiki1` GitHub session; `gh api repos/shwiki1/openclaw-termux-zh/branches/main --jq .commit.sha` confirmed remote `main` is still `ff961e903cd9c04ac1a8523f8751c33c4f12f638`; local `flutter`, `dart`, and `kotlinc` remain unavailable, so Flutter analyze/test and native compile checks were not run locally.
+- 2026-07-14 IME/browser/version cloud-build completion: `npm test` passed with 22 checks; `npm run lint -- --no-warn-ignored` passed; `git diff --check` passed; `gh auth status` confirmed the authenticated `shwiki1` GitHub session; GitHub Actions run `29343651061` succeeded and published release `v2.5.0`. Local `flutter`, `dart`, and `kotlinc` remain unavailable, so Flutter analyze/test and native compile checks were not run locally.
 - 2026-07-14 terminal IME lag fix: `npm test` passed with 21 checks; `npm run lint -- --no-warn-ignored` passed; `git diff --check` passed; `python3 /data/data/com.termux/files/home/.codex/skills/app-development-governor/scripts/validate_app_memory.py --project /storage/emulated/0/ZeroTermux/开发/openclaw-termux-zh-5.5` passed with no errors and no warnings; local `flutter`, `dart`, and `kotlinc` remain unavailable, so Flutter analyze/test and native compile checks were not run locally.
 - 2026-07-14 browser header/address-bar contrast fix: `git diff --check` passed; `npm test` passed with 20 checks; `npm run lint -- --no-warn-ignored` passed; local `flutter`, `dart`, and `kotlinc` remain unavailable, so Flutter analyze/test and visual rendering checks were not run locally.
 - 2026-07-14 version-display auto-progression fix: `git diff --check` passed; `npm test` passed with 18 checks; `npm run lint -- --no-warn-ignored` passed; `python3 -B -m py_compile scripts/build_release.py scripts/versioning.py` passed; `bash -n scripts/build-apk.sh` passed; local `flutter`, `dart`, and `kotlinc` remain unavailable, so Flutter analyze/test were not run locally.
@@ -167,8 +174,8 @@ Last updated: 2026-07-14 14:32 UTC
 - Final validation after the 2026-07-14 Node/runtime documentation fix passed with no errors and no warnings.
 
 ## Risks And Blockers
-- The terminal IME lag fix is source-complete but not device-verified yet; confirm on Android that keyboard open/close is smoother with the browser sidecar visible and that the route-scoped `adjustPan` behavior keeps terminal/browser inputs visible above the keyboard.
-- The new short display-version scheme is source-complete but not artifact-verified yet; an Android build/install smoke is still required to confirm build `144` shows `2.5` in both the installer and in-app settings.
+- The route-scoped `adjustPan` fix alone was not sufficient on-device; the new native terminal bottom-focus-strip follow-up is source-complete but not yet cloud-built or device-verified.
+- The short display-version scheme now has one successful release artifact, but the next follow-up Android build/install smoke is still required to confirm build `145` shows `2.6` in both the installer and in-app settings.
 - The Codex browser header/address-bar contrast fix is code-complete but not visually smoke-tested on a real Android device or WebView yet; confirm the single-row address bar, back/forward contrast, and popup menu readability on-device.
 - Flutter unit tests exist but are not part of the current GitHub Actions APK workflow, so a green cloud build can still miss browser automation regressions that are only covered in `flutter_app/test/`.
 - The current Termux environment still cannot run local Flutter/Dart/Kotlin verification, so Flutter analyze/test and native compile feedback remain delegated to GitHub Actions or a separate SDK machine.
@@ -188,15 +195,16 @@ Last updated: 2026-07-14 14:32 UTC
 - Project policy in `AGENTS.md`: build/release only Android `arm64-v8a` APK unless explicitly requested.
 
 ## Next Actions
-- Device-smoke the terminal IME lag fix on Android: with the Codex browser sidecar visible on compact and wide layouts, tap into the terminal to open/close the keyboard repeatedly, type during active output, and verify the screen no longer stutters or jumps.
-- Build and verify the first APK under the new display-version scheme, confirming build `144` shows `2.5` in installer/settings/dashboard while numeric build code remains separate.
+- Publish the native terminal IME input-strip follow-up through the GitHub API to remote `main`, expecting a fresh `145` / `2.6` arm64 release artifact.
+- Device-smoke the follow-up `CiYuanXia-v2.6-145-arm64-v8a.apk` on Android: with the Codex browser sidecar visible on compact and wide layouts, tap into the terminal to open/close the keyboard repeatedly, type during active output, and verify the prompt/input stay above the keyboard without reintroducing lag.
+- Verify the follow-up APK installer, settings page, and in-app version text all show `2.6` while numeric build code remains separate.
 - Device-smoke the Codex browser sidecar header on Android: verify the address bar keeps a full row, long URLs remain editable, and nav/menu text/icons stay readable against the black surface.
-- After that first artifact is verified, keep the shared helper policy intact so later builds derive automatically as `145 -> 2.6`, `146 -> 2.7`, `147 -> 2.8`, `148 -> 2.9`, `149 -> 3.0`.
+- After the follow-up artifact is verified, keep the shared helper policy intact so later builds continue deriving automatically as `145 -> 2.6`, `146 -> 2.7`, `147 -> 2.8`, `148 -> 2.9`, `149 -> 3.0`.
 - In a Flutter SDK or GitHub Actions environment, run `cd flutter_app && flutter analyze && flutter test`, then decide whether `flutter test` should become a required workflow gate before the next release candidate.
-- Device-smoke `artifacts/github-run-29323908852/CiYuanXia-v2.0.50-143-arm64-v8a.apk` on Android, covering first-run bootstrap, install/update behavior, browser multi-tab, UA switching, browser scripts, and compact sidecar reconnect behavior.
+- Device-smoke the latest release asset after the follow-up build lands, covering first-run bootstrap, install/update behavior, browser multi-tab, UA switching, browser scripts, and compact sidecar reconnect behavior.
 - Decide and document the authoritative promotion path for the next release/build: branch, remote, version bump owner, and where changelog/release notes are cut from.
 - Device-smoke Codex browser multi-tab and UA behavior on Android: open multiple pages, switch tabs, close a tab, use back/forward/reload, switch desktop/mobile UA, and verify desktop pages no longer fall back to the mobile layout on representative sites.
-- Create the next cloud build only after verifying the current anchor stays at `2.5.0+143` and the resulting build `144` install screen shows `2.5`.
+- Keep the current source anchor at `2.5.0+143`; the next cloud build should be `145`, which must advance installer/app display to `2.6`.
 - Device-smoke the freshly built arm64 APK on Android: launch, setup/runtime bootstrap, gateway start/stop, terminal, Codex browser MCP tools, first browser instructions page, and sidecar close/reopen attachment.
 - Device-smoke the browser pending-save and saved-script flow: stage a draft, save, rename, copy/run `browser-script run <id>`, delete, and verify the WebView remains attached.
 - Device-smoke browser automation fallbacks: verify `browser_get_state`, `browser_control`, and `browser-script` commands for snapshot/read/type/click flows on a live WebView.

@@ -4,6 +4,7 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.graphics.Color
+import android.graphics.Rect
 import android.graphics.Typeface
 import android.os.SystemClock
 import android.view.KeyEvent
@@ -48,7 +49,9 @@ class NativeTerminalPlatformView(
     private val params: Map<*, *>,
 ) : PlatformView, MethodChannel.MethodCallHandler {
     private val container = FrameLayout(context)
-    private val terminalView = TerminalView(context, null)
+    private val terminalView = ImeAwareTerminalView(context) {
+        visibleInputStripHeightPx()
+    }
     private val channel = MethodChannel(messenger, "com.agent.cyx/native_terminal_$viewId")
     private val sessionId = params.stringValue("sessionId") ?: "native-shell"
     private val keepAlive = params.booleanValue("keepAlive", false)
@@ -205,13 +208,19 @@ class NativeTerminalPlatformView(
     private fun focusAndShowKeyboard() {
         terminalView.post {
             terminalView.requestFocus()
+            terminalView.requestInputStripVisible()
             val imm = appContext.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
                 ?: return@post
             imm.restartInput(terminalView)
             imm.showSoftInput(terminalView, InputMethodManager.SHOW_IMPLICIT)
+            terminalView.requestInputStripVisible()
             terminalView.postDelayed({
                 imm.showSoftInput(terminalView, InputMethodManager.SHOW_IMPLICIT)
+                terminalView.requestInputStripVisible()
             }, 80)
+            terminalView.postDelayed({
+                terminalView.requestInputStripVisible()
+            }, 180)
         }
     }
 
@@ -230,6 +239,13 @@ class NativeTerminalPlatformView(
         terminalView.updateSize()
     }
 
+    private fun visibleInputStripHeightPx(): Int {
+        val density = container.resources.displayMetrics.density
+        val minimumStripHeight = (72f * density).roundToInt()
+        val estimatedPromptRowsHeight = (fontSize * 5.0f).roundToInt()
+        return maxOf(minimumStripHeight, estimatedPromptRowsHeight)
+    }
+
     companion object {
         private const val MIN_FONT_SIZE = 12
         private const val MAX_FONT_SIZE = 32
@@ -237,6 +253,29 @@ class NativeTerminalPlatformView(
         private const val MAX_TRANSCRIPT_ROWS = 3000
         private const val DEFAULT_TRANSCRIPT_ROWS = 3000
         private val sessions = mutableMapOf<String, NativeTerminalSessionHolder>()
+    }
+}
+
+private class ImeAwareTerminalView(
+    context: Context,
+    private val focusStripHeightProvider: () -> Int,
+) : TerminalView(context, null) {
+    private val focusRect = Rect()
+
+    override fun getFocusedRect(r: Rect) {
+        val stripHeight = focusStripHeightProvider().coerceAtLeast(1)
+        val bottom = height.coerceAtLeast(0)
+        val top = (bottom - stripHeight).coerceAtLeast(0)
+        r.set(0, top, width.coerceAtLeast(0), bottom)
+    }
+
+    fun requestInputStripVisible() {
+        if (width <= 0 || height <= 0) {
+            return
+        }
+        val stripHeight = focusStripHeightProvider().coerceAtLeast(1)
+        focusRect.set(0, (height - stripHeight).coerceAtLeast(0), width, height)
+        requestRectangleOnScreen(focusRect, true)
     }
 }
 
