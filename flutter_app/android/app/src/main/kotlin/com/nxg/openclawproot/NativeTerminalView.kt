@@ -14,7 +14,9 @@ import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
+import android.view.ViewTreeObserver
 import android.view.inputmethod.InputMethodManager
+import android.widget.FrameLayout
 import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
 import android.widget.TextView
@@ -54,10 +56,14 @@ class NativeTerminalPlatformView(
     viewId: Int,
     private val params: Map<*, *>,
 ) : PlatformView, MethodChannel.MethodCallHandler {
-    private val container = LinearLayout(context)
+    private val container = FrameLayout(context)
+    private val contentContainer = LinearLayout(context)
     private val terminalView = TerminalView(context, null)
+    private val bottomSpaceView = View(context)
     private val inputStripRect = Rect()
     private val containerInputStripRect = Rect()
+    private val visibleWindowRect = Rect()
+    private val containerLocationOnScreen = IntArray(2)
     private val channel = MethodChannel(messenger, "com.agent.cyx/native_terminal_$viewId")
     private val sessionId = params.stringValue("sessionId") ?: "native-shell"
     private val keepAlive = params.booleanValue("keepAlive", false)
@@ -79,10 +85,15 @@ class NativeTerminalPlatformView(
     )
     private val toolbarStrip = if (useNativeToolbar) createToolbarStrip(context) else null
     private var holder: NativeTerminalSessionHolder? = null
+    private var imeCompensationBottomPx = 0
+    private val globalLayoutListener = ViewTreeObserver.OnGlobalLayoutListener {
+        updateImeCompensation()
+    }
 
     init {
-        container.orientation = LinearLayout.VERTICAL
         container.setBackgroundColor(Color.BLACK)
+        contentContainer.orientation = LinearLayout.VERTICAL
+        contentContainer.setBackgroundColor(Color.BLACK)
         terminalView.setTerminalViewClient(client)
         terminalView.setTextSize(fontSize)
         terminalView.setTypeface(Typeface.MONOSPACE)
@@ -93,7 +104,7 @@ class NativeTerminalPlatformView(
                 requestInputStripVisible()
             }
         }
-        container.addView(
+        contentContainer.addView(
             terminalView,
             LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
@@ -102,7 +113,7 @@ class NativeTerminalPlatformView(
             ),
         )
         toolbarStrip?.let { toolbar ->
-            container.addView(
+            contentContainer.addView(
                 toolbar,
                 LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.MATCH_PARENT,
@@ -110,6 +121,22 @@ class NativeTerminalPlatformView(
                 ),
             )
         }
+        bottomSpaceView.setBackgroundColor(Color.TRANSPARENT)
+        contentContainer.addView(
+            bottomSpaceView,
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                dpToPx(1),
+            ),
+        )
+        container.addView(
+            contentContainer,
+            FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT,
+            ),
+        )
+        container.viewTreeObserver.addOnGlobalLayoutListener(globalLayoutListener)
         channel.setMethodCallHandler(this)
         attachOrCreateSession(restart = params.booleanValue("restart", false))
         terminalView.post {
@@ -121,6 +148,9 @@ class NativeTerminalPlatformView(
 
     override fun dispose() {
         hideKeyboard()
+        if (container.viewTreeObserver.isAlive) {
+            container.viewTreeObserver.removeOnGlobalLayoutListener(globalLayoutListener)
+        }
         channel.setMethodCallHandler(null)
         val current = holder
         if (current != null) {
@@ -487,11 +517,50 @@ class NativeTerminalPlatformView(
         )
         terminalView.requestRectangleOnScreen(inputStripRect, true)
         containerInputStripRect.set(inputStripRect)
-        container.offsetDescendantRectToMyCoords(terminalView, containerInputStripRect)
+        contentContainer.offsetDescendantRectToMyCoords(terminalView, containerInputStripRect)
         if (useNativeToolbar) {
-            containerInputStripRect.bottom = container.height
+            val contentBottom = (contentContainer.height - contentContainer.paddingBottom)
+                .coerceAtLeast(containerInputStripRect.bottom)
+            containerInputStripRect.bottom = contentBottom
         }
         container.requestRectangleOnScreen(containerInputStripRect, true)
+    }
+
+    private fun updateImeCompensation() {
+        if (container.width <= 0 || container.height <= 0 || bottomSpaceView.height <= 0) {
+            return
+        }
+
+        container.getWindowVisibleDisplayFrame(visibleWindowRect)
+        val rootViewHeight = container.rootView?.height ?: 0
+        val obscuredHeight = if (rootViewHeight > 0) {
+            (rootViewHeight - visibleWindowRect.height()).coerceAtLeast(0)
+        } else {
+            0
+        }
+        val keyboardLikelyVisible = obscuredHeight > dpToPx(KEYBOARD_VISIBLE_THRESHOLD_DP)
+        container.getLocationOnScreen(containerLocationOnScreen)
+        val hiddenBottomPx = if (keyboardLikelyVisible) {
+            (containerLocationOnScreen[1] + container.height - visibleWindowRect.bottom)
+                .coerceAtLeast(0)
+        } else {
+            0
+        }
+
+        if (hiddenBottomPx == imeCompensationBottomPx) {
+            return
+        }
+
+        imeCompensationBottomPx = hiddenBottomPx
+        contentContainer.setPadding(
+            contentContainer.paddingLeft,
+            contentContainer.paddingTop,
+            contentContainer.paddingRight,
+            hiddenBottomPx,
+        )
+        if (hiddenBottomPx > 0) {
+            requestInputStripVisible()
+        }
     }
 
     companion object {
@@ -500,6 +569,7 @@ class NativeTerminalPlatformView(
         private const val MIN_TRANSCRIPT_ROWS = 400
         private const val MAX_TRANSCRIPT_ROWS = 3000
         private const val DEFAULT_TRANSCRIPT_ROWS = 3000
+        private const val KEYBOARD_VISIBLE_THRESHOLD_DP = 96
         private const val TOOLBAR_BUTTON_COLOR = 0xFF161616.toInt()
         private const val TOOLBAR_ACTIVE_COLOR = 0xFF00C853.toInt()
         private val CTRL_SEQUENCE_MAP = mapOf(
