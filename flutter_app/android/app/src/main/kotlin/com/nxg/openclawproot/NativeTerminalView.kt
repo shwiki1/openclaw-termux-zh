@@ -7,9 +7,11 @@ import android.graphics.Color
 import android.graphics.Rect
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
+import android.graphics.drawable.StateListDrawable
 import android.os.SystemClock
 import android.util.TypedValue
 import android.view.Gravity
+import android.view.HapticFeedbackConstants
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
@@ -87,6 +89,10 @@ class NativeTerminalPlatformView(
     private var holder: NativeTerminalSessionHolder? = null
     private var imeCompensationBottomPx = 0
     private var lastKeyboardShowRequestElapsedMs = 0L
+    private var disposed = false
+    private val keyboardRetryRunnable = Runnable {
+        retryShowKeyboardIfNeeded()
+    }
     private val globalLayoutListener = ViewTreeObserver.OnGlobalLayoutListener {
         updateImeCompensation()
     }
@@ -139,15 +145,19 @@ class NativeTerminalPlatformView(
         )
         container.viewTreeObserver.addOnGlobalLayoutListener(globalLayoutListener)
         channel.setMethodCallHandler(this)
-        attachOrCreateSession(restart = params.booleanValue("restart", false))
+        val reusedSession = attachOrCreateSession(restart = params.booleanValue("restart", false))
         terminalView.post {
-            focusAndShowKeyboard()
+            if (!disposed) {
+                focusAndShowKeyboard(allowRetry = !reusedSession)
+            }
         }
     }
 
     override fun getView(): View = container
 
     override fun dispose() {
+        disposed = true
+        terminalView.removeCallbacks(keyboardRetryRunnable)
         hideKeyboard()
         if (container.viewTreeObserver.isAlive) {
             container.viewTreeObserver.removeOnGlobalLayoutListener(globalLayoutListener)
@@ -210,7 +220,7 @@ class NativeTerminalPlatformView(
             }
             "restart" -> {
                 attachOrCreateSession(restart = true)
-                focusAndShowKeyboard()
+                focusAndShowKeyboard(allowRetry = true)
                 result.success(true)
             }
             "close" -> {
@@ -223,7 +233,7 @@ class NativeTerminalPlatformView(
         }
     }
 
-    private fun attachOrCreateSession(restart: Boolean) {
+    private fun attachOrCreateSession(restart: Boolean): Boolean {
         if (restart) {
             sessions.remove(sessionId)?.session?.finishIfRunning()
         }
@@ -234,7 +244,7 @@ class NativeTerminalPlatformView(
             holder = existing
             terminalView.attachSession(existing.session)
             terminalView.updateSize()
-            return
+            return true
         }
 
         val executable = params.stringValue("executable")
@@ -262,37 +272,54 @@ class NativeTerminalPlatformView(
         }
         terminalView.attachSession(session)
         terminalView.updateSize()
+        return false
     }
 
-    private fun focusAndShowKeyboard() {
-        terminalView.post {
-            terminalView.requestFocus()
-            requestInputStripVisible()
-            val imm = terminalView.context.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
-                ?: return@post
-            val shouldRestartInput = !imm.isActive(terminalView)
-            if (shouldRestartInput) {
-                imm.restartInput(terminalView)
-            }
-            val now = SystemClock.uptimeMillis()
-            if (shouldRestartInput || now - lastKeyboardShowRequestElapsedMs >= 120L) {
-                imm.showSoftInput(terminalView, InputMethodManager.SHOW_IMPLICIT)
-                lastKeyboardShowRequestElapsedMs = now
-            }
-            terminalView.postDelayed({
-                requestInputStripVisible()
-                if (!imm.isActive(terminalView)) {
-                    imm.showSoftInput(terminalView, InputMethodManager.SHOW_IMPLICIT)
-                    lastKeyboardShowRequestElapsedMs = SystemClock.uptimeMillis()
-                }
-            }, 96)
+    private fun focusAndShowKeyboard(allowRetry: Boolean = false) {
+        if (disposed) {
+            return
+        }
+        terminalView.requestFocus()
+        requestInputStripVisible()
+        requestKeyboardShow()
+        terminalView.removeCallbacks(keyboardRetryRunnable)
+        if (allowRetry) {
+            terminalView.postDelayed(keyboardRetryRunnable, 160)
         }
     }
 
     private fun hideKeyboard() {
+        terminalView.removeCallbacks(keyboardRetryRunnable)
         val imm = terminalView.context.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
             ?: return
         imm.hideSoftInputFromWindow(terminalView.windowToken, 0)
+    }
+
+    private fun requestKeyboardShow(force: Boolean = false) {
+        val imm = terminalView.context.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
+            ?: return
+        val now = SystemClock.uptimeMillis()
+        val recentlyRequested = now - lastKeyboardShowRequestElapsedMs < 120L
+        if (!force && recentlyRequested && imm.isActive(terminalView)) {
+            return
+        }
+        imm.showSoftInput(terminalView, InputMethodManager.SHOW_IMPLICIT)
+        lastKeyboardShowRequestElapsedMs = now
+    }
+
+    private fun retryShowKeyboardIfNeeded() {
+        if (disposed) {
+            return
+        }
+        requestInputStripVisible()
+        val imm = terminalView.context.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
+            ?: return
+        if (terminalView.hasFocus().not()) {
+            terminalView.requestFocus()
+        }
+        if (!imm.isActive(terminalView)) {
+            requestKeyboardShow(force = true)
+        }
     }
 
     private fun setFontSize(nextFontSize: Int) {
@@ -411,8 +438,10 @@ class NativeTerminalPlatformView(
             isClickable = true
             isFocusable = false
             isFocusableInTouchMode = false
-            background = toolbarButtonBackground(active = false)
+            isHapticFeedbackEnabled = true
+            background = toolbarButtonBackground()
             setOnClickListener {
+                performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
                 onClick()
             }
         }
@@ -436,16 +465,34 @@ class NativeTerminalPlatformView(
         )
     }
 
-    private fun toolbarButtonBackground(active: Boolean): GradientDrawable {
+    private fun toolbarButtonBackground(): StateListDrawable {
+        return StateListDrawable().apply {
+            addState(
+                intArrayOf(android.R.attr.state_selected, android.R.attr.state_pressed),
+                toolbarButtonDrawable(TOOLBAR_ACTIVE_PRESSED_COLOR),
+            )
+            addState(
+                intArrayOf(android.R.attr.state_pressed),
+                toolbarButtonDrawable(TOOLBAR_BUTTON_PRESSED_COLOR),
+            )
+            addState(
+                intArrayOf(android.R.attr.state_selected),
+                toolbarButtonDrawable(TOOLBAR_ACTIVE_COLOR),
+            )
+            addState(intArrayOf(), toolbarButtonDrawable(TOOLBAR_BUTTON_COLOR))
+        }
+    }
+
+    private fun toolbarButtonDrawable(color: Int): GradientDrawable {
         return GradientDrawable().apply {
             cornerRadius = dpToPx(6).toFloat()
-            setColor(if (active) TOOLBAR_ACTIVE_COLOR else TOOLBAR_BUTTON_COLOR)
+            setColor(color)
         }
     }
 
     private fun updateModifierButtons() {
-        ctrlButtonView?.background = toolbarButtonBackground(ctrlModifierActive)
-        altButtonView?.background = toolbarButtonBackground(altModifierActive)
+        ctrlButtonView?.isSelected = ctrlModifierActive
+        altButtonView?.isSelected = altModifierActive
     }
 
     private fun toggleCtrlModifier() {
@@ -578,7 +625,9 @@ class NativeTerminalPlatformView(
         private const val DEFAULT_TRANSCRIPT_ROWS = 3000
         private const val KEYBOARD_VISIBLE_THRESHOLD_DP = 96
         private const val TOOLBAR_BUTTON_COLOR = 0xFF161616.toInt()
+        private const val TOOLBAR_BUTTON_PRESSED_COLOR = 0xFF2B2B2B.toInt()
         private const val TOOLBAR_ACTIVE_COLOR = 0xFF00C853.toInt()
+        private const val TOOLBAR_ACTIVE_PRESSED_COLOR = 0xFF009B3F.toInt()
         private val CTRL_SEQUENCE_MAP = mapOf(
             "\u001b[A" to "\u001b[1;5A",
             "\u001b[B" to "\u001b[1;5B",

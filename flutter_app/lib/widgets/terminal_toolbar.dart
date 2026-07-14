@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 class TerminalToolbar extends StatefulWidget {
   static const double toolbarHeight = 42;
@@ -99,6 +100,10 @@ class _TerminalToolbarState extends State<TerminalToolbar> {
     }
   }
 
+  void _triggerHaptic() {
+    HapticFeedback.selectionClick();
+  }
+
   @override
   Widget build(BuildContext context) {
     const bgColor = Colors.black;
@@ -113,6 +118,14 @@ class _TerminalToolbarState extends State<TerminalToolbar> {
       bool active = false,
       double? width,
     }) {
+      final effectiveOnTap = () {
+        _triggerHaptic();
+        if (onTap != null) {
+          onTap();
+        } else {
+          _send(sendData ?? label);
+        }
+      };
       return Padding(
         padding: const EdgeInsets.symmetric(horizontal: 1.5),
         child: Material(
@@ -120,7 +133,15 @@ class _TerminalToolbarState extends State<TerminalToolbar> {
           borderRadius: BorderRadius.circular(6),
           child: InkWell(
             borderRadius: BorderRadius.circular(6),
-            onTap: onTap ?? () => _send(sendData ?? label),
+            overlayColor: MaterialStateProperty.resolveWith((states) {
+              if (!states.contains(MaterialState.pressed)) {
+                return null;
+              }
+              return active
+                  ? const Color(0xCC009B3F)
+                  : const Color(0xFF2B2B2B);
+            }),
+            onTap: effectiveOnTap,
             child: Container(
               width: width,
               constraints: const BoxConstraints(minWidth: 36, minHeight: 34),
@@ -149,7 +170,16 @@ class _TerminalToolbarState extends State<TerminalToolbar> {
           borderRadius: BorderRadius.circular(6),
           child: InkWell(
             borderRadius: BorderRadius.circular(6),
-            onTap: () => _send(escSequence),
+            overlayColor: MaterialStateProperty.resolveWith((states) {
+              if (!states.contains(MaterialState.pressed)) {
+                return null;
+              }
+              return const Color(0xFF2B2B2B);
+            }),
+            onTap: () {
+              _triggerHaptic();
+              _send(escSequence);
+            },
             child: Container(
               constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
               alignment: Alignment.center,
