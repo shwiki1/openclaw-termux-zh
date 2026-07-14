@@ -7,6 +7,9 @@ class NativeBridge {
   static const _setupLogEventChannel =
       EventChannel(AppConstants.setupLogEventChannelName);
   static int _terminalSoftInputModeOwners = 0;
+  static int _browserSoftInputModeOwners = 0;
+  static String _appliedSoftInputMode = 'adjustResize';
+  static Future<void> _softInputModeSync = Future<void>.value();
 
   static Future<String> getProotPath() async {
     return await _channel.invokeMethod('getProotPath');
@@ -407,23 +410,54 @@ class NativeBridge {
     );
   }
 
+  static String _desiredSoftInputMode() {
+    if (_browserSoftInputModeOwners > 0) {
+      return 'adjustNothing';
+    }
+    if (_terminalSoftInputModeOwners > 0) {
+      return 'adjustPan';
+    }
+    return 'adjustResize';
+  }
+
+  static Future<void> _syncWindowSoftInputMode() {
+    final nextSync = _softInputModeSync.catchError((Object _) {}).then((_) async {
+      final desiredMode = _desiredSoftInputMode();
+      if (desiredMode == _appliedSoftInputMode) {
+        return;
+      }
+      await _setWindowSoftInputMode(desiredMode);
+      _appliedSoftInputMode = desiredMode;
+    });
+    _softInputModeSync = nextSync.catchError((Object _) {});
+    return nextSync;
+  }
+
   static Future<void> acquireTerminalSoftInputMode() async {
     _terminalSoftInputModeOwners += 1;
-    if (_terminalSoftInputModeOwners != 1) {
-      return;
-    }
-    await _setWindowSoftInputMode('adjustPan');
+    await _syncWindowSoftInputMode();
   }
 
   static Future<void> releaseTerminalSoftInputMode() async {
     if (_terminalSoftInputModeOwners <= 0) {
       _terminalSoftInputModeOwners = 0;
-      return;
+    } else {
+      _terminalSoftInputModeOwners -= 1;
     }
-    _terminalSoftInputModeOwners -= 1;
-    if (_terminalSoftInputModeOwners != 0) {
-      return;
+    await _syncWindowSoftInputMode();
+  }
+
+  static Future<void> acquireBrowserSoftInputMode() async {
+    _browserSoftInputModeOwners += 1;
+    await _syncWindowSoftInputMode();
+  }
+
+  static Future<void> releaseBrowserSoftInputMode() async {
+    if (_browserSoftInputModeOwners <= 0) {
+      _browserSoftInputModeOwners = 0;
+    } else {
+      _browserSoftInputModeOwners -= 1;
     }
-    await _setWindowSoftInputMode('adjustResize');
+    await _syncWindowSoftInputMode();
   }
 }

@@ -600,7 +600,10 @@ class _TerminalScreenState extends State<TerminalScreen> {
       elevation: 12,
       child: Stack(
         children: [
-          TerminalBrowserPanel(onClose: _closeBrowserPanel),
+          TerminalBrowserPanel(
+            onClose: _closeBrowserPanel,
+            visible: _browserPanelOpen,
+          ),
           Positioned(
             left: 0,
             top: 0,

@@ -13,11 +13,13 @@ import '../services/native_bridge.dart';
 
 class TerminalBrowserPanel extends StatefulWidget {
   final bool standalone;
+  final bool visible;
   final VoidCallback? onClose;
 
   const TerminalBrowserPanel({
     super.key,
     this.standalone = false,
+    this.visible = true,
     this.onClose,
   });
 
@@ -85,6 +87,7 @@ class _BrowserTab {
   bool loading;
   bool canGoBack;
   bool canGoForward;
+  bool pageInputFocused;
   Completer<void>? navigationCompleter;
 
   _BrowserTab({
@@ -96,6 +99,7 @@ class _BrowserTab {
     this.loading = true,
     this.canGoBack = false,
     this.canGoForward = false,
+    this.pageInputFocused = false,
   });
 
   Map<String, dynamic> toJson({required bool active}) {
@@ -129,6 +133,7 @@ class _TerminalBrowserPanelState extends State<TerminalBrowserPanel>
   static const _panelText = Color(0xFFF5F5F5);
   static const _panelMutedText = Color(0xFFCACACA);
   static const _panelDisabledText = Color(0xFF8A8A8A);
+  static const _keyboardFocusChannelName = 'OpenClawImeFocus';
 
   static const _welcomeHtml = '''
 <!doctype html>
@@ -288,6 +293,7 @@ class _TerminalBrowserPanelState extends State<TerminalBrowserPanel>
 
   final _service = BrowserAutomationService.instance;
   final _urlController = TextEditingController();
+  final _urlFocusNode = FocusNode();
   final List<_BrowserTab> _tabs = <_BrowserTab>[];
   int _nextTabId = 1;
   int _activeTabIndex = 0;
@@ -304,6 +310,7 @@ class _TerminalBrowserPanelState extends State<TerminalBrowserPanel>
   String _inspectorError = '';
   String _inspectorMode = 'interactables';
   List<Map<String, dynamic>> _inspectorItems = const [];
+  bool _browserSoftInputModeActive = false;
 
   _BrowserTab get _activeTab => _tabs[_activeTabIndex];
 
@@ -315,6 +322,7 @@ class _TerminalBrowserPanelState extends State<TerminalBrowserPanel>
   @override
   void initState() {
     super.initState();
+    _urlFocusNode.addListener(_handleAddressBarFocusChange);
     final initialTab = _createTab();
     _tabs.add(initialTab);
     _syncStateFromTab(initialTab, updateAddress: true);
@@ -324,8 +332,29 @@ class _TerminalBrowserPanelState extends State<TerminalBrowserPanel>
   }
 
   @override
+  void didUpdateWidget(covariant TerminalBrowserPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.visible == widget.visible) {
+      return;
+    }
+    if (!widget.visible) {
+      _clearActivePageInputFocus(blurWebView: true);
+      return;
+    }
+    _syncBrowserSoftInputMode();
+  }
+
+  @override
   void dispose() {
     _service.unbindDelegate(this);
+    _urlFocusNode.removeListener(_handleAddressBarFocusChange);
+    if (_browserSoftInputModeActive) {
+      unawaited(
+        NativeBridge.releaseBrowserSoftInputMode().catchError((_) => false),
+      );
+      _browserSoftInputModeActive = false;
+    }
+    _urlFocusNode.dispose();
     _urlController.dispose();
     super.dispose();
   }
@@ -372,6 +401,61 @@ class _TerminalBrowserPanelState extends State<TerminalBrowserPanel>
     if (updateAddress) {
       _urlController.text = tab.currentUrl;
     }
+  }
+
+  void _handleAddressBarFocusChange() {
+    _syncBrowserSoftInputMode();
+  }
+
+  bool _shouldUseBrowserSoftInputMode() {
+    if (!widget.visible) {
+      return false;
+    }
+    if (_urlFocusNode.hasFocus) {
+      return true;
+    }
+    if (_tabs.isEmpty) {
+      return false;
+    }
+    return _activeTab.pageInputFocused;
+  }
+
+  void _syncBrowserSoftInputMode() {
+    final shouldUseBrowserMode = _shouldUseBrowserSoftInputMode();
+    if (shouldUseBrowserMode == _browserSoftInputModeActive) {
+      return;
+    }
+    _browserSoftInputModeActive = shouldUseBrowserMode;
+    final future = shouldUseBrowserMode
+        ? NativeBridge.acquireBrowserSoftInputMode()
+        : NativeBridge.releaseBrowserSoftInputMode();
+    unawaited(future.catchError((_) => false));
+  }
+
+  void _clearActivePageInputFocus({bool blurWebView = false}) {
+    if (_tabs.isNotEmpty) {
+      _activeTab.pageInputFocused = false;
+    }
+    if (_urlFocusNode.hasFocus) {
+      _urlFocusNode.unfocus();
+    }
+    _syncBrowserSoftInputMode();
+    if (blurWebView && _tabs.isNotEmpty) {
+      unawaited(_blurFocusedElement(_activeTab));
+    }
+  }
+
+  Future<void> _blurFocusedElement(_BrowserTab tab) async {
+    try {
+      await tab.controller.runJavaScript(r'''
+(() => {
+  const active = document.activeElement;
+  if (active && typeof active.blur === 'function') {
+    active.blur();
+  }
+})();
+''');
+    } catch (_) {}
   }
 
   void _setTabLoadingState(
@@ -447,6 +531,74 @@ class _TerminalBrowserPanelState extends State<TerminalBrowserPanel>
     );
   }
 
+  void _handlePageInputFocusMessage(_BrowserTab tab, String rawMessage) {
+    bool focused = false;
+    try {
+      final decoded = jsonDecode(rawMessage);
+      if (decoded is Map<String, dynamic>) {
+        focused = decoded['focused'] == true;
+      } else if (decoded is Map) {
+        focused = decoded['focused'] == true;
+      }
+    } catch (_) {
+      final normalized = rawMessage.trim().toLowerCase();
+      focused = normalized == 'true' || normalized == 'focused';
+    }
+    if (tab.pageInputFocused == focused) {
+      return;
+    }
+    tab.pageInputFocused = focused;
+    if (_isActiveTab(tab)) {
+      _syncBrowserSoftInputMode();
+    }
+  }
+
+  Future<void> _installPageInputFocusBridge(_BrowserTab tab) async {
+    try {
+      await tab.controller.runJavaScript('''
+(() => {
+  const channel = window.$_keyboardFocusChannelName;
+  if (!channel || typeof channel.postMessage !== 'function') {
+    return;
+  }
+  const isEditable = (element) => {
+    if (!element) {
+      return false;
+    }
+    const tag = (element.tagName || '').toLowerCase();
+    if (tag === 'input' || tag === 'textarea' || tag === 'select') {
+      return true;
+    }
+    if (element.isContentEditable) {
+      return true;
+    }
+    if (typeof element.getAttribute !== 'function') {
+      return false;
+    }
+    const contentEditable = element.getAttribute('contenteditable');
+    return contentEditable === '' || contentEditable === 'true';
+  };
+  const postState = () => {
+    try {
+      channel.postMessage(JSON.stringify({
+        focused: isEditable(document.activeElement),
+      }));
+    } catch (_) {}
+  };
+  if (!window.__openclawImeFocusBridgeInstalled) {
+    window.__openclawImeFocusBridgeInstalled = true;
+    document.addEventListener('focusin', postState, true);
+    document.addEventListener('focusout', () => {
+      window.setTimeout(postState, 0);
+    }, true);
+    window.addEventListener('pageshow', postState, true);
+  }
+  postState();
+})();
+''');
+    } catch (_) {}
+  }
+
   Map<String, String> _userAgentHeadersForTab(_BrowserTab tab) {
     return {'User-Agent': tab.userAgentMode.userAgent};
   }
@@ -493,6 +645,10 @@ class _TerminalBrowserPanelState extends State<TerminalBrowserPanel>
 
   Future<void> _loadWelcomePage({_BrowserTab? tab}) async {
     final targetTab = tab ?? _activeTab;
+    targetTab.pageInputFocused = false;
+    if (_isActiveTab(targetTab)) {
+      _syncBrowserSoftInputMode();
+    }
     _setTabLoadingState(
       targetTab,
       title: 'Codex 浏览器自动化控制',
@@ -522,9 +678,19 @@ class _TerminalBrowserPanelState extends State<TerminalBrowserPanel>
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..enableZoom(true)
       ..setBackgroundColor(Colors.black)
+      ..addJavaScriptChannel(
+        _keyboardFocusChannelName,
+        onMessageReceived: (message) {
+          _handlePageInputFocusMessage(tab, message.message);
+        },
+      )
       ..setNavigationDelegate(
         NavigationDelegate(
           onPageStarted: (url) {
+            tab.pageInputFocused = false;
+            if (_isActiveTab(tab)) {
+              _syncBrowserSoftInputMode();
+            }
             if (tab.navigationCompleter == null ||
                 tab.navigationCompleter!.isCompleted) {
               tab.navigationCompleter = Completer<void>();
@@ -540,6 +706,7 @@ class _TerminalBrowserPanelState extends State<TerminalBrowserPanel>
           onPageFinished: (url) {
             _completePendingNavigation(tab);
             unawaited(_applyDesktopViewportHint(tab));
+            unawaited(_installPageInputFocusBridge(tab));
             unawaited(_refreshNavigationState(tab));
             if (_isActiveTab(tab) && _showInspector) {
               unawaited(_refreshInspectorCurrentMode());
@@ -556,6 +723,10 @@ class _TerminalBrowserPanelState extends State<TerminalBrowserPanel>
               return;
             }
             _completePendingNavigation(tab);
+            tab.pageInputFocused = false;
+            if (_isActiveTab(tab)) {
+              _syncBrowserSoftInputMode();
+            }
             _setTabLoadingState(
               tab,
               error: error.description.trim(),
@@ -934,6 +1105,7 @@ class _TerminalBrowserPanelState extends State<TerminalBrowserPanel>
       _syncStateFromTab(tab, updateAddress: true);
       _clearInspectorItems();
     });
+    _syncBrowserSoftInputMode();
     _publishStateToService();
     final targetUrl = url?.trim() ?? '';
     if (targetUrl.isEmpty) {
@@ -960,6 +1132,7 @@ class _TerminalBrowserPanelState extends State<TerminalBrowserPanel>
       _syncStateFromTab(_activeTab, updateAddress: true);
       _clearInspectorItems();
     });
+    _syncBrowserSoftInputMode();
     _publishStateToService();
     return _pageSnapshot(message: 'Switched to browser tab $id.');
   }
@@ -989,6 +1162,7 @@ class _TerminalBrowserPanelState extends State<TerminalBrowserPanel>
       _syncStateFromTab(_activeTab, updateAddress: true);
       _clearInspectorItems();
     });
+    _syncBrowserSoftInputMode();
     _publishStateToService();
     if (_activeTab.currentUrl.isEmpty) {
       await _loadWelcomePage();
@@ -2473,6 +2647,7 @@ class _TerminalBrowserPanelState extends State<TerminalBrowserPanel>
         Expanded(
           child: TextField(
             controller: _urlController,
+            focusNode: _urlFocusNode,
             style: const TextStyle(
               color: _panelText,
               fontSize: 13,

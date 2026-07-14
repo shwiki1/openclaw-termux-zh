@@ -128,7 +128,6 @@ class NativeTerminalViewState extends State<NativeTerminalView> {
         channel.setMethodCallHandler(_handleMethodCall);
         _channel = channel;
         unawaited(setRenderingPaused(widget.renderingPaused));
-        unawaited(showKeyboard());
       },
     );
 

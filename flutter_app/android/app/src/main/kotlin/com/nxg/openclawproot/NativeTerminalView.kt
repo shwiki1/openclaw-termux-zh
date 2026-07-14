@@ -86,6 +86,7 @@ class NativeTerminalPlatformView(
     private val toolbarStrip = if (useNativeToolbar) createToolbarStrip(context) else null
     private var holder: NativeTerminalSessionHolder? = null
     private var imeCompensationBottomPx = 0
+    private var lastKeyboardShowRequestElapsedMs = 0L
     private val globalLayoutListener = ViewTreeObserver.OnGlobalLayoutListener {
         updateImeCompensation()
     }
@@ -267,23 +268,29 @@ class NativeTerminalPlatformView(
         terminalView.post {
             terminalView.requestFocus()
             requestInputStripVisible()
-            val imm = appContext.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
+            val imm = terminalView.context.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
                 ?: return@post
-            imm.restartInput(terminalView)
-            imm.showSoftInput(terminalView, InputMethodManager.SHOW_IMPLICIT)
-            requestInputStripVisible()
-            terminalView.postDelayed({
+            val shouldRestartInput = !imm.isActive(terminalView)
+            if (shouldRestartInput) {
+                imm.restartInput(terminalView)
+            }
+            val now = SystemClock.uptimeMillis()
+            if (shouldRestartInput || now - lastKeyboardShowRequestElapsedMs >= 120L) {
                 imm.showSoftInput(terminalView, InputMethodManager.SHOW_IMPLICIT)
-                requestInputStripVisible()
-            }, 80)
+                lastKeyboardShowRequestElapsedMs = now
+            }
             terminalView.postDelayed({
                 requestInputStripVisible()
-            }, 180)
+                if (!imm.isActive(terminalView)) {
+                    imm.showSoftInput(terminalView, InputMethodManager.SHOW_IMPLICIT)
+                    lastKeyboardShowRequestElapsedMs = SystemClock.uptimeMillis()
+                }
+            }, 96)
         }
     }
 
     private fun hideKeyboard() {
-        val imm = appContext.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
+        val imm = terminalView.context.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
             ?: return
         imm.hideSoftInputFromWindow(terminalView.windowToken, 0)
     }
