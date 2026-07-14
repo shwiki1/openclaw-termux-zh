@@ -6,6 +6,7 @@ class NativeBridge {
   static const _eventChannel = EventChannel(AppConstants.eventChannelName);
   static const _setupLogEventChannel =
       EventChannel(AppConstants.setupLogEventChannelName);
+  static int _terminalSoftInputModeOwners = 0;
 
   static Future<String> getProotPath() async {
     return await _channel.invokeMethod('getProotPath');
@@ -397,5 +398,32 @@ class NativeBridge {
   static Future<bool> setRootPassword(String password) async {
     return await _channel
         .invokeMethod('setRootPassword', {'password': password});
+  }
+
+  static Future<bool> _setWindowSoftInputMode(String mode) async {
+    return await _channel.invokeMethod(
+      'setWindowSoftInputMode',
+      {'mode': mode},
+    );
+  }
+
+  static Future<void> acquireTerminalSoftInputMode() async {
+    _terminalSoftInputModeOwners += 1;
+    if (_terminalSoftInputModeOwners != 1) {
+      return;
+    }
+    await _setWindowSoftInputMode('adjustPan');
+  }
+
+  static Future<void> releaseTerminalSoftInputMode() async {
+    if (_terminalSoftInputModeOwners <= 0) {
+      _terminalSoftInputModeOwners = 0;
+      return;
+    }
+    _terminalSoftInputModeOwners -= 1;
+    if (_terminalSoftInputModeOwners != 0) {
+      return;
+    }
+    await _setWindowSoftInputMode('adjustResize');
   }
 }

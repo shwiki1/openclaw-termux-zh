@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import '../constants.dart';
 import 'local_model_service.dart';
 
 class OnlineModelCatalogException implements Exception {
@@ -86,7 +87,7 @@ class OnlineModelCatalogVariant {
 
 class OnlineModelCatalogService {
   static const _baseUrl = 'https://huggingface.co';
-  static const _userAgent = 'CiYuanXia/2.0.50';
+  static String get _userAgent => 'CiYuanXia/${AppConstants.version}';
   static final Uri _searchEndpoint = Uri.parse('$_baseUrl/api/models');
   static final Map<String, _SearchCacheEntry> _searchCache =
       <String, _SearchCacheEntry>{};

@@ -90,16 +90,100 @@ void main() {
 
     final browserMcp = rootfsFiles['/root/.openclaw/browser-mcp.mjs']!;
     expect(browserMcp, contains('browser_get_state'));
+    expect(browserMcp, contains('browser_control'));
     expect(browserMcp, contains('browser_open'));
+    expect(browserMcp, contains('browser_wait_for_selector'));
+    expect(browserMcp, contains('browser_scroll'));
+    expect(browserMcp, contains('browser_press_key'));
+    expect(browserMcp, contains('browser_select_option'));
+    expect(browserMcp, contains('browser_tab_list'));
+    expect(browserMcp, contains('browser_tab_new'));
+    expect(browserMcp, contains('browser_tab_switch'));
+    expect(browserMcp, contains('browser_tab_close'));
+    expect(browserMcp, contains('browser_set_ua'));
+    expect(browserMcp, contains('browser_script_list'));
+    expect(browserMcp, contains('browser_script_stage'));
+    expect(browserMcp, contains('browser_script_save'));
+    expect(browserMcp, contains('browser_script_run'));
+    expect(browserMcp, contains('browser_script_rename'));
+    expect(browserMcp, contains('browser_script_delete'));
+    expect(browserMcp, contains('browser_script_clear_pending'));
+    expect(browserMcp, contains('browser_wait_for_selector: "wait_for_selector"'));
+    expect(browserMcp, contains('browser_scroll: "scroll"'));
+    expect(browserMcp, contains('browser_press_key: "press_key"'));
+    expect(browserMcp, contains('browser_select_option: "select_option"'));
+    expect(browserMcp, contains('browser_tab_list: "tab_list"'));
+    expect(browserMcp, contains('browser_tab_new: "tab_new"'));
+    expect(browserMcp, contains('browser_tab_switch: "tab_switch"'));
+    expect(browserMcp, contains('browser_tab_close: "tab_close"'));
+    expect(browserMcp, contains('browser_set_ua: "set_ua"'));
+    expect(browserMcp, contains('browser_script_stage: "script_stage"'));
+    expect(browserMcp, contains('browser_script_run: "script_run"'));
+    expect(browserMcp, contains('function normalizeBridgeAction'));
+    expect(browserMcp, contains('toolName === "browser_control"'));
+    expect(browserMcp, contains('version: "1.5.0"'));
     expect(
       browserMcp,
       contains('process.stdout.write(payload.toString("utf8") + "\\n")'),
     );
     expect(browserMcp, contains('Content-Length:'));
 
+    final browserScriptLauncher =
+        rootfsFiles['/root/.openclaw/bin/browser-script']!;
+    expect(
+      browserScriptLauncher,
+      contains('browser-script call <action-or-browser_tool> [json-payload]'),
+    );
+    expect(
+      browserScriptLauncher,
+      contains('browser-script interactables [filter] [maxItems]'),
+    );
+    expect(browserScriptLauncher, contains('browser-script tabs'));
+    expect(browserScriptLauncher, contains('browser-script new-tab [url]'));
+    expect(
+      browserScriptLauncher,
+      contains('browser-script switch-tab <tab-id>'),
+    );
+    expect(browserScriptLauncher, contains('browser-script ua <desktop|mobile>'));
+    expect(browserScriptLauncher, contains('browser-script run <script-id>'));
+    expect(
+      browserScriptLauncher,
+      contains('browser-script stage <file-name> <description>'),
+    );
+    expect(browserScriptLauncher, contains('bridge_action="capture_snapshot"'));
+    expect(browserScriptLauncher, contains('bridge_action="tab_list"'));
+    expect(browserScriptLauncher, contains('bridge_action="tab_new"'));
+    expect(browserScriptLauncher, contains('bridge_action="tab_switch"'));
+    expect(browserScriptLauncher, contains('bridge_action="tab_close"'));
+    expect(browserScriptLauncher, contains('bridge_action="set_ua"'));
+    expect(browserScriptLauncher, contains('bridge_action="script_stage"'));
+    expect(browserScriptLauncher, contains('bridge_action="script_run"'));
+    expect(browserScriptLauncher, contains('const ACTION_ALIASES = {'));
+    expect(browserScriptLauncher, contains('browser_type: "type"'));
+    expect(browserScriptLauncher, contains('browser_tab_list: "tab_list"'));
+    expect(browserScriptLauncher, contains('browser_tab_new: "tab_new"'));
+    expect(browserScriptLauncher, contains('browser_tab_switch: "tab_switch"'));
+    expect(browserScriptLauncher, contains('browser_tab_close: "tab_close"'));
+    expect(browserScriptLauncher, contains('browser_set_ua: "set_ua"'));
+    expect(browserScriptLauncher, contains('OPENCLAW_BROWSER_BRIDGE_TOKEN'));
+
     final browserSkill =
         rootfsFiles['/root/.codex/skills/browser-operator/SKILL.md']!;
     expect(browserSkill, contains('browser_get_state'));
+    expect(browserSkill, contains('browser_control'));
+    expect(browserSkill, contains('browser-script call'));
+    expect(browserSkill, contains('browser_wait_for_selector'));
+    expect(browserSkill, contains('browser_scroll'));
+    expect(browserSkill, contains('browser_press_key'));
+    expect(browserSkill, contains('browser_select_option'));
+    expect(browserSkill, contains('browser_tab_list'));
+    expect(browserSkill, contains('browser_tab_new'));
+    expect(browserSkill, contains('browser_set_ua'));
+    expect(browserSkill, contains('browser_script_list'));
+    expect(browserSkill, contains('browser_script_stage'));
+    expect(browserSkill, contains('browser_script_save'));
+    expect(browserSkill, contains('browser_script_run'));
+    expect(browserSkill, contains('pending-save'));
   });
 
   test('Codex API key without custom base URL still uses API auth', () async {
@@ -193,11 +277,14 @@ void main() {
 
     final helper = rootfsFiles['/root/.openclaw/codex-termux-runtime.sh']!;
     expect(helper, contains('OPENCLAW_CODEX_PROXY_UPSTREAM'));
-    expect(helper, contains('codex_configure_model_provider "$codex_config" "hhhl"'));
+    expect(
+      helper,
+      contains('codex_configure_model_provider "\$codex_config" "hhhl"'),
+    );
     expect(
       helper,
       contains(
-        'codex_configure_browser_mcp "$codex_config" "/root/.openclaw/browser-mcp.mjs"',
+        'codex_configure_browser_mcp "\$codex_config" "/root/.openclaw/browser-mcp.mjs"',
       ),
     );
   });

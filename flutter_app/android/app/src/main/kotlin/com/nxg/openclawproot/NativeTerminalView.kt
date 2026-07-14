@@ -58,6 +58,7 @@ class NativeTerminalPlatformView(
         terminalView,
         channel,
         params.booleanValue("emitOutput", false),
+        params.booleanValue("renderingPaused", false),
         fontSize,
         ::setFontSize,
         ::focusAndShowKeyboard,
@@ -141,6 +142,10 @@ class NativeTerminalPlatformView(
                 setFontSize(nextFontSize)
                 result.success(nextFontSize)
             }
+            "setRenderingPaused" -> {
+                client.setRenderingPaused(call.argument<Boolean>("paused") == true)
+                result.success(true)
+            }
             "restart" -> {
                 attachOrCreateSession(restart = true)
                 focusAndShowKeyboard()
@@ -183,7 +188,8 @@ class NativeTerminalPlatformView(
             cwd,
             argv,
             env,
-            params.intValue("transcriptRows", 3000),
+            params.intValue("transcriptRows", DEFAULT_TRANSCRIPT_ROWS)
+                .coerceIn(MIN_TRANSCRIPT_ROWS, MAX_TRANSCRIPT_ROWS),
             client,
         )
         session.mSessionName = sessionId
@@ -227,6 +233,9 @@ class NativeTerminalPlatformView(
     companion object {
         private const val MIN_FONT_SIZE = 12
         private const val MAX_FONT_SIZE = 32
+        private const val MIN_TRANSCRIPT_ROWS = 400
+        private const val MAX_TRANSCRIPT_ROWS = 3000
+        private const val DEFAULT_TRANSCRIPT_ROWS = 3000
         private val sessions = mutableMapOf<String, NativeTerminalSessionHolder>()
     }
 }
@@ -269,10 +278,14 @@ private class NativeTerminalClient(
     private val terminalView: TerminalView,
     private val channel: MethodChannel,
     private val emitOutput: Boolean,
+    private var renderingPaused: Boolean,
     var fontSize: Int,
     private val setFontSize: (Int) -> Unit,
     private val showKeyboard: () -> Unit,
 ) : TerminalSessionClient, TerminalViewClient {
+    private var refreshScheduled = false
+    private var refreshPending = false
+    private var lastRefreshMs = 0L
     private var controlDown = false
     private var altDown = false
     private var lastTranscript = ""
@@ -280,7 +293,7 @@ private class NativeTerminalClient(
     private var lastScaleApplyMs = 0L
 
     override fun onTextChanged(changedSession: TerminalSession) {
-        terminalView.onScreenUpdated()
+        requestScreenUpdate()
         if (emitOutput) {
             val transcript = changedSession.emulator?.screen?.getTranscriptTextWithFullLinesJoined() ?: ""
             val delta = if (transcript.startsWith(lastTranscript)) {
@@ -300,7 +313,7 @@ private class NativeTerminalClient(
     }
 
     override fun onSessionFinished(finishedSession: TerminalSession) {
-        terminalView.onScreenUpdated()
+        requestScreenUpdate(immediate = true)
         channel.invokeMethod("onSessionFinished", finishedSession.exitStatus)
     }
 
@@ -320,7 +333,7 @@ private class NativeTerminalClient(
     override fun onBell(session: TerminalSession) = Unit
 
     override fun onColorsChanged(session: TerminalSession) {
-        terminalView.onScreenUpdated()
+        requestScreenUpdate(immediate = true)
     }
 
     override fun onTerminalCursorStateChange(state: Boolean) {
@@ -352,6 +365,49 @@ private class NativeTerminalClient(
 
     override fun onSingleTapUp(e: MotionEvent) {
         showKeyboard()
+    }
+
+    fun setRenderingPaused(paused: Boolean) {
+        if (renderingPaused == paused) return
+        renderingPaused = paused
+        if (!paused && (refreshPending || refreshScheduled)) {
+            refreshPending = false
+            refreshScheduled = false
+            terminalView.post {
+                requestScreenUpdate(immediate = true)
+            }
+        }
+    }
+
+    private fun requestScreenUpdate(immediate: Boolean = false) {
+        if (renderingPaused) {
+            refreshPending = true
+            return
+        }
+        val now = SystemClock.uptimeMillis()
+        val elapsed = now - lastRefreshMs
+        if (immediate || elapsed >= MIN_REFRESH_INTERVAL_MS) {
+            refreshPending = false
+            refreshScheduled = false
+            lastRefreshMs = now
+            terminalView.onScreenUpdated()
+            return
+        }
+        refreshPending = true
+        if (refreshScheduled) {
+            return
+        }
+        refreshScheduled = true
+        terminalView.postDelayed({
+            refreshScheduled = false
+            if (renderingPaused) {
+                refreshPending = true
+                return@postDelayed
+            }
+            refreshPending = false
+            lastRefreshMs = SystemClock.uptimeMillis()
+            terminalView.onScreenUpdated()
+        }, (MIN_REFRESH_INTERVAL_MS - elapsed).coerceAtLeast(1L))
     }
 
     override fun shouldBackButtonBeMappedToEscape(): Boolean = false
@@ -413,6 +469,10 @@ private class NativeTerminalClient(
     }
     override fun logStackTrace(tag: String, e: Exception) {
         android.util.Log.e(tag, "Native terminal error", e)
+    }
+
+    companion object {
+        private const val MIN_REFRESH_INTERVAL_MS = 32L
     }
 }
 

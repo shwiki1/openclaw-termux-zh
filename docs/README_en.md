@@ -8,8 +8,10 @@ CiYuanXia is a community-maintained Android integration app for OpenClaw, focuse
 
 - App name: `次元虾`
 - Android package: `com.agent.cyx`
-- Version name: `2.0.50`
-- Build number: `126`
+- Version name (installer / in-app display): `2.5`
+- Source semantic version anchor: `2.5.0+143`
+- Android build anchor: `143`
+- Build progression: `144 -> 2.5`, `145 -> 2.6`, `146 -> 2.7`, `147 -> 2.8`, `148 -> 2.9`, `149 -> 3.0`
 - Release artifact prefix: `CiYuanXia-v`
 - The Dart package name remains `openclaw` for compatibility with existing Flutter test imports.
 
@@ -29,8 +31,8 @@ Main capabilities:
 ## Runtime Defaults
 
 - Ubuntu: `24.04.3 noble`
-- arm64 / x86_64 Node.js: `24.14.1`
-- armv7 / armhf Node.js: `22.22.2`
+- arm64 / x86_64 Node.js: `24.15.0`
+- armv7 / armhf Node.js: `22.22.3`
 - OpenClaw: npm `openclaw@latest` stable release, filtering prerelease tags such as beta, rc, test, and preview.
 
 Large runtime resources should not be assumed to be bundled directly in the APK. The app can restore them from the `basic-resource` release, use custom URLs, import local archives, or download from mirrors during first-run setup.
@@ -46,13 +48,13 @@ flutter build apk --release
 Release helper:
 
 ```bash
-python scripts/build_release.py --version 2.0.50 --build-number 126
+python scripts/build_release.py --build-number 144
 ```
 
 GitHub Actions artifact naming:
 
 ```text
-CiYuanXia-v2.0.50-126-arm64-v8a.apk
+CiYuanXia-v2.5-144-arm64-v8a.apk
 ```
 
 ## Verification

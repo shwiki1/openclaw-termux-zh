@@ -4,9 +4,11 @@ node_modules/
 .env
 .env.local
 *.tgz
+*.pyc
 coverage/
 .nyc_output/
 .tmp/
+__pycache__/
 
 
 # Android signing
@@ -29,6 +31,7 @@ flutter_app/android/app/src/main/java/io/flutter/plugins/GeneratedPluginRegistra
 
 # Local release output
 dist/
+artifacts/
 release/*
 !release/*/
 release/*/*

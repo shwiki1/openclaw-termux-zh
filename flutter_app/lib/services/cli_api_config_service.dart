@@ -48,6 +48,8 @@ class CliApiConfigService {
   static const _terminalThemePath = '/root/.openclaw/terminal-theme.sh';
   static const _browserBridgeEnvPath = '/root/.openclaw/browser-bridge.env';
   static const _browserMcpPath = '/root/.openclaw/browser-mcp.mjs';
+  static const _browserScriptLauncherPath =
+      '$_managedCliBinDir/browser-script';
   static const _browserMcpStartupTimeoutSec = 60;
   static const _browserCodexSkillPath =
       '/root/.codex/skills/browser-operator/SKILL.md';
@@ -262,6 +264,10 @@ class CliApiConfigService {
       _buildBrowserMcpScript(),
     );
     await NativeBridge.writeRootfsFile(
+      _browserScriptLauncherPath,
+      _buildBrowserScriptLauncherSh(),
+    );
+    await NativeBridge.writeRootfsFile(
       _browserSkillPath,
       _buildBrowserSkill(),
     );
@@ -327,6 +333,7 @@ class CliApiConfigService {
       'chmod 0755 $_codexProxyJsPath 2>/dev/null || true; '
       'chmod 0755 $_codexTermuxRuntimePath 2>/dev/null || true; '
       'chmod 0755 $_browserMcpPath 2>/dev/null || true; '
+      'chmod 0755 $_browserScriptLauncherPath 2>/dev/null || true; '
       'chmod 0755 $_codexLauncherPath $_genericAgentLauncherPath '
       '$_geminiLauncherPath $_hermesLauncherPath 2>/dev/null || true; '
       'chmod $codexProxyEnvMode $_codexProxyEnvPath 2>/dev/null || true; '
@@ -1509,6 +1516,36 @@ const TOOL_DEFS = [
     },
   },
   {
+    name: "browser_control",
+    description:
+      "Stable single-entry browser automation tool. Use this when fine-grained browser tools are not exposed reliably; pass action such as open, tab_new, set_ua, list_interactables, type, click, capture_snapshot, or a browser_* tool name, plus payload.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        action: {
+          type: "string",
+          description:
+            "Bridge action or browser_* tool name, for example open, browser_open, tab_new, browser_set_ua, list_interactables, browser_type, click, or capture_snapshot.",
+        },
+        tool: {
+          type: "string",
+          description: "Alias for action.",
+        },
+        payload: {
+          type: "object",
+          description: "Payload for the selected action.",
+          additionalProperties: true,
+        },
+        arguments: {
+          type: "object",
+          description: "Alias for payload, useful when copying an existing MCP tool call.",
+          additionalProperties: true,
+        },
+      },
+      additionalProperties: true,
+    },
+  },
+  {
     name: "browser_open",
     description:
       "Open a URL in the OpenClaw in-app browser panel. Use this before clicking or extracting page content.",
@@ -1548,6 +1585,78 @@ const TOOL_DEFS = [
     inputSchema: {
       type: "object",
       properties: {},
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "browser_tab_list",
+    description:
+      "List all in-app browser tabs and the active tab. Use this before switching tabs.",
+    inputSchema: {
+      type: "object",
+      properties: {},
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "browser_tab_new",
+    description:
+      "Open a new in-app browser tab. Optionally provide a URL to load in the new tab.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        url: {
+          type: "string",
+          description: "Optional URL to open in the new tab.",
+        },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "browser_tab_switch",
+    description: "Switch the active in-app browser tab by numeric tab id.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: {
+          type: "integer",
+          description: "Browser tab id returned by browser_tab_list.",
+        },
+      },
+      required: ["id"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "browser_tab_close",
+    description:
+      "Close a browser tab by numeric tab id. If id is omitted, closes the active tab.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: {
+          type: "integer",
+          description: "Optional browser tab id returned by browser_tab_list.",
+        },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "browser_set_ua",
+    description:
+      "Switch the active browser tab user agent and reload the current page. Use desktop when a website shows a mobile layout unexpectedly.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        mode: {
+          type: "string",
+          enum: ["desktop", "mobile"],
+          description: "User-agent mode for the active tab.",
+        },
+      },
+      required: ["mode"],
       additionalProperties: false,
     },
   },
@@ -1609,6 +1718,107 @@ const TOOL_DEFS = [
         },
       },
       required: ["text"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "browser_wait_for_selector",
+    description:
+      "Wait until a CSS selector exists, and by default is visible, on the current page.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        selector: {
+          type: "string",
+          description: "CSS selector that must appear on the page.",
+        },
+        timeoutMs: {
+          type: "integer",
+          description: "Maximum wait time in milliseconds.",
+          minimum: 500,
+          maximum: 120000,
+        },
+        visible: {
+          type: "boolean",
+          description: "Whether the element must also be visible. Defaults to true.",
+        },
+      },
+      required: ["selector"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "browser_scroll",
+    description:
+      "Scroll the page or a scrollable CSS-selected element. Useful before searching for below-the-fold controls.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        selector: {
+          type: "string",
+          description: "Optional CSS selector for a scrollable element. Omit to scroll the page.",
+        },
+        direction: {
+          type: "string",
+          enum: ["down", "up", "left", "right", "top", "bottom"],
+          description: "Scroll direction. Defaults to down.",
+        },
+        pixels: {
+          type: "integer",
+          description: "Scroll distance in pixels for relative directions.",
+          minimum: 50,
+          maximum: 5000,
+        },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "browser_press_key",
+    description:
+      "Press a keyboard key on the active element or a CSS-selected element, such as Enter, Escape, Tab, or ArrowDown.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        selector: {
+          type: "string",
+          description: "Optional CSS selector to focus before pressing the key.",
+        },
+        key: {
+          type: "string",
+          description: "Keyboard key value, for example Enter, Escape, Tab, ArrowDown, or a single character.",
+        },
+      },
+      required: ["key"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "browser_select_option",
+    description:
+      "Select an option in a native HTML select element by value, visible label, or zero-based index.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        selector: {
+          type: "string",
+          description: "CSS selector for the select element.",
+        },
+        value: {
+          type: "string",
+          description: "Option value to select.",
+        },
+        label: {
+          type: "string",
+          description: "Visible option label or text to select.",
+        },
+        index: {
+          type: "integer",
+          description: "Zero-based option index to select.",
+          minimum: 0,
+        },
+      },
+      required: ["selector"],
       additionalProperties: false,
     },
   },
@@ -1733,9 +1943,207 @@ const TOOL_DEFS = [
     },
   },
   {
+    name: "browser_script_list",
+    description:
+      "List saved OpenClaw browser automation scripts and the current pending-save draft, including filenames, descriptions, quick commands, and run metadata.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        filter: {
+          type: "string",
+          description: "Optional text filter for filename, description, source URL, or id.",
+        },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "browser_script_stage",
+    description:
+      "Update the script assistant pending-save draft after completing a reusable browser workflow. Codex should provide an auto-filled filename, purpose description, and explicit steps when possible.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        fileName: {
+          type: "string",
+          description: "Auto-filled pending script filename, for example login-dashboard.browser.json.",
+        },
+        description: {
+          type: "string",
+          description: "Short purpose summary explaining when to reuse this script.",
+        },
+        steps: {
+          type: "array",
+          description:
+            "Optional ordered reusable steps. Each step accepts action or browser_* tool plus payload or arguments. If omitted, recent repeatable browser actions are staged.",
+          items: {
+            type: "object",
+            properties: {
+              action: { type: "string" },
+              tool: { type: "string" },
+              payload: { type: "object" },
+              arguments: { type: "object" },
+              note: { type: "string" },
+            },
+            additionalProperties: true,
+          },
+        },
+        variables: {
+          type: "array",
+          description:
+            "Optional variable names used as {{name}} placeholders in step payload strings.",
+          items: { type: "string" },
+        },
+        maxRecentSteps: {
+          type: "integer",
+          description: "Maximum recent repeatable actions to stage when steps are omitted.",
+          minimum: 1,
+          maximum: 40,
+        },
+        sourceUrl: {
+          type: "string",
+          description: "Optional source URL for the pending script draft.",
+        },
+        sourceTitle: {
+          type: "string",
+          description: "Optional source page title for the pending script draft.",
+        },
+      },
+      required: ["fileName", "description"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "browser_script_save",
+    description:
+      "Save a reusable browser automation script. Provide explicit steps when possible; if steps are omitted, the app saves recent repeatable browser actions.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: {
+          type: "string",
+          description: "Optional existing script id to overwrite.",
+        },
+        fileName: {
+          type: "string",
+          description: "User-facing script filename, for example daily-login.browser.json.",
+        },
+        description: {
+          type: "string",
+          description: "Short description of what the script is for.",
+        },
+        steps: {
+          type: "array",
+          description:
+            "Optional ordered steps. Each step accepts action or browser_* tool plus payload or arguments.",
+          items: {
+            type: "object",
+            properties: {
+              action: { type: "string" },
+              tool: { type: "string" },
+              payload: { type: "object" },
+              arguments: { type: "object" },
+              note: { type: "string" },
+            },
+            additionalProperties: true,
+          },
+        },
+        variables: {
+          type: "array",
+          description:
+            "Optional variable names used as {{name}} placeholders in step payload strings.",
+          items: { type: "string" },
+        },
+        maxRecentSteps: {
+          type: "integer",
+          description: "Maximum recent repeatable actions to save when steps are omitted.",
+          minimum: 1,
+          maximum: 40,
+        },
+        sourceUrl: {
+          type: "string",
+          description: "Optional source URL for the script record.",
+        },
+        sourceTitle: {
+          type: "string",
+          description: "Optional source page title for the script record.",
+        },
+        overwrite: {
+          type: "boolean",
+          description: "Whether a matching filename may be overwritten.",
+        },
+      },
+      required: ["fileName", "description"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "browser_script_run",
+    description:
+      "Run a saved browser automation script by id or filename. The browser panel opens automatically when possible.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: {
+          type: "string",
+          description: "Saved script id.",
+        },
+        fileName: {
+          type: "string",
+          description: "Saved script filename, used when id is unknown.",
+        },
+        variables: {
+          type: "object",
+          description: "Values for {{name}} placeholders inside script step payloads.",
+        },
+        stopOnError: {
+          type: "boolean",
+          description: "Whether to stop at the first failing step. Defaults to true.",
+        },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "browser_script_rename",
+    description:
+      "Rename a saved browser automation script and update its description.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "Saved script id." },
+        fileName: { type: "string", description: "New script filename." },
+        description: { type: "string", description: "New script description." },
+      },
+      required: ["id", "fileName"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "browser_script_delete",
+    description: "Delete a saved browser automation script by id.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "Saved script id." },
+      },
+      required: ["id"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "browser_script_clear_pending",
+    description: "Clear the script assistant pending-save browser script draft.",
+    inputSchema: {
+      type: "object",
+      properties: {},
+      additionalProperties: false,
+    },
+  },
+  {
     name: "browser_get_state",
     description:
-      "Return the current browser state including title, URL, loading flag, and the last bridge error.",
+      "Return the current browser state including title, URL, tabs, active tab id, user-agent mode, loading flag, and the last bridge error.",
     inputSchema: {
       type: "object",
       properties: {},
@@ -1750,17 +2158,48 @@ const TOOL_TO_ACTION = {
   browser_back: "back",
   browser_forward: "forward",
   browser_reload: "reload",
+  browser_tab_list: "tab_list",
+  browser_tab_new: "tab_new",
+  browser_tab_switch: "tab_switch",
+  browser_tab_close: "tab_close",
+  browser_set_ua: "set_ua",
   browser_click: "click",
   browser_type: "type",
   browser_wait_for_text: "wait_for_text",
+  browser_wait_for_selector: "wait_for_selector",
+  browser_scroll: "scroll",
+  browser_press_key: "press_key",
+  browser_select_option: "select_option",
   browser_extract: "extract",
   browser_list_links: "list_links",
   browser_list_interactables: "list_interactables",
   browser_highlight: "highlight",
   browser_capture_snapshot: "capture_snapshot",
   browser_eval: "eval",
+  browser_script_list: "script_list",
+  browser_script_stage: "script_stage",
+  browser_script_save: "script_save",
+  browser_script_run: "script_run",
+  browser_script_rename: "script_rename",
+  browser_script_delete: "script_delete",
+  browser_script_clear_pending: "script_clear_pending",
   browser_get_state: "get_state",
 };
+
+function normalizeBridgeAction(value) {
+  const raw = String(value || "").trim();
+  if (!raw) {
+    return "";
+  }
+  return TOOL_TO_ACTION[raw] || raw;
+}
+
+function objectPayload(value) {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    return value;
+  }
+  return {};
+}
 
 const HEADER_DELIMITER = Buffer.from("\\r\\n\\r\\n");
 const NEWLINE = Buffer.from("\\n");
@@ -1869,10 +2308,10 @@ async function onRequest(message) {
       },
       serverInfo: {
         name: "openclaw-browser",
-        version: "1.0.0",
+        version: "1.5.0",
       },
       instructions:
-        "Use the OpenClaw browser tools for deterministic page navigation, clicking, typing, waiting, and extraction inside the in-app browser panel.",
+        "Use the OpenClaw browser tools for deterministic page navigation, scrolling, clicking, typing, selection, waiting, extraction, and reusable saved browser scripts inside the in-app browser panel. If individual tools are not exposed, use browser_control with action and payload. After completing a reusable workflow, update the script assistant pending-save draft with browser_script_stage.",
     });
     return;
   }
@@ -1894,7 +2333,37 @@ async function onRequest(message) {
   if (method === "tools/call") {
     const params = message.params || {};
     const toolName = (params.name || "").trim();
-    const action = TOOL_TO_ACTION[toolName];
+    const toolArguments = objectPayload(params.arguments || {});
+    let action = TOOL_TO_ACTION[toolName];
+    let payload = toolArguments;
+    if (toolName === "browser_control") {
+      action = normalizeBridgeAction(toolArguments.action || toolArguments.tool);
+      payload = objectPayload(toolArguments.payload ?? toolArguments.arguments);
+      if (Object.keys(payload).length === 0) {
+        const {
+          action: _action,
+          tool: _tool,
+          payload: _payload,
+          arguments: _arguments,
+          ...rest
+        } = toolArguments;
+        payload = objectPayload(rest);
+      }
+      if (!action) {
+        reply(id, {
+          content: asToolContent({
+            ok: false,
+            message: "browser_control requires an action.",
+          }),
+          structuredContent: {
+            ok: false,
+            message: "browser_control requires an action.",
+          },
+          isError: true,
+        });
+        return;
+      }
+    }
     if (!action) {
       reply(id, {
         content: asToolContent({
@@ -1906,7 +2375,7 @@ async function onRequest(message) {
       return;
     }
     try {
-      const result = await callBridge(action, params.arguments || {});
+      const result = await callBridge(action, payload);
       reply(id, {
         content: asToolContent(result),
         structuredContent: result,
@@ -2020,6 +2489,324 @@ process.stdin.on("end", () => {
 ''';
   }
 
+  static String _buildBrowserScriptLauncherSh() {
+    return '''
+#!/usr/bin/env sh
+set -eu
+
+ENV_PATH=${_shQuote(_browserBridgeEnvPath)}
+
+usage() {
+  cat <<'USAGE'
+Usage:
+  browser-script state
+  browser-script self-test
+  browser-script call <action-or-browser_tool> [json-payload]
+  browser-script control <action-or-browser_tool> [json-payload]
+  browser-script open <url>
+  browser-script tabs
+  browser-script new-tab [url]
+  browser-script switch-tab <tab-id>
+  browser-script close-tab [tab-id]
+  browser-script ua <desktop|mobile>
+  browser-script interactables [filter] [maxItems]
+  browser-script snapshot [selector] [maxLength]
+  browser-script click <selector>
+  browser-script type <selector> <text> [submit]
+  browser-script wait-selector <selector> [timeoutMs]
+  browser-script wait-text <text> [timeoutMs]
+  browser-script scroll [direction] [pixels] [selector]
+  browser-script press-key <key> [selector]
+  browser-script list [filter]
+  browser-script show <script-id-or-filename>
+  browser-script stage <file-name> <description>
+  browser-script run <script-id>
+  browser-script delete <script-id>
+  browser-script clear-pending
+USAGE
+}
+
+if [ -r "\$ENV_PATH" ]; then
+  . "\$ENV_PATH"
+fi
+
+base_url="\${OPENCLAW_BROWSER_BRIDGE_URL:-}"
+token="\${OPENCLAW_BROWSER_BRIDGE_TOKEN:-}"
+if [ -z "\$base_url" ] || [ -z "\$token" ]; then
+  echo "OpenClaw browser bridge is not ready. Open the Codex browser panel first." >&2
+  exit 1
+fi
+
+command_name="\${1:-list}"
+if [ "\$#" -gt 0 ]; then
+  shift
+fi
+
+case "\$command_name" in
+  state|get-state)
+    bridge_action="get_state"
+    payload="{}"
+    ;;
+  self-test|self_test)
+    bridge_action="self_test"
+    payload="{}"
+    ;;
+  call|control|action)
+    bridge_action="\${1:-}"
+    [ -n "\$bridge_action" ] || { usage >&2; exit 2; }
+    payload="\${2:-{}}"
+    ;;
+  open)
+    url="\${1:-}"
+    [ -n "\$url" ] || { usage >&2; exit 2; }
+    bridge_action="open"
+    payload=\$(node -e 'process.stdout.write(JSON.stringify({ url: process.argv[1] || "" }))' "\$url")
+    ;;
+  tabs|tab-list)
+    bridge_action="tab_list"
+    payload="{}"
+    ;;
+  new-tab|tab-new)
+    url="\${1:-}"
+    bridge_action="tab_new"
+    payload=\$(node -e 'const payload = {}; if (process.argv[1]) payload.url = process.argv[1]; process.stdout.write(JSON.stringify(payload));' "\$url")
+    ;;
+  switch-tab|tab-switch)
+    tab_id="\${1:-}"
+    [ -n "\$tab_id" ] || { usage >&2; exit 2; }
+    bridge_action="tab_switch"
+    payload=\$(node -e 'const id = Number.parseInt(process.argv[1] || "", 10); process.stdout.write(JSON.stringify({ id: Number.isFinite(id) ? id : 0 }))' "\$tab_id")
+    ;;
+  close-tab|tab-close)
+    tab_id="\${1:-}"
+    bridge_action="tab_close"
+    payload=\$(node -e 'const id = Number.parseInt(process.argv[1] || "", 10); const payload = {}; if (Number.isFinite(id)) payload.id = id; process.stdout.write(JSON.stringify(payload));' "\$tab_id")
+    ;;
+  ua|user-agent|set-ua)
+    mode="\${1:-}"
+    [ -n "\$mode" ] || { usage >&2; exit 2; }
+    bridge_action="set_ua"
+    payload=\$(node -e 'process.stdout.write(JSON.stringify({ mode: process.argv[1] || "" }))' "\$mode")
+    ;;
+  interactables|list-interactables)
+    filter="\${1:-}"
+    max_items="\${2:-}"
+    bridge_action="list_interactables"
+    payload=\$(node -e 'const maxItems = Number.parseInt(process.argv[2] || "", 10); const payload = { filter: process.argv[1] || "" }; if (Number.isFinite(maxItems)) payload.maxItems = maxItems; process.stdout.write(JSON.stringify(payload));' "\$filter" "\$max_items")
+    ;;
+  snapshot|capture-snapshot)
+    selector="\${1:-}"
+    max_length="\${2:-}"
+    bridge_action="capture_snapshot"
+    payload=\$(node -e 'const maxLength = Number.parseInt(process.argv[2] || "", 10); const payload = {}; if (process.argv[1]) payload.selector = process.argv[1]; if (Number.isFinite(maxLength)) payload.maxLength = maxLength; process.stdout.write(JSON.stringify(payload));' "\$selector" "\$max_length")
+    ;;
+  click)
+    selector="\${1:-}"
+    [ -n "\$selector" ] || { usage >&2; exit 2; }
+    bridge_action="click"
+    payload=\$(node -e 'process.stdout.write(JSON.stringify({ selector: process.argv[1] || "" }))' "\$selector")
+    ;;
+  type)
+    selector="\${1:-}"
+    text="\${2:-}"
+    submit="\${3:-false}"
+    [ -n "\$selector" ] || { usage >&2; exit 2; }
+    bridge_action="type"
+    payload=\$(node -e 'const submit = /^(1|true|yes|submit)\$/i.test(process.argv[3] || ""); process.stdout.write(JSON.stringify({ selector: process.argv[1] || "", text: process.argv[2] || "", submit }))' "\$selector" "\$text" "\$submit")
+    ;;
+  wait-selector|wait_for_selector)
+    selector="\${1:-}"
+    timeout_ms="\${2:-}"
+    [ -n "\$selector" ] || { usage >&2; exit 2; }
+    bridge_action="wait_for_selector"
+    payload=\$(node -e 'const timeoutMs = Number.parseInt(process.argv[2] || "", 10); const payload = { selector: process.argv[1] || "" }; if (Number.isFinite(timeoutMs)) payload.timeoutMs = timeoutMs; process.stdout.write(JSON.stringify(payload));' "\$selector" "\$timeout_ms")
+    ;;
+  wait-text|wait_for_text)
+    text="\${1:-}"
+    timeout_ms="\${2:-}"
+    [ -n "\$text" ] || { usage >&2; exit 2; }
+    bridge_action="wait_for_text"
+    payload=\$(node -e 'const timeoutMs = Number.parseInt(process.argv[2] || "", 10); const payload = { text: process.argv[1] || "" }; if (Number.isFinite(timeoutMs)) payload.timeoutMs = timeoutMs; process.stdout.write(JSON.stringify(payload));' "\$text" "\$timeout_ms")
+    ;;
+  scroll)
+    direction="\${1:-down}"
+    pixels="\${2:-}"
+    selector="\${3:-}"
+    bridge_action="scroll"
+    payload=\$(node -e 'const pixels = Number.parseInt(process.argv[2] || "", 10); const payload = { direction: process.argv[1] || "down" }; if (Number.isFinite(pixels)) payload.pixels = pixels; if (process.argv[3]) payload.selector = process.argv[3]; process.stdout.write(JSON.stringify(payload));' "\$direction" "\$pixels" "\$selector")
+    ;;
+  press-key|press_key)
+    key="\${1:-}"
+    selector="\${2:-}"
+    [ -n "\$key" ] || { usage >&2; exit 2; }
+    bridge_action="press_key"
+    payload=\$(node -e 'const payload = { key: process.argv[1] || "" }; if (process.argv[2]) payload.selector = process.argv[2]; process.stdout.write(JSON.stringify(payload));' "\$key" "\$selector")
+    ;;
+  list)
+    filter="\${1:-}"
+    bridge_action="script_list"
+    payload=\$(node -e 'process.stdout.write(JSON.stringify({ filter: process.argv[1] || "" }))' "\$filter")
+    ;;
+  show)
+    filter="\${1:-}"
+    [ -n "\$filter" ] || { usage >&2; exit 2; }
+    bridge_action="script_list"
+    payload=\$(node -e 'process.stdout.write(JSON.stringify({ filter: process.argv[1] || "" }))' "\$filter")
+    ;;
+  stage)
+    file_name="\${1:-}"
+    description="\${2:-}"
+    [ -n "\$file_name" ] || { usage >&2; exit 2; }
+    [ -n "\$description" ] || { usage >&2; exit 2; }
+    bridge_action="script_stage"
+    payload=\$(node -e 'process.stdout.write(JSON.stringify({ fileName: process.argv[1] || "", description: process.argv[2] || "" }))' "\$file_name" "\$description")
+    ;;
+  run)
+    script_id="\${1:-}"
+    [ -n "\$script_id" ] || { usage >&2; exit 2; }
+    bridge_action="script_run"
+    payload=\$(node -e 'process.stdout.write(JSON.stringify({ id: process.argv[1] || "" }))' "\$script_id")
+    ;;
+  delete)
+    script_id="\${1:-}"
+    [ -n "\$script_id" ] || { usage >&2; exit 2; }
+    bridge_action="script_delete"
+    payload=\$(node -e 'process.stdout.write(JSON.stringify({ id: process.argv[1] || "" }))' "\$script_id")
+    ;;
+  clear-pending|discard-pending)
+    bridge_action="script_clear_pending"
+    payload="{}"
+    ;;
+  -h|--help|help)
+    usage
+    exit 0
+    ;;
+  *)
+    usage >&2
+    exit 2
+    ;;
+esac
+
+node - "\$base_url" "\$token" "\$bridge_action" "\$payload" <<'NODE'
+const [baseUrl, token, action, payloadText] = process.argv.slice(2);
+const ACTION_ALIASES = {
+  browser_control: "browser_control",
+  browser_self_test: "self_test",
+  browser_open: "open",
+  browser_back: "back",
+  browser_forward: "forward",
+  browser_reload: "reload",
+  browser_tab_list: "tab_list",
+  browser_tab_new: "tab_new",
+  browser_tab_switch: "tab_switch",
+  browser_tab_close: "tab_close",
+  browser_set_ua: "set_ua",
+  browser_click: "click",
+  browser_type: "type",
+  browser_wait_for_text: "wait_for_text",
+  browser_wait_for_selector: "wait_for_selector",
+  browser_scroll: "scroll",
+  browser_press_key: "press_key",
+  browser_select_option: "select_option",
+  browser_extract: "extract",
+  browser_list_links: "list_links",
+  browser_list_interactables: "list_interactables",
+  browser_highlight: "highlight",
+  browser_capture_snapshot: "capture_snapshot",
+  browser_eval: "eval",
+  browser_script_list: "script_list",
+  browser_script_stage: "script_stage",
+  browser_script_save: "script_save",
+  browser_script_run: "script_run",
+  browser_script_rename: "script_rename",
+  browser_script_delete: "script_delete",
+  browser_script_clear_pending: "script_clear_pending",
+  browser_get_state: "get_state",
+};
+
+(async () => {
+  let normalizedAction = ACTION_ALIASES[String(action || "").trim()] || String(action || "").trim();
+  if (!normalizedAction) {
+    console.error("Missing browser bridge action.");
+    process.exitCode = 2;
+    return;
+  }
+
+  let payload = {};
+  try {
+    payload = payloadText ? JSON.parse(payloadText) : {};
+  } catch (error) {
+    console.error("Invalid browser-script payload:", error instanceof Error ? error.message : String(error));
+    process.exitCode = 1;
+    return;
+  }
+
+  if (normalizedAction === "browser_control") {
+    const nestedActionRaw = String(
+      payload.action || payload.tool || "",
+    ).trim();
+    const nestedAction =
+      ACTION_ALIASES[nestedActionRaw] || nestedActionRaw;
+    if (!nestedAction) {
+      console.error("browser_control requires an action.");
+      process.exitCode = 2;
+      return;
+    }
+    if (nestedAction === "browser_control") {
+      console.error("browser_control cannot call itself.");
+      process.exitCode = 2;
+      return;
+    }
+    normalizedAction = nestedAction;
+    if (payload && typeof payload === "object" && !Array.isArray(payload)) {
+      const {
+        action: _action,
+        tool: _tool,
+        payload: nestedPayload,
+        arguments: nestedArguments,
+        ...rest
+      } = payload;
+      if (nestedPayload && typeof nestedPayload === "object" && !Array.isArray(nestedPayload)) {
+        payload = nestedPayload;
+      } else if (
+        nestedArguments &&
+        typeof nestedArguments === "object" &&
+        !Array.isArray(nestedArguments)
+      ) {
+        payload = nestedArguments;
+      } else {
+        payload = rest;
+      }
+    } else {
+      payload = {};
+    }
+  }
+
+  const response = await fetch(baseUrl.replace(/\\/\$/, "") + "/" + normalizedAction, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      authorization: "Bearer " + token,
+    },
+    body: JSON.stringify(payload),
+  });
+  const text = await response.text();
+  let decoded = {};
+  if (text.trim()) {
+    decoded = JSON.parse(text);
+  }
+  console.log(JSON.stringify(decoded, null, 2));
+  if (!response.ok || decoded.ok === false) {
+    process.exitCode = 1;
+  }
+})().catch((error) => {
+  console.error(error instanceof Error ? error.message : String(error));
+  process.exitCode = 1;
+});
+NODE
+''';
+  }
+
   static String _buildBrowserSkill() {
     return '''
 ---
@@ -2033,22 +2820,46 @@ Rules:
 1. Start with `browser_get_state` so you know whether the browser panel is attached.
 2. Use `browser_self_test` when checking whether the browser bridge is working or after an attachment/navigation failure.
 3. If the tool reports that the browser panel is unavailable, stop and tell the user to open the browser panel from the terminal screen.
-4. Prefer `browser_open`, `browser_wait_for_text`, `browser_list_interactables`, `browser_highlight`, `browser_click`, `browser_type`, and `browser_extract` over `browser_eval`.
-5. Use stable CSS selectors. Avoid fragile positional selectors unless there is no better choice.
-6. Before any action that could submit a form, log in, send a message, spend money, or change user data, ask for confirmation.
-7. After a navigation or form submit, wait with `browser_wait_for_text` before assuming the page is ready.
-8. When extracting content, keep the result focused. Use `selector` whenever possible instead of dumping the whole page.
-9. If the next selector is unclear, call `browser_list_interactables` or `browser_list_links` first and choose from the returned candidates.
-10. If a selector is risky, call `browser_highlight` before clicking so the user can visually confirm the target.
+4. If fine-grained MCP tools are not exposed reliably, use `browser_control` with an `action` plus `payload`, for example `{ "action": "type", "payload": { "selector": "#email", "text": "user@example.com" } }`.
+5. If MCP tools are unavailable, use the shell fallback: `browser-script call <action-or-browser_tool> '<json-payload>'`, or shortcuts such as `browser-script interactables`, `browser-script snapshot`, `browser-script type`, and `browser-script click`.
+6. Prefer `browser_open`, `browser_wait_for_text`, `browser_wait_for_selector`, `browser_scroll`, `browser_list_interactables`, `browser_highlight`, `browser_click`, `browser_type`, `browser_select_option`, `browser_press_key`, and `browser_extract` over `browser_eval`.
+7. Use stable CSS selectors. Avoid fragile positional selectors unless there is no better choice.
+8. Before any action that could submit a form, log in, send a message, spend money, or change user data, ask for confirmation.
+9. After a navigation or form submit, wait with `browser_wait_for_text` or `browser_wait_for_selector` before assuming the page is ready.
+10. When extracting content, keep the result focused. Use `selector` whenever possible instead of dumping the whole page.
+11. If the next selector is unclear, call `browser_list_interactables` or `browser_list_links` first and choose from the returned candidates.
+12. If a selector is risky, call `browser_highlight` before clicking so the user can visually confirm the target.
+13. Use `browser_scroll` for below-the-fold content before falling back to broad extraction.
+14. Use `browser_press_key` for keyboard-driven UI and `browser_select_option` for native dropdowns.
+15. Before repeating a known workflow, call `browser_script_list` and prefer `browser_script_run` when a matching script exists.
+16. After completing any complete repeatable browser workflow, update the script assistant pending-save draft with `browser_script_stage`; automatically fill `fileName` and `description` from the completed task.
+17. Prefer explicit reusable steps in `browser_script_stage`. If the exact steps are already in the recent action log, staging without steps is acceptable, but still provide the filename and purpose description.
+18. Saved scripts replay deterministic browser actions. Do not save secrets in descriptions, filenames, or variable names; use `{{name}}` placeholders for values that should change per run.
+19. For login, API-key creation, payment, posting, deletion, or other sensitive flows, stage reusable navigation and form structure only; replace passwords, tokens, one-time codes, and user-specific values with placeholders.
+20. Use `browser_tab_list` before switching if you need to preserve several open pages during a long workflow.
+21. Use `browser_tab_new` for starting an unrelated page, `browser_tab_switch` for returning to a saved context, and `browser_tab_close` only after the page state is no longer needed.
+22. Switch to `browser_set_ua` with `desktop` when a site falls back to a mobile layout despite the browser being in desktop mode; reload the current tab after switching.
 
 Typical flow:
 1. `browser_open`
-2. `browser_wait_for_text`
+2. `browser_wait_for_text` or `browser_wait_for_selector`
 3. `browser_list_interactables`
-4. `browser_highlight`
-5. `browser_click` or `browser_type`
-6. `browser_capture_snapshot` or `browser_extract`
-7. Fall back to `browser_eval` only if the built-in actions are insufficient.
+4. `browser_tab_list` or `browser_tab_new` when the task spans multiple pages
+5. `browser_scroll` if the needed element is not visible
+6. `browser_highlight`
+7. `browser_click`, `browser_type`, `browser_select_option`, or `browser_press_key`
+8. `browser_capture_snapshot` or `browser_extract`
+9. `browser_script_stage` with an auto filename, purpose description, and reusable steps so the user can save it from the script assistant.
+10. Fall back to `browser_eval` only if the built-in actions are insufficient.
+11. If any listed tool is missing from the callable tools, run the same step through `browser_control`.
+
+Script flow:
+1. `browser_script_list` with a short filter from the user request.
+2. `browser_script_run` when a saved script matches.
+3. If no script matches, perform the workflow manually with browser tools.
+4. After the manual workflow succeeds, call `browser_script_stage` and set `fileName` such as `site-task.browser.json`, plus a concise `description` explaining when to reuse it.
+5. If `browser_script_stage` is missing, use `browser_control` with `{ "action": "script_stage", "payload": ... }` or `browser-script stage <file-name> <description>`.
+6. Use `browser_script_save` only when the user explicitly asks Codex to save directly instead of placing the result in the pending-save area.
 ''';
   }
 

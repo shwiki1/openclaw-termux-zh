@@ -1,6 +1,6 @@
 # 次元虾 — 源码结构文档
 
-> 版本：v2.0.50+126 | 协议：MIT | 更新日期：2026-07-12
+> 版本：v2.5.0+143（当前显示序列起点 v2.5） | 协议：MIT | 更新日期：2026-07-14
 >
 > 本文档用于二次开发前的源码理解，按"从外到内"的方式组织：先看项目全貌，再逐层深入。本文已按当前工作区源码重新核对。
 
@@ -75,7 +75,7 @@
 | App 框架 | Flutter | SDK >=3.2.0 |
 | UI 组件库 | Material Design 3 | `useMaterial3: true` |
 | 状态管理 | Provider | `provider: ^6.1.0` |
-| 终端模拟 | xterm + flutter_pty | `xterm: ^4.0.0` |
+| 终端模拟 | Android 原生 Termux `TerminalView` + Flutter `PlatformView` | `NativeTerminalView` |
 | Web 面板 | webview_flutter | `^4.4.0` |
 | 网络请求 | dio + http | `dio: ^5.4.0` |
 | WebSocket | web_socket_channel | `^3.0.0` |
@@ -85,15 +85,15 @@
 | 前端渲染 | flutter_markdown_plus | `^1.0.7` |
 | Android 原生 | Kotlin | |
 | 隔离环境 | PRoot | 无需 Root 的 chroot 替代 |
-| 运行时 | Node.js >= 22.19.0 | 32/64 位 ARM + x86_64；按 `openclaw@latest` engines 校验 |
+| 运行时 | Node.js 22 >= 22.22.3 或 Node.js 24 >= 24.15.0 | 32/64 位 ARM + x86_64；按 `openclaw@latest` engines 校验 |
 | CLI 引擎 | OpenClaw latest stable | 多渠道 AI 网关，推荐版本跟随 npm latest 稳定版 |
 | Android 包名 | `com.agent.cyx` | `applicationId`、`namespace`、Kotlin 包声明和 MethodChannel 均使用该包名 |
 
 当前版本默认运行时策略：
 
-- `arm64` / `x86_64`：Node.js `24.14.1`。
-- `armeabi-v7a` / `armhf`：Node.js `22.22.2`，用于避开 Node.js 24 不再提供官方 `linux-armv7l` 包的问题。
-- `openclaw@latest` 当前为 `2026.6.11`，要求 Node.js `>=22.19.0`，以上两个 Node.js 版本均满足。
+- `arm64` / `x86_64`：Node.js `24.15.0`。
+- `armeabi-v7a` / `armhf`：Node.js `22.22.3`，用于避开 Node.js 24 不再提供官方 `linux-armv7l` 包的问题。
+- `openclaw@latest` 当前要求 Node.js `>=22.22.3 <23`、`>=24.15.0 <25` 或更新的受支持主版本，以上两个 Node.js 版本均满足。
 - APK 不再内置大体积 `assets/bootstrap/` 运行时包，初始化时从默认资源、用户填写 URL 或本地压缩包导入。
 - App 品牌当前为“次元虾”，Android `applicationId` / `namespace` / Kotlin 包声明 / MethodChannel 包名为 `com.agent.cyx`。
 
@@ -597,16 +597,16 @@ context.l10n.t('gateway.start')     // → "启动网关"
 ### 9.1 环境要求
 
 - Flutter SDK >= 3.2.0
-- Android SDK（NDK 支持多架构）
+- Android SDK（当前发布目标为 `arm64-v8a`）
 - Node.js >= 18（用于 CLI 部分）
 - Python 3（用于构建脚本）
 - bash（用于 `scripts/fetch-proot-binaries.sh` 等脚本）
 
 当前工作区核对结果：
 
-- `node` / `npm` 可用，本机 Node.js 为 `v24.14.1`。
+- `node` / `npm` 可用，本机 Node.js 为 `v24.14.1`，npm 为 `11.13.0`。
 - 当前 shell 环境未找到 `flutter` / `dart`，因此本机暂不能直接运行 Flutter 测试或 APK 构建。
-- 当前目录不是 Git 仓库；二次开发前建议先初始化 Git 或重新 clone 上游仓库。
+- 当前目录是 Git 仓库，当前分支为 `codex-termux-runtime-fix`。
 - 项目根目录尚未安装 `node_modules` 时，`npm run lint` 会因为找不到 `eslint` 失败；普通文件系统先执行 `npm install` 或 `npm ci`。
 - 如果项目位于 Android 共享存储（如 `/storage/emulated/0/...`），该文件系统通常不支持 npm 创建 `.bin` symlink；请使用 `npm ci --no-bin-links`，再用 `node node_modules/eslint/bin/eslint.js . --no-warn-ignored` 运行 lint。
 
@@ -664,13 +664,13 @@ bash scripts/build-prebuilt-rootfs.sh
 
 ### 9.4 CI/CD
 
-`.github/workflows/flutter-build.yml` — GitHub Actions 自动构建多架构 APK。
+`.github/workflows/flutter-build.yml` — GitHub Actions 自动构建 `arm64-v8a` APK。
 
 ### 9.5 APK 分发包
 
 | 文件名 | ABI | 大小 |
 |---|---|---|
-| `CiYuanXia-v2.0.50-126-arm64-v8a.apk` | 64 位 ARM | 以实际构建结果为准 |
+| `CiYuanXia-v2.5-144-arm64-v8a.apk` | 64 位 ARM | 以实际构建结果为准 |
 
 ---
 
@@ -840,9 +840,9 @@ flutter pub get
 flutter analyze
 flutter test
 
-# 远程：构建 APK / AAB
+# 远程：构建 arm64-v8a APK
 cd ~/openclaw-termux-zh
-python scripts/build_release.py --version 2.0.50 --build-number 126
+python scripts/build_release.py --version 2.5 --build-number 143
 ```
 
 远程构建机首次准备建议：

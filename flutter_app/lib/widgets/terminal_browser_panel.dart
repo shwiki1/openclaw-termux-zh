@@ -8,29 +8,135 @@ import 'package:webview_flutter_android/webview_flutter_android.dart';
 
 import '../app.dart';
 import '../services/browser_automation_service.dart';
+import '../services/browser_script_library_service.dart';
 import '../services/native_bridge.dart';
-import '../services/preferences_service.dart';
 
 class TerminalBrowserPanel extends StatefulWidget {
   final bool standalone;
+  final VoidCallback? onClose;
 
   const TerminalBrowserPanel({
     super.key,
     this.standalone = false,
+    this.onClose,
   });
 
   @override
   State<TerminalBrowserPanel> createState() => _TerminalBrowserPanelState();
 }
 
+enum _BrowserUserAgentMode {
+  desktop,
+  mobile,
+}
+
+extension _BrowserUserAgentModeInfo on _BrowserUserAgentMode {
+  String get label {
+    switch (this) {
+      case _BrowserUserAgentMode.desktop:
+        return '电脑';
+      case _BrowserUserAgentMode.mobile:
+        return '手机';
+    }
+  }
+
+  String get value {
+    switch (this) {
+      case _BrowserUserAgentMode.desktop:
+        return 'desktop';
+      case _BrowserUserAgentMode.mobile:
+        return 'mobile';
+    }
+  }
+
+  IconData get icon {
+    switch (this) {
+      case _BrowserUserAgentMode.desktop:
+        return Icons.desktop_windows_outlined;
+      case _BrowserUserAgentMode.mobile:
+        return Icons.phone_android;
+    }
+  }
+
+  String get userAgent {
+    switch (this) {
+      case _BrowserUserAgentMode.desktop:
+        return _TerminalBrowserPanelState._desktopUserAgent;
+      case _BrowserUserAgentMode.mobile:
+        return _TerminalBrowserPanelState._mobileUserAgent;
+    }
+  }
+}
+
+enum _BrowserMenuAction {
+  scripts,
+  snapshot,
+  inspector,
+  recentActions,
+}
+
+class _BrowserTab {
+  final int id;
+  late final WebViewController controller;
+  _BrowserUserAgentMode userAgentMode;
+  String title;
+  String currentUrl;
+  String error;
+  bool loading;
+  bool canGoBack;
+  bool canGoForward;
+  Completer<void>? navigationCompleter;
+
+  _BrowserTab({
+    required this.id,
+    this.userAgentMode = _BrowserUserAgentMode.desktop,
+    this.title = 'Browser',
+    this.currentUrl = '',
+    this.error = '',
+    this.loading = true,
+    this.canGoBack = false,
+    this.canGoForward = false,
+  });
+
+  Map<String, dynamic> toJson({required bool active}) {
+    return {
+      'id': id,
+      'active': active,
+      'title': title,
+      'url': currentUrl,
+      'loading': loading,
+      'error': error,
+      'canGoBack': canGoBack,
+      'canGoForward': canGoForward,
+      'userAgentMode': userAgentMode.value,
+      'userAgentLabel': userAgentMode.label,
+    };
+  }
+}
+
 class _TerminalBrowserPanelState extends State<TerminalBrowserPanel>
     implements BrowserAutomationDelegate {
+  static const _desktopUserAgent =
+      'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 '
+      '(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+  static const _mobileUserAgent =
+      'Mozilla/5.0 (Linux; Android 14; Pixel 8 Pro) AppleWebKit/537.36 '
+      '(KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36';
+  static const _panelHeaderBg = Color(0xFF090909);
+  static const _panelSurface = Color(0xFF121212);
+  static const _panelSurfaceAlt = Color(0xFF171717);
+  static const _panelBorder = Color(0x30FFFFFF);
+  static const _panelText = Color(0xFFF5F5F5);
+  static const _panelMutedText = Color(0xFFCACACA);
+  static const _panelDisabledText = Color(0xFF8A8A8A);
+
   static const _welcomeHtml = '''
 <!doctype html>
-<html>
+<html lang="zh-CN">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Codex 浏览器自动化控制</title>
     <style>
       :root { color-scheme: dark; }
       html, body {
@@ -42,34 +148,98 @@ class _TerminalBrowserPanelState extends State<TerminalBrowserPanel>
         min-height: 100%;
       }
       body {
-        display: flex;
-        align-items: center;
-        justify-content: center;
+        box-sizing: border-box;
+        padding: 18px;
       }
-      .card {
+      main {
         width: min(92vw, 520px);
+        margin: 0 auto;
+      }
+      .panel {
         border: 1px solid rgba(255,255,255,0.08);
-        border-radius: 18px;
+        border-radius: 8px;
         background: linear-gradient(180deg, #101010 0%, #070707 100%);
-        padding: 24px;
+        padding: 18px;
         box-sizing: border-box;
       }
-      h1 { margin: 0 0 12px; font-size: 24px; }
-      p { margin: 0 0 12px; line-height: 1.6; color: #d4d4d4; }
+      h1 { margin: 0 0 8px; font-size: 21px; line-height: 1.25; }
+      h2 { margin: 20px 0 8px; font-size: 14px; color: #ffffff; }
+      p, li { line-height: 1.6; color: #d4d4d4; font-size: 14px; }
+      p { margin: 0 0 12px; }
+      ul { margin: 0; padding-left: 18px; }
       code {
         display: inline-block;
-        padding: 2px 8px;
+        max-width: 100%;
+        padding: 2px 7px;
         border-radius: 999px;
         background: rgba(255,255,255,0.08);
+        color: #ffffff;
+        overflow-wrap: anywhere;
+      }
+      .status {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        margin: 0 0 14px;
+        padding: 5px 9px;
+        border: 1px solid rgba(34,197,94,0.42);
+        border-radius: 999px;
+        color: #bbf7d0;
+        background: rgba(34,197,94,0.1);
+        font-size: 12px;
+        font-weight: 700;
+      }
+      .dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 999px;
+        background: #22c55e;
+      }
+      .examples {
+        display: grid;
+        gap: 8px;
+      }
+      .example {
+        border: 1px solid rgba(255,255,255,0.08);
+        border-radius: 8px;
+        padding: 10px;
+        background: rgba(255,255,255,0.035);
+      }
+      .note {
+        margin-top: 16px;
+        padding-top: 14px;
+        border-top: 1px solid rgba(255,255,255,0.08);
+        color: #a3a3a3;
+        font-size: 13px;
       }
     </style>
   </head>
   <body>
-    <div class="card">
-      <h1>OpenClaw Browser Panel</h1>
-      <p>在这里打开网页后，Codex 就可以通过浏览器工具执行打开、点击、输入、提取页面内容等操作。</p>
-      <p>建议在终端里明确说明目标网址，并提示 Codex 使用 <code>browser-operator</code> 技能。</p>
-    </div>
+    <main>
+      <section class="panel">
+        <div class="status"><span class="dot"></span>浏览器自动化已就绪</div>
+        <h1>Codex 浏览器自动化控制</h1>
+        <p>这个浏览器用于打开你指定的网页，让 Codex 通过浏览器工具执行访问、点击、输入、滚动、选择、等待元素、提取页面内容和截图快照等操作。</p>
+
+        <h2>使用方式</h2>
+        <ul>
+          <li>在终端里告诉 Codex 目标网址和要完成的任务。</li>
+          <li>需要登录、搜索、填写表单或读取页面内容时，让 Codex 使用 <code>browser-operator</code>。</li>
+          <li>你也可以在上方地址栏手动输入网址，当前页面会被 Codex 接管。</li>
+          <li>浏览器默认请求电脑端页面，并支持页面缩放。</li>
+          <li>Codex 完成可复用流程后，会把脚本草稿放入右上角脚本助手的待保存区。</li>
+        </ul>
+
+        <h2>提示示例</h2>
+        <div class="examples">
+          <div class="example">打开 https://example.com，提取首页主要标题。</div>
+          <div class="example">打开我给你的后台地址，点击登录并等待表单出现。</div>
+          <div class="example">在当前页面查找下载按钮，滚动到它的位置并截图。</div>
+        </div>
+
+        <p class="note">默认不会自动打开 OpenClaw Gateway 控制台。只有你输入网址，或 Codex 工具发起打开请求时，浏览器才会访问目标网页。</p>
+      </section>
+    </main>
   </body>
 </html>
 ''';
@@ -118,7 +288,9 @@ class _TerminalBrowserPanelState extends State<TerminalBrowserPanel>
 
   final _service = BrowserAutomationService.instance;
   final _urlController = TextEditingController();
-  late final WebViewController _controller;
+  final List<_BrowserTab> _tabs = <_BrowserTab>[];
+  int _nextTabId = 1;
+  int _activeTabIndex = 0;
 
   String _title = 'Browser';
   String _currentUrl = '';
@@ -126,12 +298,16 @@ class _TerminalBrowserPanelState extends State<TerminalBrowserPanel>
   bool _loading = true;
   bool _canGoBack = false;
   bool _canGoForward = false;
-  Completer<void>? _navigationCompleter;
+  bool _showRecentActions = false;
   bool _showInspector = false;
   bool _inspectorLoading = false;
   String _inspectorError = '';
   String _inspectorMode = 'interactables';
   List<Map<String, dynamic>> _inspectorItems = const [];
+
+  _BrowserTab get _activeTab => _tabs[_activeTabIndex];
+
+  WebViewController get _controller => _activeTab.controller;
 
   @override
   String get sessionLabel => widget.standalone ? 'terminal-browser-page' : 'terminal-browser-sidecar';
@@ -139,7 +315,9 @@ class _TerminalBrowserPanelState extends State<TerminalBrowserPanel>
   @override
   void initState() {
     super.initState();
-    _controller = _createController();
+    final initialTab = _createTab();
+    _tabs.add(initialTab);
+    _syncStateFromTab(initialTab, updateAddress: true);
     _service.bindDelegate(this);
     unawaited(_service.ensureStarted());
     unawaited(_initializeBrowser());
@@ -156,22 +334,189 @@ class _TerminalBrowserPanelState extends State<TerminalBrowserPanel>
     final pendingUrl = _service.takePendingOpenUrl().trim();
     if (pendingUrl.isNotEmpty) {
       if (pendingUrl == 'about:blank') {
+        await _loadWelcomePage();
         return;
       }
       await _loadUrl(pendingUrl);
       return;
     }
-    final prefs = PreferencesService();
-    await prefs.init();
-    final initialUrl = prefs.dashboardUrl?.trim() ?? '';
-    if (initialUrl.isNotEmpty) {
-      await _loadUrl(initialUrl);
-      return;
-    }
-    await _controller.loadHtmlString(_welcomeHtml);
+    await _loadWelcomePage();
   }
 
-  WebViewController _createController() {
+  _BrowserTab _createTab({
+    String? initialUrl,
+    _BrowserUserAgentMode userAgentMode = _BrowserUserAgentMode.desktop,
+  }) {
+    final tab = _BrowserTab(
+      id: _nextTabId++,
+      userAgentMode: userAgentMode,
+    );
+    tab.controller = _createController(tab);
+    if (initialUrl != null && initialUrl.trim().isNotEmpty) {
+      tab.currentUrl = initialUrl.trim();
+    }
+    return tab;
+  }
+
+  bool _isActiveTab(_BrowserTab tab) {
+    return _tabs.isNotEmpty && identical(_activeTab, tab);
+  }
+
+  void _syncStateFromTab(_BrowserTab tab, {required bool updateAddress}) {
+    _title = tab.title;
+    _currentUrl = tab.currentUrl;
+    _error = tab.error;
+    _loading = tab.loading;
+    _canGoBack = tab.canGoBack;
+    _canGoForward = tab.canGoForward;
+    if (updateAddress) {
+      _urlController.text = tab.currentUrl;
+    }
+  }
+
+  void _setTabLoadingState(
+    _BrowserTab tab, {
+    String? title,
+    String? url,
+    String? error,
+    bool? loading,
+    bool syncUrlText = false,
+  }) {
+    if (title != null) {
+      tab.title = title;
+    }
+    if (url != null) {
+      tab.currentUrl = url;
+    }
+    if (error != null) {
+      tab.error = error;
+    }
+    if (loading != null) {
+      tab.loading = loading;
+    }
+    if (!mounted) {
+      return;
+    }
+    if (_isActiveTab(tab)) {
+      setState(() {
+        _syncStateFromTab(tab, updateAddress: syncUrlText);
+      });
+    }
+    _publishStateToService();
+  }
+
+  void _setTabBrowserState(
+    _BrowserTab tab, {
+    String? title,
+    bool? canGoBack,
+    bool? canGoForward,
+  }) {
+    if (title != null) {
+      tab.title = title;
+    }
+    if (canGoBack != null) {
+      tab.canGoBack = canGoBack;
+    }
+    if (canGoForward != null) {
+      tab.canGoForward = canGoForward;
+    }
+    if (!mounted) {
+      return;
+    }
+    if (_isActiveTab(tab)) {
+      setState(() {
+        _syncStateFromTab(tab, updateAddress: false);
+      });
+    }
+    _publishStateToService();
+  }
+
+  void _publishStateToService() {
+    final active = _activeTab;
+    _service.updateObservedState(
+      url: active.currentUrl,
+      title: active.title,
+      loading: active.loading,
+      error: active.error,
+      tabs: _tabs
+          .map((item) => item.toJson(active: identical(item, _activeTab)))
+          .toList(),
+      activeTabId: active.id,
+      userAgentMode: active.userAgentMode.value,
+      userAgentLabel: active.userAgentMode.label,
+    );
+  }
+
+  Map<String, String> _userAgentHeadersForTab(_BrowserTab tab) {
+    return {'User-Agent': tab.userAgentMode.userAgent};
+  }
+
+  Future<void> _configureWebViewForUserAgent(
+    WebViewController controller,
+    _BrowserUserAgentMode mode,
+  ) async {
+    await controller.setUserAgent(mode.userAgent);
+    final platformController = controller.platform;
+    if (platformController is AndroidWebViewController) {
+      await platformController.setUseWideViewPort(
+        mode == _BrowserUserAgentMode.desktop,
+      );
+      await platformController.setTextZoom(100);
+    }
+  }
+
+  Future<void> _applyDesktopViewportHint(_BrowserTab tab) async {
+    if (tab.userAgentMode != _BrowserUserAgentMode.desktop) {
+      return;
+    }
+    try {
+      await tab.controller.runJavaScript(r'''
+(() => {
+  const desiredWidth = '1280';
+  let viewport = document.querySelector('meta[name="viewport"]');
+  if (!viewport) {
+    viewport = document.createElement('meta');
+    viewport.setAttribute('name', 'viewport');
+    document.head.appendChild(viewport);
+  }
+  viewport.setAttribute('content', `width=${desiredWidth}, initial-scale=1.0`);
+  try {
+    Object.defineProperty(navigator, 'maxTouchPoints', {
+      get: () => 0,
+      configurable: true
+    });
+  } catch (_) {}
+})();
+''');
+    } catch (_) {}
+  }
+
+  Future<void> _loadWelcomePage({_BrowserTab? tab}) async {
+    final targetTab = tab ?? _activeTab;
+    _setTabLoadingState(
+      targetTab,
+      title: 'Codex 浏览器自动化控制',
+      url: 'about:blank',
+      error: '',
+      loading: true,
+      syncUrlText: true,
+    );
+    await targetTab.controller.loadHtmlString(_welcomeHtml);
+    if (!mounted) {
+      return;
+    }
+    _setTabLoadingState(
+      targetTab,
+      title: 'Codex 浏览器自动化控制',
+      url: 'about:blank',
+      error: '',
+      loading: false,
+      syncUrlText: true,
+    );
+    _publishStateToService();
+  }
+
+  WebViewController _createController(_BrowserTab tab) {
     const params = PlatformWebViewControllerCreationParams();
     final controller = WebViewController.fromPlatformCreationParams(params)
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
@@ -180,69 +525,50 @@ class _TerminalBrowserPanelState extends State<TerminalBrowserPanel>
       ..setNavigationDelegate(
         NavigationDelegate(
           onPageStarted: (url) {
-            if (_navigationCompleter == null ||
-                _navigationCompleter!.isCompleted) {
-              _navigationCompleter = Completer<void>();
+            if (tab.navigationCompleter == null ||
+                tab.navigationCompleter!.isCompleted) {
+              tab.navigationCompleter = Completer<void>();
             }
-            _service.updateObservedState(
+            _setTabLoadingState(
+              tab,
               url: url,
-              loading: true,
               error: '',
+              loading: true,
+              syncUrlText: _isActiveTab(tab),
             );
-            if (!mounted) {
-              return;
-            }
-            setState(() {
-              _loading = true;
-              _currentUrl = url;
-              _urlController.text = url;
-              _error = '';
-            });
           },
           onPageFinished: (url) {
-            _completePendingNavigation();
-            unawaited(_refreshNavigationState());
-            if (_showInspector) {
+            _completePendingNavigation(tab);
+            unawaited(_applyDesktopViewportHint(tab));
+            unawaited(_refreshNavigationState(tab));
+            if (_isActiveTab(tab) && _showInspector) {
               unawaited(_refreshInspectorCurrentMode());
             }
-            _service.updateObservedState(
+            _setTabLoadingState(
+              tab,
               url: url,
-              title: _title,
               loading: false,
-              error: '',
+              syncUrlText: _isActiveTab(tab),
             );
-            if (!mounted) {
-              return;
-            }
-            setState(() {
-              _loading = false;
-              _currentUrl = url;
-              _urlController.text = url;
-            });
           },
           onWebResourceError: (error) {
             if (error.isForMainFrame == false) {
               return;
             }
-            _completePendingNavigation();
-            _service.updateObservedState(
-              loading: false,
+            _completePendingNavigation(tab);
+            _setTabLoadingState(
+              tab,
               error: error.description.trim(),
+              loading: false,
+              syncUrlText: _isActiveTab(tab),
             );
-            if (!mounted) {
-              return;
-            }
-            setState(() {
-              _loading = false;
-              _error = error.description.trim();
-            });
           },
         ),
       );
 
+    unawaited(_configureWebViewForUserAgent(controller, tab.userAgentMode));
     final platformController = controller.platform;
     if (platformController is AndroidWebViewController) {
-      unawaited(platformController.setUseWideViewPort(true));
       unawaited(
         platformController.setMixedContentMode(MixedContentMode.alwaysAllow),
       );
@@ -253,24 +579,20 @@ class _TerminalBrowserPanelState extends State<TerminalBrowserPanel>
     return controller;
   }
 
-  Future<void> _refreshNavigationState() async {
+  Future<void> _refreshNavigationState([_BrowserTab? tab]) async {
+    final targetTab = tab ?? _activeTab;
     try {
-      final title = await _controller.getTitle() ?? 'Browser';
-      final canGoBack = await _controller.canGoBack();
-      final canGoForward = await _controller.canGoForward();
+      final title = await targetTab.controller.getTitle() ?? 'Browser';
+      final canGoBack = await targetTab.controller.canGoBack();
+      final canGoForward = await targetTab.controller.canGoForward();
       if (!mounted) {
         return;
       }
-      setState(() {
-        _title = title.trim().isEmpty ? 'Browser' : title.trim();
-        _canGoBack = canGoBack;
-        _canGoForward = canGoForward;
-      });
-      _service.updateObservedState(
-        title: _title,
-        url: _currentUrl,
-        loading: _loading,
-        error: _error,
+      _setTabBrowserState(
+        targetTab,
+        title: title.trim().isEmpty ? 'Browser' : title.trim(),
+        canGoBack: canGoBack,
+        canGoForward: canGoForward,
       );
     } catch (_) {}
   }
@@ -283,21 +605,91 @@ class _TerminalBrowserPanelState extends State<TerminalBrowserPanel>
     await _loadUrl(text);
   }
 
-  Future<void> _loadUrl(String rawUrl) async {
+  Future<void> _loadUrl(String rawUrl, {_BrowserTab? tab}) async {
+    final targetTab = tab ?? _activeTab;
     final url = _normalizeUrl(rawUrl);
     final uri = Uri.tryParse(url);
     if (uri == null || !uri.hasScheme) {
-      setState(() {
-        _error = 'Invalid URL';
-      });
+      if (_isActiveTab(targetTab)) {
+        setState(() {
+          _error = 'Invalid URL';
+        });
+      }
+      targetTab.error = 'Invalid URL';
+      _publishStateToService();
       return;
     }
 
-    _error = '';
-    _navigationCompleter = Completer<void>();
-    await _controller.loadRequest(uri);
-    await _awaitNavigationCompletion();
-    await _refreshNavigationState();
+    _setTabLoadingState(
+      targetTab,
+      url: uri.toString(),
+      error: '',
+      loading: true,
+      syncUrlText: true,
+    );
+    await targetTab.controller.loadRequest(
+      uri,
+      headers: _userAgentHeadersForTab(targetTab),
+    );
+    await _awaitNavigationCompletion(targetTab);
+    await _refreshNavigationState(targetTab);
+  }
+
+  void _clearInspectorItems() {
+    _inspectorItems = const [];
+    _inspectorError = '';
+    _inspectorLoading = false;
+  }
+
+  _BrowserUserAgentMode? _parseUserAgentMode(String value) {
+    final normalized = value.trim().toLowerCase();
+    if (normalized.isEmpty) {
+      return null;
+    }
+    if (normalized == 'desktop' ||
+        normalized == 'pc' ||
+        normalized == 'computer' ||
+        normalized == '电脑' ||
+        normalized == '桌面') {
+      return _BrowserUserAgentMode.desktop;
+    }
+    if (normalized == 'mobile' ||
+        normalized == 'phone' ||
+        normalized == 'android' ||
+        normalized == '手机' ||
+        normalized == '移动') {
+      return _BrowserUserAgentMode.mobile;
+    }
+    return null;
+  }
+
+  Future<void> _setUserAgentMode(
+    _BrowserUserAgentMode mode, {
+    bool reloadCurrentPage = false,
+  }) async {
+    final tab = _activeTab;
+    if (tab.userAgentMode == mode && !reloadCurrentPage) {
+      return;
+    }
+    tab.userAgentMode = mode;
+    await _configureWebViewForUserAgent(tab.controller, mode);
+    _publishStateToService();
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _syncStateFromTab(tab, updateAddress: false);
+    });
+    final currentUrl = tab.currentUrl.trim();
+    final uri = Uri.tryParse(currentUrl);
+    final shouldReload = reloadCurrentPage &&
+        currentUrl.isNotEmpty &&
+        currentUrl != 'about:blank' &&
+        uri != null &&
+        uri.hasScheme;
+    if (shouldReload) {
+      await _loadUrl(currentUrl, tab: tab);
+    }
   }
 
   String _normalizeUrl(String value) {
@@ -315,8 +707,8 @@ class _TerminalBrowserPanelState extends State<TerminalBrowserPanel>
     return 'https://$text';
   }
 
-  Future<void> _awaitNavigationCompletion() async {
-    final completer = _navigationCompleter;
+  Future<void> _awaitNavigationCompletion([_BrowserTab? tab]) async {
+    final completer = (tab ?? _activeTab).navigationCompleter;
     if (completer == null) {
       return;
     }
@@ -326,8 +718,8 @@ class _TerminalBrowserPanelState extends State<TerminalBrowserPanel>
     );
   }
 
-  void _completePendingNavigation() {
-    final completer = _navigationCompleter;
+  void _completePendingNavigation([_BrowserTab? tab]) {
+    final completer = (tab ?? _activeTab).navigationCompleter;
     if (completer == null || completer.isCompleted) {
       return;
     }
@@ -366,15 +758,22 @@ class _TerminalBrowserPanelState extends State<TerminalBrowserPanel>
     Map<String, dynamic>? extra,
   }) async {
     await _refreshNavigationState();
+    final active = _activeTab;
     return {
       'ok': ok,
       'message': message,
-      'url': _currentUrl,
-      'title': _title,
-      'loading': _loading,
-      'error': _error,
-      'canGoBack': _canGoBack,
-      'canGoForward': _canGoForward,
+      'url': active.currentUrl,
+      'title': active.title,
+      'loading': active.loading,
+      'error': active.error,
+      'canGoBack': active.canGoBack,
+      'canGoForward': active.canGoForward,
+      'tabs': _tabs
+          .map((tab) => tab.toJson(active: identical(tab, active)))
+          .toList(),
+      'activeTabId': active.id,
+      'userAgentMode': active.userAgentMode.value,
+      'userAgentLabel': active.userAgentMode.label,
       if (extra != null) ...extra,
     };
   }
@@ -388,33 +787,27 @@ class _TerminalBrowserPanelState extends State<TerminalBrowserPanel>
 
   @override
   Future<Map<String, dynamic>> selfTest() async {
-    if (mounted) {
-      setState(() {
-        _title = 'OpenClaw Browser Self Test';
-        _currentUrl = 'about:blank';
-        _urlController.text = _currentUrl;
-        _error = '';
-        _loading = true;
-      });
-    }
-    _service.updateObservedState(
-      url: 'about:blank',
+    final tab = _activeTab;
+    _setTabLoadingState(
+      tab,
       title: 'OpenClaw Browser Self Test',
-      loading: true,
+      url: 'about:blank',
       error: '',
+      loading: true,
+      syncUrlText: true,
     );
 
     try {
-      _navigationCompleter = Completer<void>();
-      await _controller.loadHtmlString(_selfTestHtml);
+      tab.navigationCompleter = Completer<void>();
+      await tab.controller.loadHtmlString(_selfTestHtml);
       await Future<void>.delayed(const Duration(milliseconds: 250));
     } catch (error) {
-      if (mounted) {
-        setState(() {
-          _loading = false;
-          _error = error.toString();
-        });
-      }
+      _setTabLoadingState(
+        tab,
+        error: error.toString(),
+        loading: false,
+        syncUrlText: true,
+      );
       return _pageSnapshot(
         ok: false,
         message: 'Failed to load the browser self-test page.',
@@ -433,11 +826,7 @@ class _TerminalBrowserPanelState extends State<TerminalBrowserPanel>
 })();
 ''');
     if (raw == null) {
-      if (mounted) {
-        setState(() {
-          _loading = false;
-        });
-      }
+      _setTabLoadingState(tab, loading: false, syncUrlText: true);
       return _pageSnapshot(
         ok: false,
         message: 'Self-test page loaded, but JavaScript evaluation failed.',
@@ -448,23 +837,19 @@ class _TerminalBrowserPanelState extends State<TerminalBrowserPanel>
     try {
       decoded = jsonDecode(raw) as Map<String, dynamic>;
     } catch (_) {
-      if (mounted) {
-        setState(() {
-          _loading = false;
-        });
-      }
+      _setTabLoadingState(tab, loading: false, syncUrlText: true);
       return _pageSnapshot(
         ok: false,
         message: 'Self-test JavaScript returned an unreadable result.',
       );
     }
     final passed = decoded['ok'] == true;
-    if (mounted) {
-      setState(() {
-        _loading = false;
-        _error = '';
-      });
-    }
+    _setTabLoadingState(
+      tab,
+      error: '',
+      loading: false,
+      syncUrlText: true,
+    );
     return _pageSnapshot(
       ok: passed,
       message: passed
@@ -498,7 +883,7 @@ class _TerminalBrowserPanelState extends State<TerminalBrowserPanel>
         message: 'The browser cannot go back from the current page.',
       );
     }
-    _navigationCompleter = Completer<void>();
+    _activeTab.navigationCompleter = Completer<void>();
     await _controller.goBack();
     await _awaitNavigationCompletion();
     return _pageSnapshot(message: 'Navigated back.');
@@ -513,7 +898,7 @@ class _TerminalBrowserPanelState extends State<TerminalBrowserPanel>
         message: 'The browser cannot go forward from the current page.',
       );
     }
-    _navigationCompleter = Completer<void>();
+    _activeTab.navigationCompleter = Completer<void>();
     await _controller.goForward();
     await _awaitNavigationCompletion();
     return _pageSnapshot(message: 'Navigated forward.');
@@ -521,10 +906,111 @@ class _TerminalBrowserPanelState extends State<TerminalBrowserPanel>
 
   @override
   Future<Map<String, dynamic>> reload() async {
-    _navigationCompleter = Completer<void>();
+    _activeTab.navigationCompleter = Completer<void>();
     await _controller.reload();
     await _awaitNavigationCompletion();
     return _pageSnapshot(message: 'Page reloaded.');
+  }
+
+  @override
+  Future<Map<String, dynamic>> listTabs() {
+    return _pageSnapshot(message: 'Browser tabs loaded.');
+  }
+
+  @override
+  Future<Map<String, dynamic>> newTab({
+    String? url,
+  }) async {
+    final tab = _createTab(userAgentMode: _activeTab.userAgentMode);
+    if (!mounted) {
+      return _pageSnapshot(
+        ok: false,
+        message: 'Browser panel is no longer mounted.',
+      );
+    }
+    setState(() {
+      _tabs.add(tab);
+      _activeTabIndex = _tabs.length - 1;
+      _syncStateFromTab(tab, updateAddress: true);
+      _clearInspectorItems();
+    });
+    _publishStateToService();
+    final targetUrl = url?.trim() ?? '';
+    if (targetUrl.isEmpty) {
+      await _loadWelcomePage(tab: tab);
+    } else {
+      await _loadUrl(targetUrl, tab: tab);
+    }
+    return _pageSnapshot(message: 'New browser tab opened.');
+  }
+
+  @override
+  Future<Map<String, dynamic>> switchTab({
+    required int id,
+  }) async {
+    final index = _tabs.indexWhere((tab) => tab.id == id);
+    if (index < 0) {
+      return _pageSnapshot(
+        ok: false,
+        message: 'Browser tab was not found: $id',
+      );
+    }
+    setState(() {
+      _activeTabIndex = index;
+      _syncStateFromTab(_activeTab, updateAddress: true);
+      _clearInspectorItems();
+    });
+    _publishStateToService();
+    return _pageSnapshot(message: 'Switched to browser tab $id.');
+  }
+
+  @override
+  Future<Map<String, dynamic>> closeTab({
+    int? id,
+  }) async {
+    final targetId = id == null || id <= 0 ? _activeTab.id : id;
+    final index = _tabs.indexWhere((tab) => tab.id == targetId);
+    if (index < 0) {
+      return _pageSnapshot(
+        ok: false,
+        message: 'Browser tab was not found: $targetId',
+      );
+    }
+    setState(() {
+      _tabs.removeAt(index);
+      if (_tabs.isEmpty) {
+        _tabs.add(_createTab());
+        _activeTabIndex = 0;
+      } else if (_activeTabIndex >= _tabs.length) {
+        _activeTabIndex = _tabs.length - 1;
+      } else if (index < _activeTabIndex) {
+        _activeTabIndex -= 1;
+      }
+      _syncStateFromTab(_activeTab, updateAddress: true);
+      _clearInspectorItems();
+    });
+    _publishStateToService();
+    if (_activeTab.currentUrl.isEmpty) {
+      await _loadWelcomePage();
+    }
+    return _pageSnapshot(message: 'Browser tab closed.');
+  }
+
+  @override
+  Future<Map<String, dynamic>> setUserAgent({
+    required String mode,
+  }) async {
+    final nextMode = _parseUserAgentMode(mode);
+    if (nextMode == null) {
+      return _pageSnapshot(
+        ok: false,
+        message: 'Unsupported browser user-agent mode: $mode',
+      );
+    }
+    await _setUserAgentMode(nextMode, reloadCurrentPage: true);
+    return _pageSnapshot(
+      message: 'Browser user-agent switched to ${nextMode.label}.',
+    );
   }
 
   @override
@@ -679,6 +1165,329 @@ class _TerminalBrowserPanelState extends State<TerminalBrowserPanel>
     return _pageSnapshot(
       ok: false,
       message: 'Timed out while waiting for the requested text.',
+    );
+  }
+
+  @override
+  Future<Map<String, dynamic>> waitForSelector({
+    required String selector,
+    int timeoutMs = 10000,
+    bool visible = true,
+  }) async {
+    if (selector.trim().isEmpty) {
+      return _pageSnapshot(
+        ok: false,
+        message: 'The selector argument cannot be empty.',
+      );
+    }
+    final deadline = DateTime.now().millisecondsSinceEpoch + timeoutMs;
+    while (DateTime.now().millisecondsSinceEpoch < deadline) {
+      final script = '''
+(() => {
+  const selector = ${jsonEncode(selector)};
+  const requireVisible = ${visible ? 'true' : 'false'};
+  const element = document.querySelector(selector);
+  if (!element) {
+    return JSON.stringify({ ok: false, found: false, visible: false });
+  }
+  const rect = element.getBoundingClientRect();
+  const style = window.getComputedStyle(element);
+  const isVisible = rect.width > 0 &&
+    rect.height > 0 &&
+    style.visibility !== 'hidden' &&
+    style.display !== 'none' &&
+    Number(style.opacity || '1') > 0;
+  return JSON.stringify({
+    ok: requireVisible ? isVisible : true,
+    found: true,
+    visible: isVisible,
+    tag: element.tagName || '',
+    text: (element.innerText || element.textContent || element.value || '')
+      .trim()
+      .slice(0, 240),
+    rect: {
+      x: Math.round(rect.x),
+      y: Math.round(rect.y),
+      width: Math.round(rect.width),
+      height: Math.round(rect.height)
+    }
+  });
+})();
+''';
+      final raw = await _runStringJs(script);
+      if (raw != null) {
+        final decoded = jsonDecode(raw) as Map<String, dynamic>;
+        if (decoded['ok'] == true) {
+          return _pageSnapshot(
+            message: visible
+                ? 'Found the visible selector on the page.'
+                : 'Found the requested selector on the page.',
+            extra: {'actionResult': decoded},
+          );
+        }
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+    }
+    return _pageSnapshot(
+      ok: false,
+      message: visible
+          ? 'Timed out while waiting for the visible selector.'
+          : 'Timed out while waiting for the requested selector.',
+    );
+  }
+
+  @override
+  Future<Map<String, dynamic>> scroll({
+    String? selector,
+    String direction = 'down',
+    int pixels = 700,
+  }) async {
+    final safePixels = pixels.clamp(50, 5000);
+    final safeDirection = direction.trim().toLowerCase().isEmpty
+        ? 'down'
+        : direction.trim().toLowerCase();
+    final script = '''
+(() => {
+  const selector = ${jsonEncode(selector?.trim() ?? '')};
+  const direction = ${jsonEncode(safeDirection)};
+  const pixels = $safePixels;
+  const root = document.scrollingElement || document.documentElement || document.body;
+  const target = selector ? document.querySelector(selector) : root;
+  if (!target) {
+    return JSON.stringify({ ok: false, message: `Selector not found: \${selector}` });
+  }
+
+  const isPage = target === root || target === document.body || target === document.documentElement;
+  const before = {
+    x: isPage ? window.scrollX : target.scrollLeft,
+    y: isPage ? window.scrollY : target.scrollTop
+  };
+  let dx = 0;
+  let dy = 0;
+  let absolute = false;
+  let top = 0;
+  let left = 0;
+  switch (direction) {
+    case 'up':
+      dy = -pixels;
+      break;
+    case 'left':
+      dx = -pixels;
+      break;
+    case 'right':
+      dx = pixels;
+      break;
+    case 'top':
+      absolute = true;
+      top = 0;
+      left = before.x;
+      break;
+    case 'bottom':
+      absolute = true;
+      top = isPage ? root.scrollHeight : target.scrollHeight;
+      left = before.x;
+      break;
+    case 'down':
+    default:
+      dy = pixels;
+      break;
+  }
+
+  if (isPage) {
+    if (absolute) {
+      window.scrollTo({ left, top, behavior: 'instant' });
+    } else {
+      window.scrollBy({ left: dx, top: dy, behavior: 'instant' });
+    }
+  } else if (absolute) {
+    target.scrollTo({ left, top, behavior: 'instant' });
+  } else {
+    target.scrollBy({ left: dx, top: dy, behavior: 'instant' });
+  }
+
+  const after = {
+    x: isPage ? window.scrollX : target.scrollLeft,
+    y: isPage ? window.scrollY : target.scrollTop
+  };
+  return JSON.stringify({
+    ok: true,
+    message: `Scrolled \${direction}.`,
+    selector: selector || null,
+    before,
+    after,
+    max: {
+      width: isPage ? root.scrollWidth : target.scrollWidth,
+      height: isPage ? root.scrollHeight : target.scrollHeight
+    }
+  });
+})();
+''';
+    final raw = await _runStringJs(script);
+    if (raw == null) {
+      return _pageSnapshot(
+        ok: false,
+        message: 'Failed to run the scroll action in WebView.',
+      );
+    }
+    final decoded = jsonDecode(raw) as Map<String, dynamic>;
+    return _pageSnapshot(
+      ok: decoded['ok'] != false,
+      message: decoded['message']?.toString() ?? 'Scrolled page.',
+      extra: {'actionResult': decoded},
+    );
+  }
+
+  @override
+  Future<Map<String, dynamic>> pressKey({
+    String? selector,
+    required String key,
+  }) async {
+    if (key.trim().isEmpty) {
+      return _pageSnapshot(
+        ok: false,
+        message: 'The key argument cannot be empty.',
+      );
+    }
+    final script = '''
+(() => {
+  const selector = ${jsonEncode(selector?.trim() ?? '')};
+  const key = ${jsonEncode(key.trim())};
+  let target = selector ? document.querySelector(selector) : document.activeElement;
+  if (selector && !target) {
+    return JSON.stringify({ ok: false, message: `Selector not found: \${selector}` });
+  }
+  if (!target || target === document.body || target === document.documentElement) {
+    target = document.querySelector('input, textarea, select, button, a[href], [tabindex], [contenteditable="true"]') || document.body;
+  }
+  if (typeof target.focus === 'function') {
+    target.focus();
+  }
+
+  const code = key.length === 1 ? `Key\${key.toUpperCase()}` : key;
+  const eventInit = { key, code, bubbles: true, cancelable: true };
+  const down = target.dispatchEvent(new KeyboardEvent('keydown', eventInit));
+  target.dispatchEvent(new KeyboardEvent('keypress', eventInit));
+  const up = target.dispatchEvent(new KeyboardEvent('keyup', eventInit));
+
+  if (key === 'Enter' && down !== false) {
+    const form = target.form || target.closest?.('form');
+    if (form && typeof form.requestSubmit === 'function') {
+      form.requestSubmit();
+    }
+  }
+
+  return JSON.stringify({
+    ok: true,
+    message: `Pressed \${key}.`,
+    selector: selector || null,
+    canceled: down === false || up === false,
+    activeTag: document.activeElement?.tagName || '',
+    activeText: (
+      document.activeElement?.innerText ||
+      document.activeElement?.textContent ||
+      document.activeElement?.value ||
+      ''
+    ).trim().slice(0, 160)
+  });
+})();
+''';
+    final raw = await _runStringJs(script);
+    if (raw == null) {
+      return _pageSnapshot(
+        ok: false,
+        message: 'Failed to run the key press action in WebView.',
+      );
+    }
+    final decoded = jsonDecode(raw) as Map<String, dynamic>;
+    return _pageSnapshot(
+      ok: decoded['ok'] != false,
+      message: decoded['message']?.toString() ?? 'Key pressed.',
+      extra: {'actionResult': decoded},
+    );
+  }
+
+  @override
+  Future<Map<String, dynamic>> selectOption({
+    required String selector,
+    String? value,
+    String? label,
+    int? index,
+  }) async {
+    if (selector.trim().isEmpty) {
+      return _pageSnapshot(
+        ok: false,
+        message: 'The selector argument cannot be empty.',
+      );
+    }
+    final hasValue = value?.trim().isNotEmpty ?? false;
+    final hasLabel = label?.trim().isNotEmpty ?? false;
+    final hasIndex = index != null && index >= 0;
+    if (!hasValue && !hasLabel && !hasIndex) {
+      return _pageSnapshot(
+        ok: false,
+        message: 'Provide value, label, or index for the option to select.',
+      );
+    }
+    final script = '''
+(() => {
+  const selector = ${jsonEncode(selector)};
+  const value = ${jsonEncode(value?.trim() ?? '')};
+  const label = ${jsonEncode(label?.trim() ?? '')};
+  const index = ${index == null ? 'null' : index.toString()};
+  const select = document.querySelector(selector);
+  if (!select) {
+    return JSON.stringify({ ok: false, message: `Selector not found: \${selector}` });
+  }
+  if (select.tagName !== 'SELECT') {
+    return JSON.stringify({ ok: false, message: 'Target element is not a select.' });
+  }
+
+  const options = Array.from(select.options || []);
+  const normalizedLabel = label.toLowerCase();
+  let option = null;
+  if (value) {
+    option = options.find((item) => item.value === value);
+  }
+  if (!option && label) {
+    option = options.find((item) =>
+      (item.label || item.text || '').trim().toLowerCase() === normalizedLabel
+    ) || options.find((item) =>
+      (item.label || item.text || '').trim().toLowerCase().includes(normalizedLabel)
+    );
+  }
+  if (!option && Number.isInteger(index) && index >= 0 && index < options.length) {
+    option = options[index];
+  }
+  if (!option) {
+    return JSON.stringify({ ok: false, message: 'Matching option was not found.' });
+  }
+
+  select.value = option.value;
+  option.selected = true;
+  select.dispatchEvent(new Event('input', { bubbles: true }));
+  select.dispatchEvent(new Event('change', { bubbles: true }));
+  return JSON.stringify({
+    ok: true,
+    message: 'Option selected.',
+    selector,
+    selectedIndex: select.selectedIndex,
+    value: select.value,
+    text: (option.label || option.text || '').trim()
+  });
+})();
+''';
+    final raw = await _runStringJs(script);
+    if (raw == null) {
+      return _pageSnapshot(
+        ok: false,
+        message: 'Failed to run the select action in WebView.',
+      );
+    }
+    final decoded = jsonDecode(raw) as Map<String, dynamic>;
+    return _pageSnapshot(
+      ok: decoded['ok'] != false,
+      message: decoded['message']?.toString() ?? 'Option selected.',
+      extra: {'actionResult': decoded},
     );
   }
 
@@ -1003,8 +1812,9 @@ class _TerminalBrowserPanelState extends State<TerminalBrowserPanel>
           child: Column(
             children: [
               _buildHeader(theme),
-              _buildRecentActionsStrip(theme),
-              _buildInspectorStrip(theme),
+              if (_showRecentActions) _buildRecentActionsStrip(theme),
+              if (_showInspector || _inspectorLoading || _inspectorItems.isNotEmpty)
+                _buildInspectorStrip(theme),
               Expanded(
                 child: Stack(
                   children: [
@@ -1049,14 +1859,6 @@ class _TerminalBrowserPanelState extends State<TerminalBrowserPanel>
         );
       },
     );
-  }
-
-  Future<void> _handleBackButton() async {
-    await back();
-  }
-
-  Future<void> _handleForwardButton() async {
-    await forward();
   }
 
   Future<void> _handleReloadButton() async {
@@ -1115,6 +1917,21 @@ class _TerminalBrowserPanelState extends State<TerminalBrowserPanel>
     }
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('$label copied')),
+    );
+  }
+
+  Future<void> _showScriptLibrary() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: const Color(0xFF090909),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(8)),
+      ),
+      builder: (context) {
+        return _BrowserScriptLibrarySheet(service: _service);
+      },
     );
   }
 
@@ -1547,121 +2364,418 @@ class _TerminalBrowserPanelState extends State<TerminalBrowserPanel>
     );
   }
 
-  Widget _buildHeader(ThemeData theme) {
-    return ColoredBox(
-      color: const Color(0xFF090909),
-      child: SafeArea(
-        bottom: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  const Icon(Icons.language, color: Colors.white, size: 18),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      _title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.titleSmall?.copyWith(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  _buildActionIcon(
-                    icon: Icons.arrow_back,
-                    enabled: _canGoBack,
-                    onTap: _canGoBack ? () => unawaited(_handleBackButton()) : null,
-                  ),
-                  _buildActionIcon(
-                    icon: Icons.arrow_forward,
-                    enabled: _canGoForward,
-                    onTap:
-                        _canGoForward ? () => unawaited(_handleForwardButton()) : null,
-                  ),
-                  _buildActionIcon(
-                    icon: Icons.refresh,
-                    onTap: () => unawaited(_handleReloadButton()),
-                  ),
-                  _buildActionIcon(
-                    icon: Icons.download_rounded,
-                    onTap: () => unawaited(_exportSnapshot()),
-                  ),
-                ],
+  Widget _buildTabStrip(ThemeData theme, {required bool compact}) {
+    return SizedBox(
+      height: 38,
+      child: Row(
+        children: [
+          Expanded(
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: _tabs.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 6),
+              itemBuilder: (context, index) {
+                return _buildTabChip(
+                  theme,
+                  _tabs[index],
+                  compact: compact,
+                );
+              },
+            ),
+          ),
+          const SizedBox(width: 6),
+          _buildActionIcon(
+            icon: Icons.add,
+            tooltip: '新建标签页',
+            onTap: () => unawaited(newTab()),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTabChip(
+    ThemeData theme,
+    _BrowserTab tab, {
+    required bool compact,
+  }) {
+    final active = _isActiveTab(tab);
+    final title = tab.title.trim().isNotEmpty
+        ? tab.title.trim()
+        : tab.currentUrl.trim().isNotEmpty
+            ? tab.currentUrl.trim()
+            : '新标签页';
+    return ConstrainedBox(
+      constraints: BoxConstraints(
+        minWidth: compact ? 102 : 128,
+        maxWidth: compact ? 142 : 190,
+      ),
+      child: Material(
+        color: active ? AppColors.accent.withAlpha(28) : Colors.white.withAlpha(8),
+        borderRadius: BorderRadius.circular(8),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(8),
+          onTap: active ? null : () => unawaited(switchTab(id: tab.id)),
+          child: Container(
+            padding: const EdgeInsets.only(left: 9, right: 4),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: active
+                    ? AppColors.accent.withAlpha(150)
+                    : Colors.white.withAlpha(14),
               ),
-              const SizedBox(height: 10),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _urlController,
-                      style: const TextStyle(color: Colors.white, fontSize: 13),
-                      cursorColor: Colors.white,
-                      textInputAction: TextInputAction.go,
-                      onSubmitted: (_) => unawaited(_submitAddress()),
-                      decoration: InputDecoration(
-                        isDense: true,
-                        filled: true,
-                        fillColor: Colors.white.withAlpha(8),
-                        hintText: 'Enter URL',
-                        hintStyle: const TextStyle(color: Colors.white54),
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 12,
-                        ),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(
-                            color: Colors.white.withAlpha(22),
-                          ),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(
-                            color: Colors.white.withAlpha(18),
-                          ),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: AppColors.accent),
-                        ),
-                      ),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  tab.userAgentMode.icon,
+                  size: 14,
+                  color: active ? AppColors.accent : Colors.white54,
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.labelMedium?.copyWith(
+                      color: active ? Colors.white : Colors.white70,
+                      fontWeight: active ? FontWeight.w800 : FontWeight.w600,
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  FilledButton(
-                    onPressed: () => unawaited(_submitAddress()),
-                    style: FilledButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 12,
-                      ),
-                      backgroundColor: AppColors.accent,
-                    ),
-                    child: const Text('Open'),
-                  ),
-                ],
-              ),
-              if (_currentUrl.isNotEmpty) ...[
-                const SizedBox(height: 8),
-                Text(
-                  _currentUrl,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: Colors.white60,
                   ),
                 ),
+                if (_tabs.length > 1)
+                  IconButton(
+                    tooltip: '关闭标签页',
+                    onPressed: () => unawaited(closeTab(id: tab.id)),
+                    icon: const Icon(Icons.close, size: 14),
+                    color: Colors.white54,
+                    visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(
+                      minWidth: 28,
+                      minHeight: 28,
+                    ),
+                  ),
               ],
-            ],
+            ),
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildAddressBar(ThemeData theme, {required bool compact}) {
+    final label = _title.trim().isEmpty ? '地址' : _title.trim();
+    return Row(
+      children: [
+        Expanded(
+          child: TextField(
+            controller: _urlController,
+            style: const TextStyle(
+              color: _panelText,
+              fontSize: 13,
+            ),
+            cursorColor: _panelText,
+            textInputAction: TextInputAction.go,
+            onSubmitted: (_) => unawaited(_submitAddress()),
+            decoration: InputDecoration(
+              isDense: true,
+              filled: true,
+              fillColor: _panelSurfaceAlt,
+              label: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: _panelMutedText),
+              ),
+              floatingLabelStyle: const TextStyle(color: AppColors.accent),
+              hintText: '输入网址',
+              hintStyle: const TextStyle(color: _panelMutedText),
+              prefixIcon: Icon(
+                _activeTab.userAgentMode.icon,
+                size: 18,
+                color: AppColors.accent,
+              ),
+              prefixIconConstraints: const BoxConstraints(
+                minWidth: 38,
+                minHeight: 38,
+              ),
+              contentPadding: EdgeInsets.symmetric(
+                horizontal: compact ? 9 : 11,
+                vertical: compact ? 10 : 12,
+              ),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: const BorderSide(color: _panelBorder),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: const BorderSide(color: _panelBorder),
+              ),
+              focusedBorder: const OutlineInputBorder(
+                borderRadius: BorderRadius.all(
+                  Radius.circular(8),
+                ),
+                borderSide: BorderSide(color: AppColors.accent),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        _buildAddressSubmitButton(compact: compact),
+      ],
+    );
+  }
+
+  Widget _buildUaModeButton({required bool compact}) {
+    return PopupMenuButton<_BrowserUserAgentMode>(
+      tooltip: '切换 UA',
+      onSelected: (mode) => unawaited(
+        _setUserAgentMode(mode, reloadCurrentPage: true),
+      ),
+      color: _panelSurfaceAlt,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(10),
+        side: const BorderSide(color: _panelBorder),
+      ),
+      itemBuilder: (context) {
+        return [
+          for (final mode in _BrowserUserAgentMode.values)
+            PopupMenuItem(
+              value: mode,
+              child: _buildMenuEntry(
+                icon: mode.icon,
+                label: '${mode.label} UA',
+                iconColor: mode == _activeTab.userAgentMode
+                    ? AppColors.accent
+                    : _panelText,
+                textColor: mode == _activeTab.userAgentMode
+                    ? AppColors.accent
+                    : _panelText,
+              ),
+            )
+        ];
+      },
+      child: Container(
+        width: compact ? 38 : 42,
+        height: 38,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: _panelSurface,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: _panelBorder),
+        ),
+        child: Icon(
+          _activeTab.userAgentMode.icon,
+          size: 18,
+          color: _panelText,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMoreMenu({required bool compact}) {
+    return PopupMenuButton<_BrowserMenuAction>(
+      tooltip: '更多浏览器工具',
+      color: _panelSurfaceAlt,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(10),
+        side: const BorderSide(color: _panelBorder),
+      ),
+      onSelected: _handleBrowserMenuAction,
+      itemBuilder: (context) {
+        return [
+          PopupMenuItem(
+            value: _BrowserMenuAction.scripts,
+            child: _buildMenuEntry(
+              icon: Icons.playlist_play,
+              label: '脚本助手',
+            ),
+          ),
+          PopupMenuItem(
+            value: _BrowserMenuAction.inspector,
+            child: _buildMenuEntry(
+              icon: Icons.tune,
+              label: _showInspector ? '隐藏检查器' : '显示检查器',
+            ),
+          ),
+          PopupMenuItem(
+            value: _BrowserMenuAction.recentActions,
+            child: _buildMenuEntry(
+              icon: Icons.history,
+              label: _showRecentActions ? '隐藏最近操作' : '显示最近操作',
+            ),
+          ),
+          PopupMenuItem(
+            value: _BrowserMenuAction.snapshot,
+            child: _buildMenuEntry(
+              icon: Icons.download_rounded,
+              label: '保存页面快照',
+            ),
+          ),
+        ];
+      },
+      child: Container(
+        width: 38,
+        height: 38,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: _panelSurface,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: _panelBorder),
+        ),
+        child: const Icon(Icons.more_horiz, size: 19, color: _panelText),
+      ),
+    );
+  }
+
+  Widget _buildMenuEntry({
+    required IconData icon,
+    required String label,
+    Color? iconColor,
+    Color? textColor,
+  }) {
+    final resolvedIconColor = iconColor ?? _panelText;
+    final resolvedTextColor = textColor ?? _panelText;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 18, color: resolvedIconColor),
+        const SizedBox(width: 10),
+        Text(
+          label,
+          style: TextStyle(
+            color: resolvedTextColor,
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _handleBrowserMenuAction(_BrowserMenuAction action) {
+    switch (action) {
+      case _BrowserMenuAction.scripts:
+        unawaited(_showScriptLibrary());
+        break;
+      case _BrowserMenuAction.snapshot:
+        unawaited(_exportSnapshot());
+        break;
+      case _BrowserMenuAction.inspector:
+        setState(() {
+          _showInspector = !_showInspector;
+        });
+        if (_showInspector && _inspectorItems.isEmpty) {
+          unawaited(_refreshInspectorCurrentMode());
+        }
+        break;
+      case _BrowserMenuAction.recentActions:
+        setState(() {
+          _showRecentActions = !_showRecentActions;
+        });
+        break;
+    }
+  }
+
+  Widget _buildHeader(ThemeData theme) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxWidth < 380;
+        return ColoredBox(
+          color: _panelHeaderBg,
+          child: SafeArea(
+            bottom: false,
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(
+                compact ? 10 : 12,
+                10,
+                compact ? 10 : 12,
+                10,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildTabStrip(theme, compact: compact),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      _buildActionIcon(
+                        icon: Icons.arrow_back,
+                        tooltip: '后退',
+                        enabled: _canGoBack,
+                        onTap: () => unawaited(back()),
+                      ),
+                      _buildActionIcon(
+                        icon: Icons.arrow_forward,
+                        tooltip: '前进',
+                        enabled: _canGoForward,
+                        onTap: () => unawaited(forward()),
+                      ),
+                      _buildActionIcon(
+                        icon: Icons.refresh,
+                        tooltip: '刷新',
+                        onTap: () => unawaited(_handleReloadButton()),
+                      ),
+                      const Spacer(),
+                      _buildUaModeButton(compact: compact),
+                      const SizedBox(width: 6),
+                      _buildMoreMenu(compact: compact),
+                      if (widget.onClose != null) ...[
+                        const SizedBox(width: 6),
+                        _buildActionIcon(
+                          icon: Icons.close,
+                          tooltip: '关闭',
+                          onTap: widget.onClose,
+                        ),
+                      ],
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  _buildAddressBar(theme, compact: compact),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildAddressSubmitButton({required bool compact}) {
+    if (compact) {
+      return IconButton.filled(
+        tooltip: 'Open URL',
+        onPressed: () => unawaited(_submitAddress()),
+        icon: const Icon(Icons.arrow_forward, size: 18),
+        style: IconButton.styleFrom(
+          backgroundColor: AppColors.accent,
+          foregroundColor: Colors.white,
+          fixedSize: const Size(42, 42),
+          minimumSize: const Size(42, 42),
+          padding: EdgeInsets.zero,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+          ),
+        ),
+      );
+    }
+    return FilledButton.icon(
+      onPressed: () => unawaited(_submitAddress()),
+      style: FilledButton.styleFrom(
+        padding: const EdgeInsets.symmetric(
+          horizontal: 12,
+          vertical: 12,
+        ),
+        backgroundColor: AppColors.accent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+        ),
+      ),
+      icon: const Icon(Icons.arrow_forward, size: 16),
+      label: const Text('打开'),
     );
   }
 
@@ -1681,17 +2795,22 @@ class _TerminalBrowserPanelState extends State<TerminalBrowserPanel>
     required IconData icon,
     required VoidCallback? onTap,
     bool enabled = true,
+    String? tooltip,
   }) {
     return IconButton(
+      tooltip: tooltip,
       onPressed: enabled ? onTap : null,
-      icon: Icon(icon, size: 18),
-      color: enabled ? Colors.white : Colors.white24,
+      icon: Icon(icon, size: 19),
+      color: enabled ? _panelText : _panelDisabledText,
       visualDensity: VisualDensity.compact,
       style: IconButton.styleFrom(
-        backgroundColor: Colors.white.withAlpha(10),
+        backgroundColor: enabled ? _panelSurface : _panelSurfaceAlt,
+        fixedSize: const Size(38, 38),
+        minimumSize: const Size(38, 38),
+        padding: EdgeInsets.zero,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(10),
-          side: BorderSide(color: Colors.white.withAlpha(14)),
+          borderRadius: BorderRadius.circular(8),
+          side: const BorderSide(color: _panelBorder),
         ),
       ),
     );
@@ -1728,4 +2847,803 @@ class _TerminalBrowserPanelState extends State<TerminalBrowserPanel>
       ),
     );
   }
+}
+
+class _BrowserScriptLibrarySheet extends StatefulWidget {
+  final BrowserAutomationService service;
+
+  const _BrowserScriptLibrarySheet({
+    required this.service,
+  });
+
+  @override
+  State<_BrowserScriptLibrarySheet> createState() =>
+      _BrowserScriptLibrarySheetState();
+}
+
+class _BrowserScriptLibrarySheetState
+    extends State<_BrowserScriptLibrarySheet> {
+  var _loading = true;
+  var _saving = false;
+  var _savingPending = false;
+  var _clearingPending = false;
+  var _error = '';
+  String _runningId = '';
+  String _deletingId = '';
+  List<BrowserAutomationScript> _scripts = const <BrowserAutomationScript>[];
+  BrowserAutomationScriptDraft? _pendingDraft;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.service.addListener(_handleServiceChanged);
+    unawaited(_loadScripts());
+  }
+
+  @override
+  void dispose() {
+    widget.service.removeListener(_handleServiceChanged);
+    super.dispose();
+  }
+
+  void _handleServiceChanged() {
+    final nextDraft = widget.service.pendingScriptDraft;
+    if (identical(nextDraft, _pendingDraft) || !mounted) {
+      return;
+    }
+    setState(() {
+      _pendingDraft = nextDraft;
+    });
+  }
+
+  Future<void> _loadScripts() async {
+    setState(() {
+      _loading = true;
+      _error = '';
+    });
+    try {
+      final scripts = await widget.service.loadScripts();
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _scripts = scripts;
+        _pendingDraft = widget.service.pendingScriptDraft;
+      });
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _error = error.toString();
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _savePendingScript(BrowserAutomationScriptDraft draft) async {
+    final result = await _showScriptEditDialog(
+      title: '保存待保存脚本',
+      fileName: draft.fileName,
+      description: draft.description,
+      confirmLabel: '保存',
+    );
+    if (result == null) {
+      return;
+    }
+    setState(() {
+      _savingPending = true;
+    });
+    try {
+      final response = await widget.service.savePendingScript(
+        fileName: result.fileName,
+        description: result.description,
+      );
+      if (!mounted) {
+        return;
+      }
+      _showSnack(
+        response['ok'] == false
+            ? response['message']?.toString() ?? '待保存脚本保存失败'
+            : '待保存脚本已保存',
+      );
+      await _loadScripts();
+    } finally {
+      if (mounted) {
+        setState(() {
+          _savingPending = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _discardPendingScript() async {
+    setState(() {
+      _clearingPending = true;
+    });
+    try {
+      final response = await widget.service.clearPendingScriptDraft();
+      if (!mounted) {
+        return;
+      }
+      _showSnack(
+        response['ok'] == false
+            ? response['message']?.toString() ?? '待保存脚本清除失败'
+            : '待保存脚本已清除',
+      );
+      setState(() {
+        _pendingDraft = widget.service.pendingScriptDraft;
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _clearingPending = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _saveRecentScript() async {
+    final result = await _showScriptEditDialog(
+      title: '保存最近流程',
+      fileName: _defaultScriptFileName(),
+      description: '保存最近一次可复用的浏览器操作流程',
+      confirmLabel: '保存',
+    );
+    if (result == null) {
+      return;
+    }
+    setState(() {
+      _saving = true;
+    });
+    try {
+      final response = await widget.service.saveRecentScript(
+        fileName: result.fileName,
+        description: result.description,
+      );
+      if (!mounted) {
+        return;
+      }
+      _showSnack(
+        response['ok'] == false
+            ? response['message']?.toString() ?? '脚本保存失败'
+            : '脚本已保存',
+      );
+      await _loadScripts();
+    } finally {
+      if (mounted) {
+        setState(() {
+          _saving = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _runScript(BrowserAutomationScript script) async {
+    setState(() {
+      _runningId = script.id;
+    });
+    try {
+      final response = await widget.service.runScript(script.id);
+      if (!mounted) {
+        return;
+      }
+      _showSnack(
+        response['ok'] == false
+            ? response['message']?.toString() ?? '脚本运行失败'
+            : '脚本运行完成',
+      );
+      await _loadScripts();
+    } finally {
+      if (mounted) {
+        setState(() {
+          _runningId = '';
+        });
+      }
+    }
+  }
+
+  Future<void> _renameScript(BrowserAutomationScript script) async {
+    final result = await _showScriptEditDialog(
+      title: '重命名脚本',
+      fileName: script.fileName,
+      description: script.description,
+      confirmLabel: '保存',
+    );
+    if (result == null) {
+      return;
+    }
+    final response = await widget.service.renameScript(
+      id: script.id,
+      fileName: result.fileName,
+      description: result.description,
+    );
+    if (!mounted) {
+      return;
+    }
+    _showSnack(
+      response['ok'] == false
+          ? response['message']?.toString() ?? '脚本重命名失败'
+          : '脚本已更新',
+    );
+    await _loadScripts();
+  }
+
+  Future<void> _deleteScript(BrowserAutomationScript script) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('删除脚本'),
+          content: Text('确定删除 ${script.fileName}？'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('删除'),
+            ),
+          ],
+        );
+      },
+    );
+    if (confirmed != true) {
+      return;
+    }
+    setState(() {
+      _deletingId = script.id;
+    });
+    try {
+      final response = await widget.service.deleteScript(script.id);
+      if (!mounted) {
+        return;
+      }
+      _showSnack(
+        response['ok'] == false
+            ? response['message']?.toString() ?? '脚本删除失败'
+            : '脚本已删除',
+      );
+      await _loadScripts();
+    } finally {
+      if (mounted) {
+        setState(() {
+          _deletingId = '';
+        });
+      }
+    }
+  }
+
+  Future<void> _copyText(String text, String label) async {
+    await Clipboard.setData(ClipboardData(text: text));
+    if (!mounted) {
+      return;
+    }
+    _showSnack('$label 已复制');
+  }
+
+  Future<_ScriptEditResult?> _showScriptEditDialog({
+    required String title,
+    required String fileName,
+    required String description,
+    required String confirmLabel,
+  }) async {
+    final fileController = TextEditingController(text: fileName);
+    final descriptionController = TextEditingController(text: description);
+    try {
+      return await showDialog<_ScriptEditResult>(
+        context: context,
+        builder: (context) {
+          return AlertDialog(
+            title: Text(title),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: fileController,
+                  decoration: const InputDecoration(
+                    labelText: '文件名',
+                    hintText: 'daily-login.browser.json',
+                  ),
+                  textInputAction: TextInputAction.next,
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: descriptionController,
+                  decoration: const InputDecoration(
+                    labelText: '用处简介',
+                    hintText: '说明这个脚本适合什么任务',
+                  ),
+                  minLines: 2,
+                  maxLines: 4,
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('取消'),
+              ),
+              FilledButton(
+                onPressed: () {
+                  final nextFileName = fileController.text.trim();
+                  if (nextFileName.isEmpty) {
+                    return;
+                  }
+                  Navigator.of(context).pop(
+                    _ScriptEditResult(
+                      fileName: nextFileName,
+                      description: descriptionController.text.trim(),
+                    ),
+                  );
+                },
+                child: Text(confirmLabel),
+              ),
+            ],
+          );
+        },
+      );
+    } finally {
+      fileController.dispose();
+      descriptionController.dispose();
+    }
+  }
+
+  void _showSnack(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
+  }
+
+  String _defaultScriptFileName() {
+    final now = DateTime.now();
+    String two(int value) => value.toString().padLeft(2, '0');
+    return 'browser-${now.year}${two(now.month)}${two(now.day)}-'
+        '${two(now.hour)}${two(now.minute)}.browser.json';
+  }
+
+  String _formatDate(DateTime value) {
+    String two(int number) => number.toString().padLeft(2, '0');
+    final local = value.toLocal();
+    return '${local.year}-${two(local.month)}-${two(local.day)} '
+        '${two(local.hour)}:${two(local.minute)}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final height = MediaQuery.sizeOf(context).height * 0.86;
+    return ConstrainedBox(
+      constraints: BoxConstraints(maxHeight: height),
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 10, 10),
+            child: Row(
+              children: [
+                Container(
+                  width: 34,
+                  height: 34,
+                  decoration: BoxDecoration(
+                    color: AppColors.accent.withAlpha(26),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: AppColors.accent.withAlpha(110)),
+                  ),
+                  child: const Icon(
+                    Icons.playlist_play,
+                    size: 19,
+                    color: AppColors.accent,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '浏览器脚本助手',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        '保存、复用和快速启动 Codex 浏览器操作流程',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: Colors.white60,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  tooltip: '刷新',
+                  onPressed: _loading ? null : () => unawaited(_loadScripts()),
+                  icon: const Icon(Icons.refresh),
+                ),
+                IconButton(
+                  tooltip: '关闭',
+                  onPressed: () => Navigator.of(context).pop(),
+                  icon: const Icon(Icons.close),
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+            child: Row(
+              children: [
+                Expanded(
+                  child: FilledButton.icon(
+                    onPressed:
+                        _saving ? null : () => unawaited(_saveRecentScript()),
+                    icon: _saving
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.save_alt, size: 18),
+                    label: const Text('保存最近流程'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Divider(height: 1, color: Colors.white.withAlpha(14)),
+          Expanded(child: _buildBody(theme)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBody(ThemeData theme) {
+    if (_loading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (_error.isNotEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(18),
+          child: Text(
+            _error,
+            textAlign: TextAlign.center,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: AppColors.statusRed,
+            ),
+          ),
+        ),
+      );
+    }
+    if (_scripts.isEmpty) {
+      return ListView(
+        padding: const EdgeInsets.all(12),
+        children: [
+          if (_pendingDraft != null) ...[
+            _buildPendingDraftCard(theme, _pendingDraft!),
+            const SizedBox(height: 10),
+          ],
+          _buildEmptyScriptsState(theme),
+        ],
+      );
+    }
+
+    final children = <Widget>[
+      if (_pendingDraft != null) ...[
+        _buildPendingDraftCard(theme, _pendingDraft!),
+        const SizedBox(height: 10),
+      ],
+      for (var index = 0; index < _scripts.length; index++) ...[
+        _buildScriptCard(theme, _scripts[index]),
+        if (index != _scripts.length - 1) const SizedBox(height: 10),
+      ],
+    ];
+    return ListView(
+      padding: const EdgeInsets.all(12),
+      children: children,
+    );
+  }
+
+  Widget _buildEmptyScriptsState(ThemeData theme) {
+    return Padding(
+      padding: const EdgeInsets.all(22),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.topic_outlined,
+            size: 42,
+            color: Colors.white.withAlpha(90),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            '还没有保存的浏览器脚本',
+            style: theme.textTheme.titleSmall?.copyWith(
+              color: Colors.white,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            _pendingDraft == null
+                ? '让 Codex 完成一次浏览器流程后，脚本助手会显示待保存的可复用脚本。'
+                : '上方待保存脚本确认后会进入这里，之后可一键运行或复制快捷命令。',
+            textAlign: TextAlign.center,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: Colors.white60,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPendingDraftCard(
+    ThemeData theme,
+    BrowserAutomationScriptDraft draft,
+  ) {
+    final meta = [
+      '${draft.steps.length} 步',
+      draft.autoGenerated ? '自动草稿' : 'Codex 草稿',
+      '更新 ${_formatDate(draft.updatedAt)}',
+    ].join(' · ');
+    final disabled = _savingPending || _clearingPending;
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFBBF24).withAlpha(12),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFFBBF24).withAlpha(90)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Icon(
+                Icons.pending_actions,
+                size: 18,
+                color: Color(0xFFFBBF24),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  '待保存：${draft.fileName}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            draft.description,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: Colors.white70,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            meta,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: Colors.white.withAlpha(115),
+            ),
+          ),
+          if (draft.sourceUrl.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text(
+              draft.sourceUrl,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: const Color(0xFFFBBF24),
+                fontFamily: 'monospace',
+              ),
+            ),
+          ],
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            children: [
+              FilledButton.icon(
+                onPressed:
+                    disabled ? null : () => unawaited(_savePendingScript(draft)),
+                icon: _savingPending
+                    ? const SizedBox(
+                        width: 15,
+                        height: 15,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.save_alt, size: 16),
+                label: const Text('保存/编辑'),
+              ),
+              OutlinedButton.icon(
+                onPressed: disabled
+                    ? null
+                    : () => unawaited(
+                          _copyText(draft.codexPrompt, '复用提示'),
+                        ),
+                icon: const Icon(Icons.content_copy, size: 16),
+                label: const Text('复制提示'),
+              ),
+              TextButton.icon(
+                onPressed:
+                    disabled ? null : () => unawaited(_discardPendingScript()),
+                icon: _clearingPending
+                    ? const SizedBox(
+                        width: 15,
+                        height: 15,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.clear, size: 16),
+                label: const Text('丢弃'),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildScriptCard(ThemeData theme, BrowserAutomationScript script) {
+    final running = _runningId == script.id;
+    final deleting = _deletingId == script.id;
+    final disabled = running || deleting;
+    final meta = [
+      '${script.steps.length} 步',
+      '运行 ${script.runCount} 次',
+      '更新 ${_formatDate(script.updatedAt)}',
+      if (script.lastRunAt != null) '最近运行 ${_formatDate(script.lastRunAt!)}',
+    ].join(' · ');
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white.withAlpha(7),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.white.withAlpha(16)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Icon(
+                Icons.description_outlined,
+                size: 18,
+                color: AppColors.accent,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  script.fileName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            script.description,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: Colors.white70,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            meta,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: Colors.white.withAlpha(115),
+            ),
+          ),
+          if (script.sourceUrl.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text(
+              script.sourceUrl,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: const Color(0xFFFBBF24),
+                fontFamily: 'monospace',
+              ),
+            ),
+          ],
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            children: [
+              FilledButton.icon(
+                onPressed: disabled ? null : () => unawaited(_runScript(script)),
+                icon: running
+                    ? const SizedBox(
+                        width: 15,
+                        height: 15,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.play_arrow, size: 16),
+                label: const Text('运行'),
+              ),
+              OutlinedButton.icon(
+                onPressed:
+                    disabled ? null : () => unawaited(_renameScript(script)),
+                icon: const Icon(Icons.edit, size: 16),
+                label: const Text('重命名'),
+              ),
+              OutlinedButton.icon(
+                onPressed: disabled
+                    ? null
+                    : () => unawaited(
+                          _copyText(script.quickCommand, '快捷命令'),
+                        ),
+                icon: const Icon(Icons.terminal, size: 16),
+                label: const Text('复制命令'),
+              ),
+              OutlinedButton.icon(
+                onPressed: disabled
+                    ? null
+                    : () => unawaited(
+                          _copyText(script.codexPrompt, 'Codex 提示词'),
+                        ),
+                icon: const Icon(Icons.content_copy, size: 16),
+                label: const Text('复制提示'),
+              ),
+              TextButton.icon(
+                onPressed:
+                    disabled ? null : () => unawaited(_deleteScript(script)),
+                icon: deleting
+                    ? const SizedBox(
+                        width: 15,
+                        height: 15,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.delete_outline, size: 16),
+                label: const Text('删除'),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ScriptEditResult {
+  final String fileName;
+  final String description;
+
+  const _ScriptEditResult({
+    required this.fileName,
+    required this.description,
+  });
 }

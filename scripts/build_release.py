@@ -11,6 +11,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from versioning import derive_build_versions, display_version, normalize_version
+
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 FLUTTER_DIR = ROOT_DIR / "flutter_app"
@@ -58,10 +60,6 @@ def default_build_number(value: str) -> str:
     except ValueError:
         return next_build_number(value)
     return str(pubspec_build + 1)
-
-
-def normalize_version(value: str) -> str:
-    return value.strip().lstrip("vV")
 
 
 def ask(prompt: str, default: str, non_interactive: bool) -> str:
@@ -232,7 +230,7 @@ def run_pub_get(skip_pub_get: bool) -> None:
     run_command(["flutter", "pub", "get"], cwd=FLUTTER_DIR)
 
 
-def build_artifacts(version: str, build_number: str) -> None:
+def build_artifacts(version: str, build_number: str, install_version: str) -> None:
     build_args = ["--build-name", version, "--build-number", build_number]
 
     print("[步骤 3/4] 构建 arm64-v8a APK……")
@@ -248,6 +246,8 @@ def build_artifacts(version: str, build_number: str) -> None:
             *build_args,
             "--dart-define",
             f"APP_VERSION_NAME={version}",
+            "--dart-define",
+            f"APP_VERSION_DISPLAY={install_version}",
             "--dart-define",
             f"APP_VERSION_CODE={build_number}",
         ],
@@ -265,29 +265,46 @@ def copy_if_exists(source: Path, target: Path, copied_files: list[Path]) -> None
     copied_files.append(target)
 
 
-def collect_artifacts(version: str, build_number: str, output_dir: Path) -> list[Path]:
+def collect_artifacts(
+    version: str,
+    build_number: str,
+    install_version: str,
+    output_dir: Path,
+) -> list[Path]:
     copied_files: list[Path] = []
     output_dir.mkdir(parents=True, exist_ok=True)
 
     apk_root = FLUTTER_DIR / "build" / "app" / "outputs" / "flutter-apk"
 
     arm64_source = apk_root / ARM64_APK
-    arm64_target = output_dir / f"CiYuanXia-v{version}-{build_number}-arm64-v8a.apk"
+    arm64_target = output_dir / f"CiYuanXia-v{install_version}-{build_number}-arm64-v8a.apk"
     copy_if_exists(arm64_source, arm64_target, copied_files)
 
-    doc_source = DOCS_DIR / f"release-v{version}.zh.md"
     doc_target = output_dir / "Release.zh.md"
-    if doc_source.exists() and not doc_target.exists():
-        shutil.copy2(doc_source, doc_target)
-        copied_files.append(doc_target)
+    if not doc_target.exists():
+        for candidate in (
+            DOCS_DIR / f"release-v{install_version}.zh.md",
+            DOCS_DIR / f"release-v{version}.zh.md",
+        ):
+            if candidate.exists():
+                shutil.copy2(candidate, doc_target)
+                copied_files.append(doc_target)
+                break
 
     return copied_files
 
 
-def print_summary(version: str, build_number: str, output_dir: Path, copied_files: list[Path]) -> None:
+def print_summary(
+    version: str,
+    build_number: str,
+    install_version: str,
+    output_dir: Path,
+    copied_files: list[Path],
+) -> None:
     print("\n[步骤 4/4] 构建完成，产物整理如下：")
-    print(f"版本号: {version}")
+    print(f"源码语义版本: {version}")
     print(f"构建号: {build_number}")
+    print(f"安装显示版本: {install_version}")
     print(f"输出目录: {output_dir}")
 
     if not copied_files:
@@ -300,8 +317,8 @@ def print_summary(version: str, build_number: str, output_dir: Path, copied_file
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="构建 OpenClaw Android arm64-v8a 发布 APK，并整理到 release/v版本 目录。")
-    parser.add_argument("--version", help="发布版本号，例如 1.8.7 或 v1.8.7；默认使用当前 pubspec 版本")
-    parser.add_argument("--build-number", help="Android 构建号，例如 17；默认使用当前 pubspec 构建号 +1")
+    parser.add_argument("--version", help="可选覆盖发布版本号，例如 2.5 或 2.5.0；默认按当前锚点和构建号自动推导")
+    parser.add_argument("--build-number", help="Android 构建号，例如 144；默认使用当前 pubspec 构建号 +1")
     parser.add_argument("--output-dir", help="自定义输出目录，默认是 release/v版本")
     parser.add_argument("--non-interactive", action="store_true", help="不询问输入，直接使用参数或默认值")
     parser.add_argument("--skip-fetch-proot", action="store_true", help="跳过 PRoot 二进制检查与拉取")
@@ -316,38 +333,47 @@ def main() -> int:
     args = parse_args()
 
     pubspec_version, pubspec_build_number = read_pubspec_version()
-    default_version = normalize_version(pubspec_version)
+    base_version = normalize_version(pubspec_version)
     default_build_number_value = default_build_number(pubspec_build_number)
-
-    current_version_text = f"{pubspec_version}+{pubspec_build_number}"
-
-    version = normalize_version(
-        args.version
-        or ask(
-            f"请输入发布版本（当前 pubspec: {current_version_text}）",
-            default_version,
-            args.non_interactive,
-        )
-    )
     build_number = args.build_number or ask(
         f"请输入构建号（当前 pubspec 构建号: {pubspec_build_number}，默认自动递增）",
         default_build_number_value,
         args.non_interactive,
+    )
+    derived_version = derive_build_versions(
+        base_version,
+        pubspec_build_number,
+        build_number,
+    )["semanticVersion"]
+    current_version_text = f"{base_version}+{pubspec_build_number}"
+    version = normalize_version(
+        args.version
+        or ask(
+            f"请输入发布版本（当前序列锚点: {current_version_text}；默认按构建号自动推导）",
+            derived_version,
+            args.non_interactive,
+        )
     )
 
     if not version:
         raise RuntimeError("发布版本不能为空。")
     if not build_number.isdigit():
         raise RuntimeError("构建号必须是整数。")
+    install_version = display_version(version)
 
-    output_dir = Path(args.output_dir).expanduser().resolve() if args.output_dir else (RELEASE_ROOT / f"v{version}").resolve()
+    output_dir = (
+        Path(args.output_dir).expanduser().resolve()
+        if args.output_dir
+        else (RELEASE_ROOT / f"v{install_version}").resolve()
+    )
 
     print("=" * 60)
     print("OpenClaw 发布构建脚本")
     print(f"项目目录: {ROOT_DIR}")
     print(f"Flutter 目录: {FLUTTER_DIR}")
     print(f"当前 pubspec: {current_version_text}")
-    print(f"发布版本: {version}")
+    print(f"源码语义版本: {version}")
+    print(f"安装显示版本: {install_version}")
     print(f"构建号: {build_number}")
     print(f"输出目录: {output_dir}")
     print("=" * 60)
@@ -356,9 +382,9 @@ def main() -> int:
 
     fetch_proot_if_needed(args.skip_fetch_proot)
     run_pub_get(args.skip_pub_get)
-    build_artifacts(version, build_number)
-    copied_files = collect_artifacts(version, build_number, output_dir)
-    print_summary(version, build_number, output_dir, copied_files)
+    build_artifacts(version, build_number, install_version)
+    copied_files = collect_artifacts(version, build_number, install_version, output_dir)
+    print_summary(version, build_number, install_version, output_dir, copied_files)
 
     print("\n提示：如果你要正式发布，建议使用自己的 keystore 进行签名。")
     return 0

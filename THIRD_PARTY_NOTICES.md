@@ -284,7 +284,7 @@ Included icons:
 
 ## Node.js
 
-- Version: 24.15.0 for arm64, 22.22.2 for armv7 configuration.
+- Version: 24.15.0 for arm64, 22.22.3 for armv7 configuration.
 - License: MIT-style Node.js license with third-party notices.
 - Used as: Node.js runtime inside the bundled/prebuilt proot environment, and
   as a fallback downloaded runtime archive where configured.

@@ -6,7 +6,7 @@
   </p>
   <p>面向中文 Android 用户维护的 OpenClaw 独立整合应用。</p>
   <p>
-    <img src="https://img.shields.io/badge/Release-v2.0.50-2563EB?style=for-the-badge" alt="Release v2.0.50" />
+    <img src="https://img.shields.io/badge/Release-v2.5-2563EB?style=for-the-badge" alt="Release v2.5" />
     <img src="https://img.shields.io/badge/Package-com.agent.cyx-111827?style=for-the-badge" alt="Package com.agent.cyx" />
     <img src="https://img.shields.io/badge/Android-10%2B-3DDC84?style=for-the-badge&logo=android&logoColor=white" alt="Android" />
     <img src="https://img.shields.io/badge/License-MIT-111827?style=for-the-badge" alt="License" />
@@ -26,8 +26,10 @@
 
 - 应用名：`次元虾`
 - Android 包名：`com.agent.cyx`
-- 版本名：`2.0.50`
-- 构建号：`126`
+- 版本名（安装包 / 应用内显示）：`2.5`
+- 源码语义版本锚点：`2.5.0+143`
+- Android 构建号锚点：`143`
+- 构建递进规则：`144 -> 2.5`、`145 -> 2.6`、`146 -> 2.7`、`147 -> 2.8`、`148 -> 2.9`、`149 -> 3.0`
 - 发布产物前缀：`CiYuanXia-v`
 - Dart 包名仍保留为 `openclaw`，用于兼容现有 Flutter 测试导入。
 
@@ -52,7 +54,7 @@ Flutter UI
 Kotlin Android services
   -> PRoot process manager
 Ubuntu RootFS
-  -> Node.js 24.14.1 / OpenClaw Gateway / CLI tools
+  -> Node.js 24.15.0 / OpenClaw Gateway / CLI tools
 Android device capabilities
   -> camera / location / screen / flash / vibration / sensors / serial
 ```
@@ -79,8 +81,8 @@ Android device capabilities
 当前默认资源策略：
 
 - Ubuntu：`24.04.3 noble`
-- arm64 / x86_64：Node.js `24.14.1`
-- armv7 / armhf：Node.js `22.22.2`
+- arm64 / x86_64：Node.js `24.15.0`
+- armv7 / armhf：Node.js `22.22.3`
 - OpenClaw：默认选择 npm `openclaw@latest` 的稳定版，过滤 beta、rc、test、preview 等预发布版本。
 
 ## 重要提醒
@@ -103,13 +105,13 @@ flutter build apk --release
 生成发布目录：
 
 ```bash
-python scripts/build_release.py --version 2.0.50 --build-number 126
+python scripts/build_release.py --build-number 144
 ```
 
 GitHub Actions 构建产物命名：
 
 ```text
-CiYuanXia-v2.0.50-126-arm64-v8a.apk
+CiYuanXia-v2.5-144-arm64-v8a.apk
 ```
 
 ## 验证

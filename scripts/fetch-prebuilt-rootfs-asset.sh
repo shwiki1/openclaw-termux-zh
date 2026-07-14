@@ -72,7 +72,7 @@ if data.get("fingerprint") != expected_fingerprint:
 PY
 
 echo "==> Rootfs manifest matched current build fingerprint"
-gh release download "$RELEASE_TAG" --pattern "$ASSET_NAME" --dir "$ASSET_DIR" >/dev/null
+gh release download "$RELEASE_TAG" --pattern "$ASSET_NAME" --dir "$ASSET_DIR" --clobber >/dev/null
 
 if [[ ! -s "$DEST_PATH" ]]; then
   echo "Downloaded rootfs asset is missing or empty: $DEST_PATH" >&2

@@ -12,6 +12,7 @@ on:
       - 'scripts/publish-prebuilt-rootfs-asset.sh'
       - 'scripts/build-apk.sh'
       - 'scripts/build_release.py'
+      - 'scripts/versioning.py'
       - '.github/workflows/flutter-build.yml'
   pull_request:
     branches: [main]
@@ -24,6 +25,7 @@ on:
       - 'scripts/publish-prebuilt-rootfs-asset.sh'
       - 'scripts/build-apk.sh'
       - 'scripts/build_release.py'
+      - 'scripts/versioning.py'
       - '.github/workflows/flutter-build.yml'
   workflow_dispatch:
     inputs:
@@ -44,6 +46,8 @@ jobs:
     timeout-minutes: 120
     outputs:
       version: ${{ steps.collect.outputs.version }}
+      version_name: ${{ steps.collect.outputs.version_name }}
+      version_code: ${{ steps.collect.outputs.version_code }}
 
     steps:
       - name: Checkout
@@ -68,7 +72,6 @@ jobs:
           sudo apt-get install -y --no-install-recommends binutils curl gzip qemu-user-static unzip xz-utils zstd
 
       - name: Restore bundled OpenClaw rootfs
-        if: ${{ vars.BUILD_BUNDLED_ROOTFS == 'true' }}
         id: restore_rootfs
         env:
           GH_TOKEN: ${{ github.token }}
@@ -81,7 +84,7 @@ jobs:
           fi
 
       - name: Build bundled OpenClaw rootfs
-        if: ${{ vars.BUILD_BUNDLED_ROOTFS == 'true' && steps.restore_rootfs.outputs.restored != 'true' }}
+        if: ${{ steps.restore_rootfs.outputs.restored != 'true' }}
         run: |
           set -euo pipefail
           bash scripts/build-prebuilt-rootfs.sh --no-docker --arch arm64 --mirror http://mirrors.ustc.edu.cn/ubuntu-ports
@@ -103,6 +106,23 @@ jobs:
         run: |
           set -euo pipefail
           bash scripts/publish-prebuilt-rootfs-asset.sh --arch arm64 --release-tag basic-resource
+
+      - name: Verify bundled OpenClaw rootfs
+        run: |
+          set -euo pipefail
+          ROOTFS=flutter_app/assets/bootstrap/openclaw-rootfs-noble-arm64.tar.gz
+          test -s "$ROOTFS"
+          if head -c 128 "$ROOTFS" | grep -aq 'git-lfs.github.com/spec/v1'; then
+            echo "ERROR: $ROOTFS is still a Git LFS pointer. Ensure checkout pulled LFS files or enable BUILD_BUNDLED_ROOTFS."
+            exit 1
+          fi
+          gzip -t "$ROOTFS"
+          SIZE_MB=$(du -m "$ROOTFS" | cut -f1)
+          if [ "$SIZE_MB" -lt 80 ]; then
+            echo "ERROR: bundled rootfs looks too small (${SIZE_MB} MB)"
+            exit 1
+          fi
+          echo "Bundled rootfs verified: ${SIZE_MB} MB"
 
       - name: Install Android SDK packages
         run: |
@@ -177,16 +197,27 @@ jobs:
           if [ "${VERSION_CODE}" -le "${PUBSPEC_VERSION_CODE}" ]; then
             VERSION_CODE="$((PUBSPEC_VERSION_CODE + 1))"
           fi
-          VERSION_NAME="$VERSION_BASE"
+          eval "$(
+            python3 ../scripts/versioning.py derive \
+              --base-version "$VERSION_BASE" \
+              --base-build "$PUBSPEC_VERSION_CODE" \
+              --target-build "$VERSION_CODE" \
+              --format shell
+          )"
+          VERSION_NAME="$SEMANTIC_VERSION"
+          VERSION_DISPLAY="$DISPLAY_VERSION"
           echo "APP_VERSION_NAME=${VERSION_NAME}" >> "$GITHUB_ENV"
+          echo "APP_VERSION_DISPLAY=${VERSION_DISPLAY}" >> "$GITHUB_ENV"
           echo "APP_VERSION_CODE=${VERSION_CODE}" >> "$GITHUB_ENV"
           echo "APP_FULL_VERSION=${VERSION_NAME}+${VERSION_CODE}" >> "$GITHUB_ENV"
+          echo "APP_ANDROID_VERSION_NAME=${VERSION_DISPLAY}" >> "$GITHUB_ENV"
 
           {
             echo "sdk.dir=${ANDROID_HOME}"
             echo "flutter.sdk=${FLUTTER_SDK}"
             echo "flutter.versionName=${VERSION_NAME}"
             echo "flutter.versionCode=${VERSION_CODE}"
+            echo "flutter.androidVersionName=${VERSION_DISPLAY}"
           } > android/local.properties
 
           flutter --version
@@ -296,6 +327,7 @@ jobs:
             --build-name "$APP_VERSION_NAME" \
             --build-number "$APP_VERSION_CODE" \
             --dart-define=APP_VERSION_NAME="$APP_VERSION_NAME" \
+            --dart-define=APP_VERSION_DISPLAY="$APP_VERSION_DISPLAY" \
             --dart-define=APP_VERSION_CODE="$APP_VERSION_CODE"
 
       - name: Verify APK native PRoot binaries
@@ -318,9 +350,20 @@ jobs:
         id: collect
         run: |
           set -euo pipefail
-          VERSION="${APP_VERSION_NAME:-$(awk '/^version:/ {print $2; exit}' flutter_app/pubspec.yaml | cut -d'+' -f1)}"
+          format_display_version() {
+            local version_name="$1"
+            if [[ "$version_name" =~ ^([0-9]+)\.([0-9]+)\.0$ ]]; then
+              echo "${BASH_REMATCH[1]}.${BASH_REMATCH[2]}"
+              return
+            fi
+            echo "$version_name"
+          }
+
+          VERSION_NAME="${APP_VERSION_NAME:-$(awk '/^version:/ {print $2; exit}' flutter_app/pubspec.yaml | cut -d'+' -f1)}"
+          VERSION="${APP_VERSION_DISPLAY:-$(format_display_version "$VERSION_NAME")}"
           VERSION_CODE="${APP_VERSION_CODE:-0}"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "version_name=$VERSION_NAME" >> "$GITHUB_OUTPUT"
           echo "version_code=$VERSION_CODE" >> "$GITHUB_OUTPUT"
           mkdir -p artifacts
 
@@ -329,7 +372,8 @@ jobs:
 
           echo "### Build Artifacts" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "Version: v${VERSION}+${VERSION_CODE}" >> "$GITHUB_STEP_SUMMARY"
+          echo "Install-visible version: v${VERSION}" >> "$GITHUB_STEP_SUMMARY"
+          echo "Internal version/build: ${VERSION_NAME}+${VERSION_CODE}" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "| File | Size |" >> "$GITHUB_STEP_SUMMARY"
           echo "|------|------|" >> "$GITHUB_STEP_SUMMARY"
@@ -352,13 +396,16 @@ jobs:
         with:
           script: |
             const version = '${{ steps.collect.outputs.version }}';
+            const versionName = '${{ steps.collect.outputs.version_name }}';
             const versionCode = '${{ steps.collect.outputs.version_code }}';
             const runUrl = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`;
 
             const body = [
               `## Build Successful`,
               ``,
-              `**Version:** \`v${version}+${versionCode}\``,
+              `**Install-visible version:** \`v${version}\``,
+              ``,
+              `**Internal version/build:** \`${versionName}+${versionCode}\``,
               ``,
               `### Download APK`,
               ``,
@@ -441,7 +488,7 @@ jobs:
         id: version
         run: |
           set -euo pipefail
-          VERSION="$(awk '/^version:/ {print $2; exit}' flutter_app/pubspec.yaml | cut -d'+' -f1)"
+          VERSION="${{ needs.build.outputs.version_name }}"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           if git ls-remote --tags origin "refs/tags/v${VERSION}" | grep -q .; then
             echo "exists=true" >> "$GITHUB_OUTPUT"
@@ -463,7 +510,7 @@ jobs:
             ### Downloads
             | File | Description |
             |------|-------------|
-            | `CiYuanXia-v${{ steps.version.outputs.version }}-arm64-v8a.apk` | arm64-v8a Android devices |
+            | `CiYuanXia-v${{ needs.build.outputs.version }}-${{ needs.build.outputs.version_code }}-arm64-v8a.apk` | arm64-v8a Android devices |
 
             ### First Run
             1. Install the APK

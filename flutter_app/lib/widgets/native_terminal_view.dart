@@ -14,6 +14,8 @@ class NativeTerminalView extends StatefulWidget {
   final bool restart;
   final bool keepAlive;
   final bool emitOutput;
+  final bool renderingPaused;
+  final int transcriptRows;
   final int fontSize;
   final ValueChanged<String>? onOutput;
   final ValueChanged<int>? onSessionFinished;
@@ -29,6 +31,8 @@ class NativeTerminalView extends StatefulWidget {
     this.restart = false,
     this.keepAlive = false,
     this.emitOutput = false,
+    this.renderingPaused = false,
+    this.transcriptRows = 3000,
     this.fontSize = 18,
     this.onOutput,
     this.onSessionFinished,
@@ -66,12 +70,24 @@ class NativeTerminalViewState extends State<NativeTerminalView> {
     await _channel?.invokeMethod('setFontSize', {'fontSize': fontSize});
   }
 
+  Future<void> setRenderingPaused(bool paused) async {
+    await _channel?.invokeMethod('setRenderingPaused', {'paused': paused});
+  }
+
   Future<void> restart() async {
     await _channel?.invokeMethod('restart');
   }
 
   Future<void> close() async {
     await _channel?.invokeMethod('close');
+  }
+
+  @override
+  void didUpdateWidget(covariant NativeTerminalView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.renderingPaused != widget.renderingPaused) {
+      unawaited(setRenderingPaused(widget.renderingPaused));
+    }
   }
 
   @override
@@ -100,13 +116,15 @@ class NativeTerminalViewState extends State<NativeTerminalView> {
         'restart': widget.restart,
         'keepAlive': widget.keepAlive,
         'emitOutput': widget.emitOutput,
+        'renderingPaused': widget.renderingPaused,
         'fontSize': widget.fontSize,
-        'transcriptRows': 3000,
+        'transcriptRows': widget.transcriptRows,
       },
       onPlatformViewCreated: (id) {
         final channel = MethodChannel('com.agent.cyx/native_terminal_$id');
         channel.setMethodCallHandler(_handleMethodCall);
         _channel = channel;
+        unawaited(setRenderingPaused(widget.renderingPaused));
         unawaited(showKeyboard());
       },
     );

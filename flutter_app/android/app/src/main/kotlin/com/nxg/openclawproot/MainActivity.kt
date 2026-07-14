@@ -29,6 +29,7 @@ import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
 import android.provider.OpenableColumns
+import android.view.WindowManager
 import android.webkit.WebView
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -854,6 +855,28 @@ class MainActivity : FlutterActivity() {
                         result.success(true)
                     } catch (e: Exception) {
                         result.error("FOREGROUND_ERROR", e.message, null)
+                    }
+                }
+                "setWindowSoftInputMode" -> {
+                    val mode = call.argument<String>("mode")
+                        ?.trim()
+                        ?.lowercase()
+                        ?: "adjustResize"
+                    runOnUiThread {
+                        window.setSoftInputMode(
+                            when (mode) {
+                                "adjustpan", "pan" ->
+                                    WindowManager.LayoutParams.SOFT_INPUT_STATE_UNSPECIFIED or
+                                        WindowManager.LayoutParams.SOFT_INPUT_ADJUST_PAN
+                                "adjustnothing", "nothing" ->
+                                    WindowManager.LayoutParams.SOFT_INPUT_STATE_UNSPECIFIED or
+                                        WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING
+                                else ->
+                                    WindowManager.LayoutParams.SOFT_INPUT_STATE_UNSPECIFIED or
+                                        WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
+                            }
+                        )
+                        result.success(true)
                     }
                 }
                 "readSensor" -> {

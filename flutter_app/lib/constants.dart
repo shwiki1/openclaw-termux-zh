@@ -1,13 +1,30 @@
 class AppConstants {
   static const String appName = '次元虾';
   static const String version =
-      String.fromEnvironment('APP_VERSION_NAME', defaultValue: '2.0.50');
+      String.fromEnvironment('APP_VERSION_NAME', defaultValue: '2.5.0');
   static const String buildNumber =
-      String.fromEnvironment('APP_VERSION_CODE', defaultValue: '126');
+      String.fromEnvironment('APP_VERSION_CODE', defaultValue: '143');
   static const String fullVersion = '$version+$buildNumber';
-  static const String displayVersion =
-      buildNumber == '1' ? version : fullVersion;
+  static final String displayVersion = _resolveDisplayVersion();
   static const String packageName = 'com.agent.cyx';
+
+  static String _resolveDisplayVersion() {
+    const definedDisplay = String.fromEnvironment(
+      'APP_VERSION_DISPLAY',
+      defaultValue: '',
+    );
+    final normalizedDisplay = definedDisplay.trim();
+    if (normalizedDisplay.isNotEmpty) {
+      return normalizedDisplay;
+    }
+
+    final normalizedVersion = version.trim();
+    final match = RegExp(r'^(\d+)\.(\d+)\.0$').firstMatch(normalizedVersion);
+    if (match != null) {
+      return '${match.group(1)}.${match.group(2)}';
+    }
+    return normalizedVersion;
+  }
 
   /// Matches ANSI escape sequences (e.g. color codes in terminal output).
   static final ansiEscape = RegExp(r'\x1b\[[0-9;]*[a-zA-Z]');
@@ -53,8 +70,8 @@ class AppConstants {
 
   // Node.js binary tarball is downloaded by Flutter and extracted by Java.
   // Bypasses curl/gpg/NodeSource which fail inside proot.
-  static const String nodeVersion = '24.14.1';
-  static const String nodeArmv7Version = '22.22.2';
+  static const String nodeVersion = '24.15.0';
+  static const String nodeArmv7Version = '22.22.3';
   static const String openClawEstimatedSize = '~95 MB';
   static const String nodePrimaryMirrorBaseUrl =
       'https://npmmirror.com/mirrors/node';

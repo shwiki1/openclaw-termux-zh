@@ -22,6 +22,25 @@ if (flutterVersionName == null) {
     flutterVersionName = "1.5.0"
 }
 
+def displayVersionName = { String versionName ->
+    def normalized = versionName == null ? "" : versionName.trim()
+    if (normalized.isEmpty()) {
+        return "1.0"
+    }
+    def matcher = normalized =~ /^(\d+)\.(\d+)\.0$/
+    if (matcher.matches()) {
+        return "${matcher[0][1]}.${matcher[0][2]}"
+    }
+    return normalized
+}
+
+def androidVersionName = localProperties.getProperty("flutter.androidVersionName")
+if (androidVersionName == null || androidVersionName.trim().isEmpty()) {
+    androidVersionName = displayVersionName(flutterVersionName)
+} else {
+    androidVersionName = androidVersionName.trim()
+}
+
 def keystoreProperties = new Properties()
 def keystorePropertiesFile = rootProject.file("key.properties")
 if (keystorePropertiesFile.exists()) {
@@ -52,7 +71,7 @@ android {
         minSdk = 29
         targetSdk = 36
         versionCode = flutterVersionCode.toInteger()
-        versionName = flutterVersionName
+        versionName = androidVersionName
     }
 
     if (hasKeystore) {
