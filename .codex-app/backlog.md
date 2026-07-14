@@ -29,7 +29,7 @@
 - Keep app version/build number updated before every new cloud build.
 - Current source metadata anchor is `2.5.0+143`; latest successful GitHub Release asset is `CiYuanXia-v2.5-144-arm64-v8a.apk`, but user device testing says that build still does not pan the native terminal prompt above the keyboard.
 - Future user-facing builds now derive automatically from the target build number: `144 -> 2.5`, `145 -> 2.6`, `146 -> 2.7`, `147 -> 2.8`, `148 -> 2.9`, `149 -> 3.0`.
-- The next fresh build should be `145 -> 2.6` and must include the native terminal bottom-focus-strip IME follow-up in `NativeTerminalView.kt`.
+- The next fresh build should be `145 -> 2.6` and must include the native terminal bottom input-strip IME follow-up in `NativeTerminalView.kt`.
 - Current browser automation work is being submitted to GitHub Actions; after the APK is available, the next browser smoke target is Android device verification of tab/UA/mobile-desktop behavior.
 - The current APK workflow is green without running `flutter test`; keep that gap visible until CI or a dedicated SDK environment closes it.
 - Keep Node.js `24.15.0` for arm64/x86_64 and `22.22.3` for armv7 aligned across constants, RootFS scripts, setup l10n copy, docs, bootstrap resource names, license/source notices, legacy installer URLs, and `lib/test.js` unless a future task upgrades the runtime asset set.

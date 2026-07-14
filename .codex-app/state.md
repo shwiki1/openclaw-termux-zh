@@ -32,12 +32,12 @@ Last updated: 2026-07-14 17:24 UTC
 - Next artifact expectation: the next fresh APK build (`145`) should show installer/app version `2.6` and use the short artifact name `CiYuanXia-v2.6-145-arm64-v8a.apk`.
 
 ## Active Task
-- Publish a follow-up cloud build that includes the native terminal bottom-focus-strip IME fix in `NativeTerminalView.kt`.
+- Publish a follow-up cloud build that includes the native terminal bottom input-strip IME helper in `NativeTerminalView.kt`.
 - Device-smoke the follow-up `145` / `2.6` APK on Android, confirming terminal input is lifted above the keyboard, browser inputs remain visible, and installer/settings still show the derived short version correctly.
 
 ## Recently Changed
 - Locked `TerminalScreen` to `resizeToAvoidBottomInset: false` and switched the terminal route to Android `adjustPan` while it is visible, so IME open/close keeps terminal/browser inputs visible without relayouting both platform views together.
-- Added `ImeAwareTerminalView` in `NativeTerminalView.kt` so the native terminal reports a bottom input-strip focus rect and repeatedly requests that strip onto the screen while opening the IME, instead of relying on `adjustPan` alone.
+- Added a bottom input-strip helper in `NativeTerminalView.kt` so the native terminal repeatedly requests the lower prompt area onto the screen while opening the IME, instead of relying on `adjustPan` alone.
 - Restored `OnlineModelCatalogService._userAgent` to a `const` after GitHub Actions run `29343049542` failed on a non-constant Dart map literal.
 - Added a root Node self-test guard for the terminal IME layout policy so future refactors do not accidentally re-enable whole-screen keyboard resizing on the terminal page.
 - Extended the root Node self-test to guard the native terminal bottom input-strip IME behavior in `NativeTerminalView.kt`.

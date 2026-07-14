@@ -180,6 +180,8 @@ jobs:
 
       - name: Prepare Android local properties
         working-directory: flutter_app
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           FLUTTER_SDK="$(dirname "$(dirname "$(command -v flutter)")")"
@@ -189,13 +191,21 @@ jobs:
           if [ "$PUBSPEC_VERSION_CODE" = "$APP_VERSION" ] || [ -z "$PUBSPEC_VERSION_CODE" ]; then
             PUBSPEC_VERSION_CODE="1"
           fi
-          GENERATED_VERSION_CODE="${GITHUB_RUN_NUMBER:-0}"
-          if ! [[ "$GENERATED_VERSION_CODE" =~ ^[0-9]+$ ]]; then
-            GENERATED_VERSION_CODE=0
+          VERSION_CODE="$((PUBSPEC_VERSION_CODE + 1))"
+          LATEST_RELEASE_BUILD="$(
+            gh api "repos/${GITHUB_REPOSITORY}/releases/latest" --jq '
+              [
+                .assets[]?.name
+                | capture("-(?<build>[0-9]+)-arm64-v8a\\\\.apk$").build
+                | tonumber
+              ] | max // 0
+            ' 2>/dev/null || printf '0'
+          )"
+          if ! [[ "$LATEST_RELEASE_BUILD" =~ ^[0-9]+$ ]]; then
+            LATEST_RELEASE_BUILD=0
           fi
-          VERSION_CODE="$GENERATED_VERSION_CODE"
-          if [ "${VERSION_CODE}" -le "${PUBSPEC_VERSION_CODE}" ]; then
-            VERSION_CODE="$((PUBSPEC_VERSION_CODE + 1))"
+          if [ "${LATEST_RELEASE_BUILD}" -ge "${VERSION_CODE}" ]; then
+            VERSION_CODE="$((LATEST_RELEASE_BUILD + 1))"
           fi
           eval "$(
             python3 ../scripts/versioning.py derive \
