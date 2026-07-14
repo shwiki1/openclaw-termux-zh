@@ -193,13 +193,12 @@ jobs:
           fi
           VERSION_CODE="$((PUBSPEC_VERSION_CODE + 1))"
           LATEST_RELEASE_BUILD="$(
-            gh api "repos/${GITHUB_REPOSITORY}/releases/latest" --jq '
-              [
-                .assets[]?.name
-                | capture("-(?<build>[0-9]+)-arm64-v8a\\\\.apk$").build
-                | tonumber
-              ] | max // 0
-            ' 2>/dev/null || printf '0'
+            {
+              gh api "repos/${GITHUB_REPOSITORY}/releases/latest" --jq '.assets[]?.name' 2>/dev/null || true
+            } \
+              | sed -nE 's/.*-([0-9]+)-arm64-v8a\.apk/\1/p' \
+              | sort -n \
+              | tail -n 1
           )"
           if ! [[ "$LATEST_RELEASE_BUILD" =~ ^[0-9]+$ ]]; then
             LATEST_RELEASE_BUILD=0
