@@ -36,6 +36,7 @@ class _TerminalScreenState extends State<TerminalScreen> {
   static final Map<String, int> _savedActiveIndexes = {};
 
   var _terminalKey = GlobalKey<NativeTerminalViewState>();
+  final _terminalViewportKey = GlobalKey();
   final _browserService = BrowserAutomationService.instance;
   late final TerminalInputController _terminalInput;
   late Future<_NativeTerminalConfig> _configFuture;
@@ -46,6 +47,9 @@ class _TerminalScreenState extends State<TerminalScreen> {
   var _browserPanelOpen = false;
   var _browserPanelCreated = false;
   var _lastBrowserPanelRequestNonce = 0;
+  var _imeToolbarLift = 0.0;
+  double? _terminalViewportBaselineTop;
+  var _imeLiftUpdateScheduled = false;
 
   _TerminalSessionTab get _activeSession => _sessions[_activeIndex];
 
@@ -135,6 +139,57 @@ class _TerminalScreenState extends State<TerminalScreen> {
   void _persistSessionTabs() {
     _savedSessions[widget.sessionId] = List<_TerminalSessionTab>.of(_sessions);
     _savedActiveIndexes[widget.sessionId] = _activeIndex;
+  }
+
+  void _scheduleImeLiftUpdate() {
+    if (_imeLiftUpdateScheduled) {
+      return;
+    }
+    _imeLiftUpdateScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _imeLiftUpdateScheduled = false;
+      _updateImeLift();
+    });
+  }
+
+  void _updateImeLift() {
+    if (!mounted) {
+      return;
+    }
+    final mediaQuery = MediaQuery.maybeOf(context);
+    final renderObject = _terminalViewportKey.currentContext?.findRenderObject();
+    if (mediaQuery == null || renderObject is! RenderBox || !renderObject.hasSize) {
+      return;
+    }
+
+    final keyboardInset = mediaQuery.viewInsets.bottom;
+    final bottomSystemInset = mediaQuery.viewPadding.bottom;
+    final viewportTop = renderObject.localToGlobal(Offset.zero).dy;
+
+    if (keyboardInset <= bottomSystemInset + 0.5) {
+      _terminalViewportBaselineTop = viewportTop;
+      if (_imeToolbarLift != 0) {
+        setState(() {
+          _imeToolbarLift = 0;
+        });
+      }
+      return;
+    }
+
+    final baselineTop = _terminalViewportBaselineTop ?? viewportTop;
+    final systemPanLift = (baselineTop - viewportTop).clamp(0.0, keyboardInset);
+    final desiredToolbarLift =
+        (keyboardInset - bottomSystemInset).clamp(0.0, keyboardInset);
+    final additionalToolbarLift = (
+      desiredToolbarLift - systemPanLift
+    ).clamp(0.0, desiredToolbarLift);
+
+    if ((_imeToolbarLift - additionalToolbarLift).abs() < 1) {
+      return;
+    }
+    setState(() {
+      _imeToolbarLift = additionalToolbarLift;
+    });
   }
 
   void _restart() {
@@ -453,20 +508,18 @@ class _TerminalScreenState extends State<TerminalScreen> {
     final mediaQuery = MediaQuery.of(context);
     final screenWidth = mediaQuery.size.width;
     final bottomSystemInset = mediaQuery.viewPadding.bottom;
-    final keyboardInset = mediaQuery.viewInsets.bottom;
     final toolbarReservedHeight =
         TerminalToolbar.toolbarHeight + bottomSystemInset;
-    final toolbarBottomOffset = keyboardInset > bottomSystemInset
-        ? keyboardInset - bottomSystemInset
-        : 0.0;
     final compactCodexBrowser = _isCodexSession && screenWidth < 960;
     final pauseTerminalRendering = compactCodexBrowser && _browserPanelOpen;
+    _scheduleImeLiftUpdate();
 
     final terminal = Column(
       children: [
         if (_isCodexSession) _buildBrowserStatusBanner(screenWidth),
         Expanded(
           child: Stack(
+            key: _terminalViewportKey,
             children: [
               Positioned.fill(
                 child: Padding(
@@ -495,7 +548,7 @@ class _TerminalScreenState extends State<TerminalScreen> {
                 curve: Curves.easeOutCubic,
                 left: 0,
                 right: 0,
-                bottom: toolbarBottomOffset,
+                bottom: _imeToolbarLift,
                 child: TerminalToolbar(
                   onWrite: _terminalInput.writeBytes,
                   ctrlNotifier: _terminalInput.ctrlNotifier,
