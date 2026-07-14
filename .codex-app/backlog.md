@@ -1,6 +1,7 @@
 # Backlog
 
 ## Ready
+- Device-smoke Codex browser multi-tab and UA behavior on Android: open multiple pages, switch tabs, close a tab, use back/forward/reload, switch desktop/mobile UA, and verify desktop pages no longer fall back to the mobile layout on representative sites.
 - Device-smoke Codex terminal performance: start a long Codex CLI conversation, open/close the compact browser sidecar while output is active, verify the sidecar stays connected, terminal input still works, and the terminal screen catches up after closing the sidecar.
 - Device-smoke the browser automation hardening: verify `browser_control` and `browser-script` fallback commands can complete snapshot/read/type/click flows on a live WebView, then confirm the compact right browser sidecar still stays connected after close/reopen.
 - Device-smoke the freshly built arm64 APK on Android: first browser open shows the `Codex 浏览器自动化控制` instructions page, self-test, open URL, wait selector, scroll, type, press Enter, select option, capture snapshot, then close/reopen the compact right browser sidecar and verify it still shows `浏览器已连接`.
@@ -19,7 +20,10 @@
 
 ## Do Not Forget
 - Keep app version/build number updated before every new cloud build.
-- Current metadata is aligned at source `2.0.50+140`; the latest completed GitHub artifact was CI version `2.0.50+140` from run `29283260131`; the in-progress/new cloud build is expected to produce CI version `2.0.50+141` or higher.
+- Current metadata is aligned at source `2.0.50+141`; the latest completed GitHub artifact before the browser tabs/UA build submission was CI version `2.0.50+141` from run `29293286907`; bump build metadata before any later new cloud build.
+- Current browser automation work is being submitted to GitHub Actions; after the APK is available, the next browser smoke target is Android device verification of tab/UA/mobile-desktop behavior.
+- Keep Node.js `24.14.1` aligned across constants, RootFS scripts, setup l10n copy, docs, bundled resource names, legacy installer URLs, and `lib/test.js` unless a future task upgrades the bundled runtime asset set.
+- `inspect_app_project.py` only auto-detects the root Node shell here; manually verify Flutter/Kotlin facts from `flutter_app/` before editing or reporting architecture.
 - Keep the stable `browser_control` MCP entrypoint and `browser-script call/control` fallbacks in sync with the bridge action aliases.
 - Keep terminal display throttling scoped to rendering/scrollback only; do not route CLI context management through Flutter terminal display text.
 - Update `.codex-app/state.md` and the latest session handoff after meaningful changes.

@@ -25,11 +25,103 @@ class TerminalBrowserPanel extends StatefulWidget {
   State<TerminalBrowserPanel> createState() => _TerminalBrowserPanelState();
 }
 
+enum _BrowserUserAgentMode {
+  desktop,
+  mobile,
+}
+
+extension _BrowserUserAgentModeInfo on _BrowserUserAgentMode {
+  String get label {
+    switch (this) {
+      case _BrowserUserAgentMode.desktop:
+        return '电脑';
+      case _BrowserUserAgentMode.mobile:
+        return '手机';
+    }
+  }
+
+  String get value {
+    switch (this) {
+      case _BrowserUserAgentMode.desktop:
+        return 'desktop';
+      case _BrowserUserAgentMode.mobile:
+        return 'mobile';
+    }
+  }
+
+  IconData get icon {
+    switch (this) {
+      case _BrowserUserAgentMode.desktop:
+        return Icons.desktop_windows_outlined;
+      case _BrowserUserAgentMode.mobile:
+        return Icons.phone_android;
+    }
+  }
+
+  String get userAgent {
+    switch (this) {
+      case _BrowserUserAgentMode.desktop:
+        return _TerminalBrowserPanelState._desktopUserAgent;
+      case _BrowserUserAgentMode.mobile:
+        return _TerminalBrowserPanelState._mobileUserAgent;
+    }
+  }
+}
+
+enum _BrowserMenuAction {
+  scripts,
+  snapshot,
+  inspector,
+  recentActions,
+}
+
+class _BrowserTab {
+  final int id;
+  late final WebViewController controller;
+  _BrowserUserAgentMode userAgentMode;
+  String title;
+  String currentUrl;
+  String error;
+  bool loading;
+  bool canGoBack;
+  bool canGoForward;
+  Completer<void>? navigationCompleter;
+
+  _BrowserTab({
+    required this.id,
+    this.userAgentMode = _BrowserUserAgentMode.desktop,
+    this.title = 'Browser',
+    this.currentUrl = '',
+    this.error = '',
+    this.loading = true,
+    this.canGoBack = false,
+    this.canGoForward = false,
+  });
+
+  Map<String, dynamic> toJson({required bool active}) {
+    return {
+      'id': id,
+      'active': active,
+      'title': title,
+      'url': currentUrl,
+      'loading': loading,
+      'error': error,
+      'canGoBack': canGoBack,
+      'canGoForward': canGoForward,
+      'userAgentMode': userAgentMode.value,
+      'userAgentLabel': userAgentMode.label,
+    };
+  }
+}
+
 class _TerminalBrowserPanelState extends State<TerminalBrowserPanel>
     implements BrowserAutomationDelegate {
   static const _desktopUserAgent =
       'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 '
       '(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+  static const _mobileUserAgent =
+      'Mozilla/5.0 (Linux; Android 14; Pixel 8 Pro) AppleWebKit/537.36 '
+      '(KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36';
 
   static const _welcomeHtml = '''
 <!doctype html>
@@ -189,7 +281,9 @@ class _TerminalBrowserPanelState extends State<TerminalBrowserPanel>
 
   final _service = BrowserAutomationService.instance;
   final _urlController = TextEditingController();
-  late final WebViewController _controller;
+  final List<_BrowserTab> _tabs = <_BrowserTab>[];
+  int _nextTabId = 1;
+  int _activeTabIndex = 0;
 
   String _title = 'Browser';
   String _currentUrl = '';
@@ -197,12 +291,16 @@ class _TerminalBrowserPanelState extends State<TerminalBrowserPanel>
   bool _loading = true;
   bool _canGoBack = false;
   bool _canGoForward = false;
-  Completer<void>? _navigationCompleter;
+  bool _showRecentActions = false;
   bool _showInspector = false;
   bool _inspectorLoading = false;
   String _inspectorError = '';
   String _inspectorMode = 'interactables';
   List<Map<String, dynamic>> _inspectorItems = const [];
+
+  _BrowserTab get _activeTab => _tabs[_activeTabIndex];
+
+  WebViewController get _controller => _activeTab.controller;
 
   @override
   String get sessionLabel => widget.standalone ? 'terminal-browser-page' : 'terminal-browser-sidecar';
@@ -210,7 +308,9 @@ class _TerminalBrowserPanelState extends State<TerminalBrowserPanel>
   @override
   void initState() {
     super.initState();
-    _controller = _createController();
+    final initialTab = _createTab();
+    _tabs.add(initialTab);
+    _syncStateFromTab(initialTab, updateAddress: true);
     _service.bindDelegate(this);
     unawaited(_service.ensureStarted());
     unawaited(_initializeBrowser());
@@ -236,42 +336,180 @@ class _TerminalBrowserPanelState extends State<TerminalBrowserPanel>
     await _loadWelcomePage();
   }
 
-  Future<void> _loadWelcomePage() async {
-    if (mounted) {
-      setState(() {
-        _title = 'Codex 浏览器自动化控制';
-        _currentUrl = 'about:blank';
-        _urlController.text = _currentUrl;
-        _error = '';
-        _loading = true;
-      });
-    }
-    _service.updateObservedState(
-      url: 'about:blank',
-      title: 'Codex 浏览器自动化控制',
-      loading: true,
-      error: '',
+  _BrowserTab _createTab({
+    String? initialUrl,
+    _BrowserUserAgentMode userAgentMode = _BrowserUserAgentMode.desktop,
+  }) {
+    final tab = _BrowserTab(
+      id: _nextTabId++,
+      userAgentMode: userAgentMode,
     );
-    await _controller.loadHtmlString(_welcomeHtml);
+    tab.controller = _createController(tab);
+    if (initialUrl != null && initialUrl.trim().isNotEmpty) {
+      tab.currentUrl = initialUrl.trim();
+    }
+    return tab;
+  }
+
+  bool _isActiveTab(_BrowserTab tab) {
+    return _tabs.isNotEmpty && identical(_activeTab, tab);
+  }
+
+  void _syncStateFromTab(_BrowserTab tab, {required bool updateAddress}) {
+    _title = tab.title;
+    _currentUrl = tab.currentUrl;
+    _error = tab.error;
+    _loading = tab.loading;
+    _canGoBack = tab.canGoBack;
+    _canGoForward = tab.canGoForward;
+    if (updateAddress) {
+      _urlController.text = tab.currentUrl;
+    }
+  }
+
+  void _setTabLoadingState(
+    _BrowserTab tab, {
+    String? title,
+    String? url,
+    String? error,
+    bool? loading,
+    bool syncUrlText = false,
+  }) {
+    if (title != null) {
+      tab.title = title;
+    }
+    if (url != null) {
+      tab.currentUrl = url;
+    }
+    if (error != null) {
+      tab.error = error;
+    }
+    if (loading != null) {
+      tab.loading = loading;
+    }
     if (!mounted) {
       return;
     }
-    setState(() {
-      _title = 'Codex 浏览器自动化控制';
-      _currentUrl = 'about:blank';
-      _urlController.text = _currentUrl;
-      _loading = false;
-      _error = '';
-    });
+    if (_isActiveTab(tab)) {
+      setState(() {
+        _syncStateFromTab(tab, updateAddress: syncUrlText);
+      });
+    }
+    _publishStateToService();
+  }
+
+  void _setTabBrowserState(
+    _BrowserTab tab, {
+    String? title,
+    bool? canGoBack,
+    bool? canGoForward,
+  }) {
+    if (title != null) {
+      tab.title = title;
+    }
+    if (canGoBack != null) {
+      tab.canGoBack = canGoBack;
+    }
+    if (canGoForward != null) {
+      tab.canGoForward = canGoForward;
+    }
+    if (!mounted) {
+      return;
+    }
+    if (_isActiveTab(tab)) {
+      setState(() {
+        _syncStateFromTab(tab, updateAddress: false);
+      });
+    }
+    _publishStateToService();
+  }
+
+  void _publishStateToService() {
+    final active = _activeTab;
     _service.updateObservedState(
-      url: 'about:blank',
-      title: _title,
-      loading: false,
-      error: '',
+      url: active.currentUrl,
+      title: active.title,
+      loading: active.loading,
+      error: active.error,
+      tabs: _tabs
+          .map((item) => item.toJson(active: identical(item, _activeTab)))
+          .toList(),
+      activeTabId: active.id,
+      userAgentMode: active.userAgentMode.value,
+      userAgentLabel: active.userAgentMode.label,
     );
   }
 
-  WebViewController _createController() {
+  Map<String, String> _userAgentHeadersForTab(_BrowserTab tab) {
+    return {'User-Agent': tab.userAgentMode.userAgent};
+  }
+
+  Future<void> _configureWebViewForUserAgent(
+    WebViewController controller,
+    _BrowserUserAgentMode mode,
+  ) async {
+    await controller.setUserAgent(mode.userAgent);
+    final platformController = controller.platform;
+    if (platformController is AndroidWebViewController) {
+      await platformController.setUseWideViewPort(
+        mode == _BrowserUserAgentMode.desktop,
+      );
+      await platformController.setTextZoom(100);
+    }
+  }
+
+  Future<void> _applyDesktopViewportHint(_BrowserTab tab) async {
+    if (tab.userAgentMode != _BrowserUserAgentMode.desktop) {
+      return;
+    }
+    try {
+      await tab.controller.runJavaScript(r'''
+(() => {
+  const desiredWidth = '1280';
+  let viewport = document.querySelector('meta[name="viewport"]');
+  if (!viewport) {
+    viewport = document.createElement('meta');
+    viewport.setAttribute('name', 'viewport');
+    document.head.appendChild(viewport);
+  }
+  viewport.setAttribute('content', `width=${desiredWidth}, initial-scale=1.0`);
+  try {
+    Object.defineProperty(navigator, 'maxTouchPoints', {
+      get: () => 0,
+      configurable: true
+    });
+  } catch (_) {}
+})();
+''');
+    } catch (_) {}
+  }
+
+  Future<void> _loadWelcomePage({_BrowserTab? tab}) async {
+    final targetTab = tab ?? _activeTab;
+    _setTabLoadingState(
+      targetTab,
+      title: 'Codex 浏览器自动化控制',
+      url: 'about:blank',
+      error: '',
+      loading: true,
+      syncUrlText: true,
+    );
+    await targetTab.controller.loadHtmlString(_welcomeHtml);
+    if (!mounted) {
+      return;
+    }
+    _setTabLoadingState(
+      targetTab,
+      title: 'Codex 浏览器自动化控制',
+      url: 'about:blank',
+      error: '',
+      loading: false,
+      syncUrlText: true,
+    );
+    _publishStateToService();
+  }
+
+  WebViewController _createController(_BrowserTab tab) {
     const params = PlatformWebViewControllerCreationParams();
     final controller = WebViewController.fromPlatformCreationParams(params)
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
@@ -280,71 +518,50 @@ class _TerminalBrowserPanelState extends State<TerminalBrowserPanel>
       ..setNavigationDelegate(
         NavigationDelegate(
           onPageStarted: (url) {
-            if (_navigationCompleter == null ||
-                _navigationCompleter!.isCompleted) {
-              _navigationCompleter = Completer<void>();
+            if (tab.navigationCompleter == null ||
+                tab.navigationCompleter!.isCompleted) {
+              tab.navigationCompleter = Completer<void>();
             }
-            _service.updateObservedState(
+            _setTabLoadingState(
+              tab,
               url: url,
-              loading: true,
               error: '',
+              loading: true,
+              syncUrlText: _isActiveTab(tab),
             );
-            if (!mounted) {
-              return;
-            }
-            setState(() {
-              _loading = true;
-              _currentUrl = url;
-              _urlController.text = url;
-              _error = '';
-            });
           },
           onPageFinished: (url) {
-            _completePendingNavigation();
-            unawaited(_refreshNavigationState());
-            if (_showInspector) {
+            _completePendingNavigation(tab);
+            unawaited(_applyDesktopViewportHint(tab));
+            unawaited(_refreshNavigationState(tab));
+            if (_isActiveTab(tab) && _showInspector) {
               unawaited(_refreshInspectorCurrentMode());
             }
-            _service.updateObservedState(
+            _setTabLoadingState(
+              tab,
               url: url,
-              title: _title,
               loading: false,
-              error: '',
+              syncUrlText: _isActiveTab(tab),
             );
-            if (!mounted) {
-              return;
-            }
-            setState(() {
-              _loading = false;
-              _currentUrl = url;
-              _urlController.text = url;
-            });
           },
           onWebResourceError: (error) {
             if (error.isForMainFrame == false) {
               return;
             }
-            _completePendingNavigation();
-            _service.updateObservedState(
-              loading: false,
+            _completePendingNavigation(tab);
+            _setTabLoadingState(
+              tab,
               error: error.description.trim(),
+              loading: false,
+              syncUrlText: _isActiveTab(tab),
             );
-            if (!mounted) {
-              return;
-            }
-            setState(() {
-              _loading = false;
-              _error = error.description.trim();
-            });
           },
         ),
       );
 
-    unawaited(controller.setUserAgent(_desktopUserAgent));
+    unawaited(_configureWebViewForUserAgent(controller, tab.userAgentMode));
     final platformController = controller.platform;
     if (platformController is AndroidWebViewController) {
-      unawaited(platformController.setUseWideViewPort(true));
-      unawaited(platformController.setTextZoom(100));
       unawaited(
         platformController.setMixedContentMode(MixedContentMode.alwaysAllow),
       );
@@ -355,24 +572,20 @@ class _TerminalBrowserPanelState extends State<TerminalBrowserPanel>
     return controller;
   }
 
-  Future<void> _refreshNavigationState() async {
+  Future<void> _refreshNavigationState([_BrowserTab? tab]) async {
+    final targetTab = tab ?? _activeTab;
     try {
-      final title = await _controller.getTitle() ?? 'Browser';
-      final canGoBack = await _controller.canGoBack();
-      final canGoForward = await _controller.canGoForward();
+      final title = await targetTab.controller.getTitle() ?? 'Browser';
+      final canGoBack = await targetTab.controller.canGoBack();
+      final canGoForward = await targetTab.controller.canGoForward();
       if (!mounted) {
         return;
       }
-      setState(() {
-        _title = title.trim().isEmpty ? 'Browser' : title.trim();
-        _canGoBack = canGoBack;
-        _canGoForward = canGoForward;
-      });
-      _service.updateObservedState(
-        title: _title,
-        url: _currentUrl,
-        loading: _loading,
-        error: _error,
+      _setTabBrowserState(
+        targetTab,
+        title: title.trim().isEmpty ? 'Browser' : title.trim(),
+        canGoBack: canGoBack,
+        canGoForward: canGoForward,
       );
     } catch (_) {}
   }
@@ -385,21 +598,91 @@ class _TerminalBrowserPanelState extends State<TerminalBrowserPanel>
     await _loadUrl(text);
   }
 
-  Future<void> _loadUrl(String rawUrl) async {
+  Future<void> _loadUrl(String rawUrl, {_BrowserTab? tab}) async {
+    final targetTab = tab ?? _activeTab;
     final url = _normalizeUrl(rawUrl);
     final uri = Uri.tryParse(url);
     if (uri == null || !uri.hasScheme) {
-      setState(() {
-        _error = 'Invalid URL';
-      });
+      if (_isActiveTab(targetTab)) {
+        setState(() {
+          _error = 'Invalid URL';
+        });
+      }
+      targetTab.error = 'Invalid URL';
+      _publishStateToService();
       return;
     }
 
-    _error = '';
-    _navigationCompleter = Completer<void>();
-    await _controller.loadRequest(uri);
-    await _awaitNavigationCompletion();
-    await _refreshNavigationState();
+    _setTabLoadingState(
+      targetTab,
+      url: uri.toString(),
+      error: '',
+      loading: true,
+      syncUrlText: true,
+    );
+    await targetTab.controller.loadRequest(
+      uri,
+      headers: _userAgentHeadersForTab(targetTab),
+    );
+    await _awaitNavigationCompletion(targetTab);
+    await _refreshNavigationState(targetTab);
+  }
+
+  void _clearInspectorItems() {
+    _inspectorItems = const [];
+    _inspectorError = '';
+    _inspectorLoading = false;
+  }
+
+  _BrowserUserAgentMode? _parseUserAgentMode(String value) {
+    final normalized = value.trim().toLowerCase();
+    if (normalized.isEmpty) {
+      return null;
+    }
+    if (normalized == 'desktop' ||
+        normalized == 'pc' ||
+        normalized == 'computer' ||
+        normalized == '电脑' ||
+        normalized == '桌面') {
+      return _BrowserUserAgentMode.desktop;
+    }
+    if (normalized == 'mobile' ||
+        normalized == 'phone' ||
+        normalized == 'android' ||
+        normalized == '手机' ||
+        normalized == '移动') {
+      return _BrowserUserAgentMode.mobile;
+    }
+    return null;
+  }
+
+  Future<void> _setUserAgentMode(
+    _BrowserUserAgentMode mode, {
+    bool reloadCurrentPage = false,
+  }) async {
+    final tab = _activeTab;
+    if (tab.userAgentMode == mode && !reloadCurrentPage) {
+      return;
+    }
+    tab.userAgentMode = mode;
+    await _configureWebViewForUserAgent(tab.controller, mode);
+    _publishStateToService();
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _syncStateFromTab(tab, updateAddress: false);
+    });
+    final currentUrl = tab.currentUrl.trim();
+    final uri = Uri.tryParse(currentUrl);
+    final shouldReload = reloadCurrentPage &&
+        currentUrl.isNotEmpty &&
+        currentUrl != 'about:blank' &&
+        uri != null &&
+        uri.hasScheme;
+    if (shouldReload) {
+      await _loadUrl(currentUrl, tab: tab);
+    }
   }
 
   String _normalizeUrl(String value) {
@@ -417,8 +700,8 @@ class _TerminalBrowserPanelState extends State<TerminalBrowserPanel>
     return 'https://$text';
   }
 
-  Future<void> _awaitNavigationCompletion() async {
-    final completer = _navigationCompleter;
+  Future<void> _awaitNavigationCompletion([_BrowserTab? tab]) async {
+    final completer = (tab ?? _activeTab).navigationCompleter;
     if (completer == null) {
       return;
     }
@@ -428,8 +711,8 @@ class _TerminalBrowserPanelState extends State<TerminalBrowserPanel>
     );
   }
 
-  void _completePendingNavigation() {
-    final completer = _navigationCompleter;
+  void _completePendingNavigation([_BrowserTab? tab]) {
+    final completer = (tab ?? _activeTab).navigationCompleter;
     if (completer == null || completer.isCompleted) {
       return;
     }
@@ -468,15 +751,22 @@ class _TerminalBrowserPanelState extends State<TerminalBrowserPanel>
     Map<String, dynamic>? extra,
   }) async {
     await _refreshNavigationState();
+    final active = _activeTab;
     return {
       'ok': ok,
       'message': message,
-      'url': _currentUrl,
-      'title': _title,
-      'loading': _loading,
-      'error': _error,
-      'canGoBack': _canGoBack,
-      'canGoForward': _canGoForward,
+      'url': active.currentUrl,
+      'title': active.title,
+      'loading': active.loading,
+      'error': active.error,
+      'canGoBack': active.canGoBack,
+      'canGoForward': active.canGoForward,
+      'tabs': _tabs
+          .map((tab) => tab.toJson(active: identical(tab, active)))
+          .toList(),
+      'activeTabId': active.id,
+      'userAgentMode': active.userAgentMode.value,
+      'userAgentLabel': active.userAgentMode.label,
       if (extra != null) ...extra,
     };
   }
@@ -490,33 +780,27 @@ class _TerminalBrowserPanelState extends State<TerminalBrowserPanel>
 
   @override
   Future<Map<String, dynamic>> selfTest() async {
-    if (mounted) {
-      setState(() {
-        _title = 'OpenClaw Browser Self Test';
-        _currentUrl = 'about:blank';
-        _urlController.text = _currentUrl;
-        _error = '';
-        _loading = true;
-      });
-    }
-    _service.updateObservedState(
-      url: 'about:blank',
+    final tab = _activeTab;
+    _setTabLoadingState(
+      tab,
       title: 'OpenClaw Browser Self Test',
-      loading: true,
+      url: 'about:blank',
       error: '',
+      loading: true,
+      syncUrlText: true,
     );
 
     try {
-      _navigationCompleter = Completer<void>();
-      await _controller.loadHtmlString(_selfTestHtml);
+      tab.navigationCompleter = Completer<void>();
+      await tab.controller.loadHtmlString(_selfTestHtml);
       await Future<void>.delayed(const Duration(milliseconds: 250));
     } catch (error) {
-      if (mounted) {
-        setState(() {
-          _loading = false;
-          _error = error.toString();
-        });
-      }
+      _setTabLoadingState(
+        tab,
+        error: error.toString(),
+        loading: false,
+        syncUrlText: true,
+      );
       return _pageSnapshot(
         ok: false,
         message: 'Failed to load the browser self-test page.',
@@ -535,11 +819,7 @@ class _TerminalBrowserPanelState extends State<TerminalBrowserPanel>
 })();
 ''');
     if (raw == null) {
-      if (mounted) {
-        setState(() {
-          _loading = false;
-        });
-      }
+      _setTabLoadingState(tab, loading: false, syncUrlText: true);
       return _pageSnapshot(
         ok: false,
         message: 'Self-test page loaded, but JavaScript evaluation failed.',
@@ -550,23 +830,19 @@ class _TerminalBrowserPanelState extends State<TerminalBrowserPanel>
     try {
       decoded = jsonDecode(raw) as Map<String, dynamic>;
     } catch (_) {
-      if (mounted) {
-        setState(() {
-          _loading = false;
-        });
-      }
+      _setTabLoadingState(tab, loading: false, syncUrlText: true);
       return _pageSnapshot(
         ok: false,
         message: 'Self-test JavaScript returned an unreadable result.',
       );
     }
     final passed = decoded['ok'] == true;
-    if (mounted) {
-      setState(() {
-        _loading = false;
-        _error = '';
-      });
-    }
+    _setTabLoadingState(
+      tab,
+      error: '',
+      loading: false,
+      syncUrlText: true,
+    );
     return _pageSnapshot(
       ok: passed,
       message: passed
@@ -600,7 +876,7 @@ class _TerminalBrowserPanelState extends State<TerminalBrowserPanel>
         message: 'The browser cannot go back from the current page.',
       );
     }
-    _navigationCompleter = Completer<void>();
+    _activeTab.navigationCompleter = Completer<void>();
     await _controller.goBack();
     await _awaitNavigationCompletion();
     return _pageSnapshot(message: 'Navigated back.');
@@ -615,7 +891,7 @@ class _TerminalBrowserPanelState extends State<TerminalBrowserPanel>
         message: 'The browser cannot go forward from the current page.',
       );
     }
-    _navigationCompleter = Completer<void>();
+    _activeTab.navigationCompleter = Completer<void>();
     await _controller.goForward();
     await _awaitNavigationCompletion();
     return _pageSnapshot(message: 'Navigated forward.');
@@ -623,10 +899,111 @@ class _TerminalBrowserPanelState extends State<TerminalBrowserPanel>
 
   @override
   Future<Map<String, dynamic>> reload() async {
-    _navigationCompleter = Completer<void>();
+    _activeTab.navigationCompleter = Completer<void>();
     await _controller.reload();
     await _awaitNavigationCompletion();
     return _pageSnapshot(message: 'Page reloaded.');
+  }
+
+  @override
+  Future<Map<String, dynamic>> listTabs() {
+    return _pageSnapshot(message: 'Browser tabs loaded.');
+  }
+
+  @override
+  Future<Map<String, dynamic>> newTab({
+    String? url,
+  }) async {
+    final tab = _createTab(userAgentMode: _activeTab.userAgentMode);
+    if (!mounted) {
+      return _pageSnapshot(
+        ok: false,
+        message: 'Browser panel is no longer mounted.',
+      );
+    }
+    setState(() {
+      _tabs.add(tab);
+      _activeTabIndex = _tabs.length - 1;
+      _syncStateFromTab(tab, updateAddress: true);
+      _clearInspectorItems();
+    });
+    _publishStateToService();
+    final targetUrl = url?.trim() ?? '';
+    if (targetUrl.isEmpty) {
+      await _loadWelcomePage(tab: tab);
+    } else {
+      await _loadUrl(targetUrl, tab: tab);
+    }
+    return _pageSnapshot(message: 'New browser tab opened.');
+  }
+
+  @override
+  Future<Map<String, dynamic>> switchTab({
+    required int id,
+  }) async {
+    final index = _tabs.indexWhere((tab) => tab.id == id);
+    if (index < 0) {
+      return _pageSnapshot(
+        ok: false,
+        message: 'Browser tab was not found: $id',
+      );
+    }
+    setState(() {
+      _activeTabIndex = index;
+      _syncStateFromTab(_activeTab, updateAddress: true);
+      _clearInspectorItems();
+    });
+    _publishStateToService();
+    return _pageSnapshot(message: 'Switched to browser tab $id.');
+  }
+
+  @override
+  Future<Map<String, dynamic>> closeTab({
+    int? id,
+  }) async {
+    final targetId = id == null || id <= 0 ? _activeTab.id : id;
+    final index = _tabs.indexWhere((tab) => tab.id == targetId);
+    if (index < 0) {
+      return _pageSnapshot(
+        ok: false,
+        message: 'Browser tab was not found: $targetId',
+      );
+    }
+    setState(() {
+      _tabs.removeAt(index);
+      if (_tabs.isEmpty) {
+        _tabs.add(_createTab());
+        _activeTabIndex = 0;
+      } else if (_activeTabIndex >= _tabs.length) {
+        _activeTabIndex = _tabs.length - 1;
+      } else if (index < _activeTabIndex) {
+        _activeTabIndex -= 1;
+      }
+      _syncStateFromTab(_activeTab, updateAddress: true);
+      _clearInspectorItems();
+    });
+    _publishStateToService();
+    if (_activeTab.currentUrl.isEmpty) {
+      await _loadWelcomePage();
+    }
+    return _pageSnapshot(message: 'Browser tab closed.');
+  }
+
+  @override
+  Future<Map<String, dynamic>> setUserAgent({
+    required String mode,
+  }) async {
+    final nextMode = _parseUserAgentMode(mode);
+    if (nextMode == null) {
+      return _pageSnapshot(
+        ok: false,
+        message: 'Unsupported browser user-agent mode: $mode',
+      );
+    }
+    await _setUserAgentMode(nextMode, reloadCurrentPage: true);
+    return _pageSnapshot(
+      message: 'Browser user-agent switched to ${nextMode.label}.',
+    );
   }
 
   @override
@@ -1428,8 +1805,9 @@ class _TerminalBrowserPanelState extends State<TerminalBrowserPanel>
           child: Column(
             children: [
               _buildHeader(theme),
-              _buildRecentActionsStrip(theme),
-              _buildInspectorStrip(theme),
+              if (_showRecentActions) _buildRecentActionsStrip(theme),
+              if (_showInspector || _inspectorLoading || _inspectorItems.isNotEmpty)
+                _buildInspectorStrip(theme),
               Expanded(
                 child: Stack(
                   children: [
@@ -1979,6 +2357,300 @@ class _TerminalBrowserPanelState extends State<TerminalBrowserPanel>
     );
   }
 
+  Widget _buildTabStrip(ThemeData theme, {required bool compact}) {
+    return SizedBox(
+      height: 38,
+      child: Row(
+        children: [
+          Expanded(
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: _tabs.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 6),
+              itemBuilder: (context, index) {
+                return _buildTabChip(
+                  theme,
+                  _tabs[index],
+                  compact: compact,
+                );
+              },
+            ),
+          ),
+          const SizedBox(width: 6),
+          _buildActionIcon(
+            icon: Icons.add,
+            tooltip: '新建标签页',
+            onTap: () => unawaited(newTab()),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTabChip(
+    ThemeData theme,
+    _BrowserTab tab, {
+    required bool compact,
+  }) {
+    final active = _isActiveTab(tab);
+    final title = tab.title.trim().isNotEmpty
+        ? tab.title.trim()
+        : tab.currentUrl.trim().isNotEmpty
+            ? tab.currentUrl.trim()
+            : '新标签页';
+    return ConstrainedBox(
+      constraints: BoxConstraints(
+        minWidth: compact ? 102 : 128,
+        maxWidth: compact ? 142 : 190,
+      ),
+      child: Material(
+        color: active ? AppColors.accent.withAlpha(28) : Colors.white.withAlpha(8),
+        borderRadius: BorderRadius.circular(8),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(8),
+          onTap: active ? null : () => unawaited(switchTab(id: tab.id)),
+          child: Container(
+            padding: const EdgeInsets.only(left: 9, right: 4),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: active
+                    ? AppColors.accent.withAlpha(150)
+                    : Colors.white.withAlpha(14),
+              ),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  tab.userAgentMode.icon,
+                  size: 14,
+                  color: active ? AppColors.accent : Colors.white54,
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.labelMedium?.copyWith(
+                      color: active ? Colors.white : Colors.white70,
+                      fontWeight: active ? FontWeight.w800 : FontWeight.w600,
+                    ),
+                  ),
+                ),
+                if (_tabs.length > 1)
+                  IconButton(
+                    tooltip: '关闭标签页',
+                    onPressed: () => unawaited(closeTab(id: tab.id)),
+                    icon: const Icon(Icons.close, size: 14),
+                    color: Colors.white54,
+                    visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(
+                      minWidth: 28,
+                      minHeight: 28,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAddressBar(ThemeData theme, {required bool compact}) {
+    final label = _title.trim().isEmpty ? '地址' : _title.trim();
+    return Row(
+      children: [
+        Expanded(
+          child: TextField(
+            controller: _urlController,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 13,
+            ),
+            cursorColor: Colors.white,
+            textInputAction: TextInputAction.go,
+            onSubmitted: (_) => unawaited(_submitAddress()),
+            decoration: InputDecoration(
+              isDense: true,
+              filled: true,
+              fillColor: Colors.white.withAlpha(8),
+              label: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: Colors.white54),
+              ),
+              floatingLabelStyle: const TextStyle(color: AppColors.accent),
+              hintText: '输入网址',
+              hintStyle: const TextStyle(color: Colors.white54),
+              prefixIcon: Icon(
+                _activeTab.userAgentMode.icon,
+                size: 18,
+                color: Colors.white54,
+              ),
+              prefixIconConstraints: const BoxConstraints(
+                minWidth: 38,
+                minHeight: 38,
+              ),
+              contentPadding: EdgeInsets.symmetric(
+                horizontal: compact ? 9 : 11,
+                vertical: compact ? 10 : 12,
+              ),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: BorderSide(
+                  color: Colors.white.withAlpha(22),
+                ),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: BorderSide(
+                  color: Colors.white.withAlpha(18),
+                ),
+              ),
+              focusedBorder: const OutlineInputBorder(
+                borderRadius: BorderRadius.all(
+                  Radius.circular(8),
+                ),
+                borderSide: BorderSide(color: AppColors.accent),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        _buildAddressSubmitButton(compact: compact),
+      ],
+    );
+  }
+
+  Widget _buildUaModeButton({required bool compact}) {
+    return PopupMenuButton<_BrowserUserAgentMode>(
+      tooltip: '切换 UA',
+      onSelected: (mode) => unawaited(
+        _setUserAgentMode(mode, reloadCurrentPage: true),
+      ),
+      color: const Color(0xFF151515),
+      itemBuilder: (context) {
+        return [
+          for (final mode in _BrowserUserAgentMode.values)
+            PopupMenuItem(
+              value: mode,
+              child: Row(
+                children: [
+                  Icon(
+                    mode.icon,
+                    size: 18,
+                    color: mode == _activeTab.userAgentMode
+                        ? AppColors.accent
+                        : Colors.white70,
+                  ),
+                  const SizedBox(width: 10),
+                  Text('${mode.label} UA'),
+                ],
+              ),
+            ),
+        ];
+      },
+      child: Container(
+        width: compact ? 34 : 42,
+        height: 34,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: Colors.white.withAlpha(10),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.white.withAlpha(14)),
+        ),
+        child: Icon(
+          _activeTab.userAgentMode.icon,
+          size: 18,
+          color: Colors.white,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMoreMenu({required bool compact}) {
+    return PopupMenuButton<_BrowserMenuAction>(
+      tooltip: '更多浏览器工具',
+      color: const Color(0xFF151515),
+      onSelected: _handleBrowserMenuAction,
+      itemBuilder: (context) {
+        return [
+          const PopupMenuItem(
+            value: _BrowserMenuAction.scripts,
+            child: ListTile(
+              dense: true,
+              leading: Icon(Icons.playlist_play),
+              title: Text('脚本助手'),
+            ),
+          ),
+          PopupMenuItem(
+            value: _BrowserMenuAction.inspector,
+            child: ListTile(
+              dense: true,
+              leading: const Icon(Icons.tune),
+              title: Text(_showInspector ? '隐藏检查器' : '显示检查器'),
+            ),
+          ),
+          PopupMenuItem(
+            value: _BrowserMenuAction.recentActions,
+            child: ListTile(
+              dense: true,
+              leading: const Icon(Icons.history),
+              title: Text(_showRecentActions ? '隐藏最近操作' : '显示最近操作'),
+            ),
+          ),
+          const PopupMenuItem(
+            value: _BrowserMenuAction.snapshot,
+            child: ListTile(
+              dense: true,
+              leading: Icon(Icons.download_rounded),
+              title: Text('保存页面快照'),
+            ),
+          ),
+        ];
+      },
+      child: Container(
+        width: compact ? 34 : 38,
+        height: 34,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: Colors.white.withAlpha(10),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.white.withAlpha(14)),
+        ),
+        child: const Icon(Icons.more_horiz, size: 19, color: Colors.white),
+      ),
+    );
+  }
+
+  void _handleBrowserMenuAction(_BrowserMenuAction action) {
+    switch (action) {
+      case _BrowserMenuAction.scripts:
+        unawaited(_showScriptLibrary());
+        break;
+      case _BrowserMenuAction.snapshot:
+        unawaited(_exportSnapshot());
+        break;
+      case _BrowserMenuAction.inspector:
+        setState(() {
+          _showInspector = !_showInspector;
+        });
+        if (_showInspector && _inspectorItems.isEmpty) {
+          unawaited(_refreshInspectorCurrentMode());
+        }
+        break;
+      case _BrowserMenuAction.recentActions:
+        setState(() {
+          _showRecentActions = !_showRecentActions;
+        });
+        break;
+    }
+  }
+
   Widget _buildHeader(ThemeData theme) {
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -1997,105 +2669,52 @@ class _TerminalBrowserPanelState extends State<TerminalBrowserPanel>
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    children: [
-                      if (!compact) ...[
-                        const Icon(Icons.language, color: Colors.white, size: 18),
-                        const SizedBox(width: 8),
-                      ],
-                      Expanded(
-                        child: Text(
-                          _title,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.titleSmall?.copyWith(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 6),
-                      _buildActionIcon(
-                        icon: Icons.refresh,
-                        tooltip: 'Reload',
-                        onTap: () => unawaited(_handleReloadButton()),
-                      ),
-                      _buildActionIcon(
-                        icon: Icons.playlist_play,
-                        tooltip: 'Scripts',
-                        onTap: () => unawaited(_showScriptLibrary()),
-                      ),
-                      _buildActionIcon(
-                        icon: Icons.download_rounded,
-                        tooltip: 'Save snapshot',
-                        onTap: () => unawaited(_exportSnapshot()),
-                      ),
-                      if (widget.onClose != null)
-                        _buildActionIcon(
-                          icon: Icons.close,
-                          tooltip: 'Close',
-                          onTap: widget.onClose,
-                        ),
-                    ],
-                  ),
+                  _buildTabStrip(theme, compact: compact),
                   const SizedBox(height: 10),
                   Row(
                     children: [
-                      Expanded(
-                        child: TextField(
-                          controller: _urlController,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 13,
-                          ),
-                          cursorColor: Colors.white,
-                          textInputAction: TextInputAction.go,
-                          onSubmitted: (_) => unawaited(_submitAddress()),
-                          decoration: InputDecoration(
-                            isDense: true,
-                            filled: true,
-                            fillColor: Colors.white.withAlpha(8),
-                            hintText: 'Enter URL',
-                            hintStyle: const TextStyle(color: Colors.white54),
-                            contentPadding: EdgeInsets.symmetric(
-                              horizontal: compact ? 10 : 12,
-                              vertical: 12,
-                            ),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8),
-                              borderSide: BorderSide(
-                                color: Colors.white.withAlpha(22),
-                              ),
-                            ),
-                            enabledBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8),
-                              borderSide: BorderSide(
-                                color: Colors.white.withAlpha(18),
-                              ),
-                            ),
-                            focusedBorder: const OutlineInputBorder(
-                              borderRadius: BorderRadius.all(
-                                Radius.circular(8),
-                              ),
-                              borderSide: BorderSide(color: AppColors.accent),
-                            ),
-                          ),
-                        ),
+                      _buildActionIcon(
+                        icon: Icons.arrow_back,
+                        tooltip: '后退',
+                        enabled: _canGoBack,
+                        onTap: () => unawaited(back()),
                       ),
-                      const SizedBox(width: 8),
-                      _buildAddressSubmitButton(compact: compact),
+                      _buildActionIcon(
+                        icon: Icons.arrow_forward,
+                        tooltip: '前进',
+                        enabled: _canGoForward,
+                        onTap: () => unawaited(forward()),
+                      ),
+                      _buildActionIcon(
+                        icon: Icons.refresh,
+                        tooltip: '刷新',
+                        onTap: () => unawaited(_handleReloadButton()),
+                      ),
+                      const SizedBox(width: 6),
+                      if (compact)
+                        _buildUaModeButton(compact: compact)
+                      else ...[
+                        Expanded(
+                          child: _buildAddressBar(theme, compact: compact),
+                        ),
+                        const SizedBox(width: 8),
+                        _buildUaModeButton(compact: compact),
+                      ],
+                      const SizedBox(width: 6),
+                      _buildMoreMenu(compact: compact),
+                      if (widget.onClose != null) ...[
+                        const SizedBox(width: 6),
+                        _buildActionIcon(
+                          icon: Icons.close,
+                          tooltip: '关闭',
+                          onTap: widget.onClose,
+                        ),
+                      ],
                     ],
                   ),
-                  if (_currentUrl.isNotEmpty) ...[
+                  if (compact) ...[
                     const SizedBox(height: 8),
-                    Text(
-                      _currentUrl,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: Colors.white60,
-                      ),
-                    ),
+                    _buildAddressBar(theme, compact: compact),
                   ],
                 ],
               ),

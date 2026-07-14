@@ -288,6 +288,7 @@ def print_summary(version: str, build_number: str, output_dir: Path, copied_file
     print("\n[步骤 4/4] 构建完成，产物整理如下：")
     print(f"版本号: {version}")
     print(f"构建号: {build_number}")
+    print(f"安装显示版本: {version}+{build_number}")
     print(f"输出目录: {output_dir}")
 
     if not copied_files:
@@ -349,6 +350,7 @@ def main() -> int:
     print(f"当前 pubspec: {current_version_text}")
     print(f"发布版本: {version}")
     print(f"构建号: {build_number}")
+    print(f"安装显示版本: {version}+{build_number}")
     print(f"输出目录: {output_dir}")
     print("=" * 60)
 

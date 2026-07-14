@@ -1,6 +1,6 @@
 # Current App State
 
-Last updated: 2026-07-13 21:55 UTC
+Last updated: 2026-07-14 08:53 UTC
 
 ## Current Truth
 - App: `次元虾`, a Chinese Android integration for OpenClaw Gateway without a Termux app dependency.
@@ -10,17 +10,33 @@ Last updated: 2026-07-13 21:55 UTC
 - Active branch: `codex-termux-runtime-fix`.
 - Remotes: `origin` is Gitee `https://gitee.com/cds-y-code/openclaw-termux-zh.git`; `shwiki` is GitHub `https://github.com/shwiki1/openclaw-termux-zh.git`.
 - Cloud build: `.github/workflows/flutter-build.yml` builds an `arm64-v8a` APK and can create a GitHub Release.
-- Current source version: root `package.json` `2.0.50`; Flutter `pubspec.yaml` `2.0.50+140`.
+- Current source version: root `package.json` `2.0.50`; Flutter `pubspec.yaml` `2.0.50+141`.
 - App version: `2.0.50`.
-- Build number: `140` in `flutter_app/pubspec.yaml`; CI may use a higher GitHub run number.
-- Version metadata is aligned to `2.0.50+140` in Flutter defaults, README files, STRUCTURE, and CHANGELOG.
-- Browser automation now defaults to a desktop UA, keeps WebView zoom enabled with Android text zoom normalization, and stages reusable workflows into a pending-save script draft before the user confirms saving.
-- Last artifact: GitHub Actions run `29283260131` produced `CiYuanXia-v2.0.50-140-arm64-v8a.apk` from `shwiki/codex-termux-runtime-fix` head `7d977373176406104c40b391ee2cd4b7fd74c2d5`; local download path is `artifacts/github-run-29283260131/CiYuanXia-v2.0.50-140-arm64-v8a.apk`; APK SHA256 `db236bd4a96d30f59340df9d060ae9b4ae9fbdd80f075ac82d5bf43840348ada`; artifact ZIP digest `sha256:fc8110fa4a2c0f62c21f7a658b1da764ab1f1bb4a7b14fe905be74085a21a0ff`; `aapt dump badging` reports Android manifest `versionCode=2140` and `versionName=2.0.50` for the arm64 split APK.
+- Build number: `141` in `flutter_app/pubspec.yaml`; CI may use a higher GitHub run number.
+- Version metadata is aligned to `2.0.50+141` in Flutter defaults, README files, STRUCTURE, and CHANGELOG.
+- Runtime Node defaults are aligned to Node.js `24.14.1` across Flutter constants, prebuilt RootFS scripts, setup l10n copy, primary docs, basic-resource docs, bundled fallback asset name, and the legacy root Node CLI.
+- Terminal implementation docs now describe native Android Termux `TerminalView` through Flutter `PlatformView`, not the obsolete Web/PTY stack.
+- APK install-visible versionName now resolves to `base+build` (`2.0.50+141` for the next build) instead of raw base only; Android `versionCode` remains the numeric build and may be ABI-split-adjusted by Flutter.
+- Browser automation now supports in-memory multi-tab sessions, active-tab state snapshots, UI/MCP/browser-script UA switching, desktop UA request headers, WebView wide-viewport/text-zoom normalization, and a best-effort desktop viewport hint for responsive pages.
+- Browser automation keeps reusable workflow staging in a pending-save script draft before the user confirms saving.
+- Last recorded successful artifact before the browser tabs/UA build submission: GitHub Actions run `29293286907` produced `CiYuanXia-v2.0.50-141-arm64-v8a.apk` from `shwiki/codex-termux-runtime-fix` head `459a63536bdcbff5d5f05f96f3a81dc6d4d6889b`; artifact ID `8295917288`; artifact ZIP digest `sha256:153c4b895a1bf1838985266fd6dfcd4fb32e021d7704e70e16ed53ccaf7dbfe8`. The previous locally downloaded artifact remains `artifacts/github-run-29283260131/CiYuanXia-v2.0.50-140-arm64-v8a.apk`.
+- Management status: latest recorded cloud build is complete; no new cloud build was dispatched during the 2026-07-13 23:51 project-management analysis.
 
 ## Active Task
-- Submitting a GitHub Actions arm64-v8a APK build for the browser desktop UA/zoom and pending-save script draft changes using source metadata `2.0.50+140`.
+- Submitting a GitHub Actions cloud build for the local Codex browser automation fixes: multi-tab UI and bridge actions, UA switching, restored header back/forward controls, collapsed low-use browser tools into a more menu, unified address/title field, generated MCP/browser-script tab and UA commands, and best-effort desktop-page handling.
+- Source metadata was bumped to `2.0.50+141`; the next workflow run is expected to produce `APP_VERSION_CODE=142` and `CiYuanXia-v2.0.50-142-arm64-v8a.apk`.
 
 ## Recently Changed
+- Bumped Flutter source/build metadata and release docs from `2.0.50+140` to `2.0.50+141` before submitting the Codex browser tabs/UA cloud build.
+- Kept the remote rootfs cache restore fix in `scripts/fetch-prebuilt-rootfs-asset.sh` by using `gh release download --clobber`, matching the latest successful remote build.
+- Added Codex browser tab state in `TerminalBrowserPanel`: per-tab WebView controllers, titles/URLs/errors/loading/navigation state, active tab switching, close/new tab UI, and service state publication.
+- Added Codex browser UA switching from UI, MCP, and `browser-script ua <desktop|mobile>`; desktop mode now applies a desktop User-Agent through WebView settings and request headers, enables Android wide viewport, normalizes text zoom, and injects a desktop viewport hint after page load.
+- Restored browser header back/forward buttons, kept refresh and close controls, unified page title into the address field label, and moved script assistant, inspector, recent actions, and snapshot into the browser more menu.
+- Extended `BrowserAutomationService`, generated `CliApiConfigService`, `browser-operator` guidance, and `flutter_app/test/cli_api_config_service_test.dart` with tab list/new/switch/close and UA switching tools.
+- Corrected the Unreleased changelog browser-tabs note so it only documents implemented tab/UA behavior.
+- Reconciled Node.js runtime defaults to `24.14.1` in `flutter_app/lib/constants.dart`, prebuilt RootFS scripts, and setup strings so they match the bundled/basic-resource fallback archive.
+- Corrected `STRUCTURE.md` terminal stack notes to native Android Termux `TerminalView` plus Flutter `PlatformView`.
+- Added a root Node self-test guard in `lib/test.js` so future Node runtime version drift across constants, scripts, docs, l10n, resource docs, and the legacy installer fails `npm test`.
 - Bumped Flutter source/build metadata and release docs from `2.0.50+139` to `2.0.50+140` before submitting the next cloud build.
 - Added desktop UA and Android text zoom defaults to `TerminalBrowserPanel`.
 - Added a browser script pending-save draft flow with `browser_script_stage` / `browser_script_clear_pending`, auto-staged drafts from recent browser actions, and a save-pending UI in the script assistant bottom sheet.
@@ -33,6 +49,7 @@ Last updated: 2026-07-13 21:55 UTC
 - Added Flutter test assertions for the generated browser MCP tools.
 - Added an Unreleased changelog note for Codex browser automation enhancement.
 - Updated `flutter_app/lib/constants.dart` default build number from `126` to `133`.
+- Updated APK install-visible version handling so `versionName` is now `base+build` from Gradle/local.properties instead of raw base only, and the settings screen now shows the manifest `versionName` directly.
 - Updated `README.md`, `docs/README_en.md`, `STRUCTURE.md`, and `CHANGELOG.md` to match `2.0.50+133`.
 - Bumped Flutter source/build metadata from `2.0.50+133` to `2.0.50+134` before the next cloud build.
 - Bumped Flutter source/build metadata from `2.0.50+134` to `2.0.50+135` before the next cloud build.
@@ -68,6 +85,9 @@ Last updated: 2026-07-13 21:55 UTC
 - GitHub Actions run `29283260131` succeeded from remote commit `7d9773731764`; downloaded `CiYuanXia-v2.0.50-140-arm64-v8a.apk` and verified ZIP integrity, arm64 PRoot libraries, APK SHA256, and manifest version fields.
 
 ## Checks
+- 2026-07-14 Codex browser tabs/UA cloud-build prep checks: `git diff --check` passed; `npm test` passed with 14 checks; `npm run lint -- --no-warn-ignored` passed; `bash -n scripts/build-apk.sh`, `bash -n scripts/build-prebuilt-rootfs.sh`, `bash -n scripts/prebuilt-rootfs-metadata.sh`, `bash -n scripts/fetch-prebuilt-rootfs-asset.sh`, and `python3 -B -m py_compile scripts/build_release.py` passed; focused version check found no remaining current source metadata references to `2.0.50+140` in primary version docs/source.
+- 2026-07-14 Codex browser tabs/UA checks: `git diff --check` passed; `npm test` passed with 14 checks; `npm run lint -- --no-warn-ignored` passed; focused `rg` checks confirmed tab/UA generated tools and found no stale `重命名标签`/`tab_rename` references.
+- 2026-07-14 local SDK availability check: `command -v dart`, `command -v flutter`, and `command -v kotlinc` returned no local paths, so Dart format, Flutter analyze, Flutter tests, and Kotlin compiler checks were not run locally.
 - Cloud-build prep checks for source `2.0.50+140`: `git diff --check` passed; `npm test` passed with 11 checks; `npm run lint -- --no-warn-ignored` passed; `command -v dart`, `command -v flutter`, and `command -v kotlinc` returned no local paths.
 - `git diff --check`: passed after the desktop UA/zoom and browser script draft changes.
 - `npm test`: passed again after the script draft changes, 11 checks passed and 0 failed.
@@ -98,16 +118,22 @@ Last updated: 2026-07-13 21:55 UTC
 - GitHub Actions run `29283260131`: completed successfully; CI `APP_VERSION_CODE=140`; artifact `ciyuanxia-apks` ID `8292276612`; artifact ZIP digest `sha256:fc8110fa4a2c0f62c21f7a658b1da764ab1f1bb4a7b14fe905be74085a21a0ff`; downloaded APK `CiYuanXia-v2.0.50-140-arm64-v8a.apk`; APK SHA256 `db236bd4a96d30f59340df9d060ae9b4ae9fbdd80f075ac82d5bf43840348ada`; `unzip -t` passed; `unzip -l` confirmed arm64 PRoot libraries; `aapt dump badging` reported `versionCode=2140`, `versionName=2.0.50`.
 - Browser control stability hardening checks: `git diff --check` passed; `npm test` passed with 11 checks; `npm run lint -- --no-warn-ignored` passed; `command -v dart` and `command -v flutter` returned no local SDK paths, so Flutter analyze/test were not run locally.
 - Terminal sidecar/performance polish checks: `git diff --check` passed; `npm test` passed with 11 checks; `npm run lint -- --no-warn-ignored` passed; `command -v dart`, `command -v flutter`, and `command -v kotlinc` returned no local SDK/compiler paths, and no executable `flutter_app/android/gradlew` is available in this environment.
+- Version-display stabilization checks: `git diff --check` passed; `npm test` passed with 13 checks; `npm run lint -- --no-warn-ignored` passed; `python3 -m py_compile scripts/build_release.py` passed; `bash -n scripts/build-apk.sh` passed; `command -v flutter` and `command -v dart` are unavailable locally; `gradle -q tasks --dry-run` crashed in the Android/Termux Gradle runtime before a useful build-phase verification could complete.
+- 2026-07-14 project-management analysis checks: `python3 .../inspect_app_project.py --project .` completed but only auto-detected the root Node shell, so Flutter/Kotlin facts were verified manually; `git diff --check` passed; `npm test` passed with 13 checks; `npm run lint -- --no-warn-ignored` passed; `python3 -m py_compile scripts/build_release.py` passed; `bash -n scripts/build-apk.sh` passed; `bash -n scripts/build-prebuilt-rootfs.sh` passed; `command -v flutter`, `command -v dart`, and `command -v kotlinc` returned no local paths, while `gradle` exists at `/data/data/com.termux/files/usr/bin/gradle`.
+- 2026-07-14 Node/runtime documentation fix checks: `git diff --check` passed; `npm test` passed with 14 checks; `npm run lint -- --no-warn-ignored` passed; `bash -n scripts/build-apk.sh` passed; `bash -n scripts/build-prebuilt-rootfs.sh` passed; `bash -n scripts/prebuilt-rootfs-metadata.sh` passed; `python3 -B -m py_compile scripts/build_release.py` passed; a focused stale Node/terminal-stack `rg` check returned no matches in current source/docs targets; local `flutter`, `dart`, and `kotlinc` remain unavailable.
 
 ## Memory Validation
+- Final validation after the 2026-07-14 browser tabs/UA/browser-script updates passed with no errors and no warnings.
 - Initial validation before filling memory passed with warnings for placeholder fields.
 - Final validation after metadata fixes passed with no errors and no warnings.
 - Final validation after recording GitHub Actions run `29272795310` passed with no errors and no warnings.
 - Final validation after browser script assistant memory updates passed with no errors and no warnings.
 - Final validation after recording GitHub Actions run `29283260131` passed with no errors and no warnings.
+- Final validation after the 2026-07-14 Node/runtime documentation fix passed with no errors and no warnings.
 
 ## Risks And Blockers
 - Local environment cannot run Flutter checks yet.
+- Codex browser multi-tab, UA switching, and desktop-layout behavior need Android device smoke on an actual WebView; the injected desktop viewport hint is best-effort and some sites may still choose mobile layouts from server-side/device heuristics.
 - Browser script assistant changes need Flutter analyzer coverage and Android device smoke; local environment cannot visually inspect the bottom-sheet UI.
 - Desktop UA/zoom defaults and the pending-save draft flow still need Android device smoke on a real browser panel.
 - The new `browser_control` MCP entrypoint and `browser-script call/control` fallbacks need Android device smoke against a real WebView-attached browser session.
@@ -121,11 +147,10 @@ Last updated: 2026-07-13 21:55 UTC
 - Project policy in `AGENTS.md`: build/release only Android `arm64-v8a` APK unless explicitly requested.
 
 ## Next Actions
-- Watch the submitted GitHub Actions arm64-v8a build, download the `ciyuanxia-apks` artifact if it succeeds, verify checksum/native libraries/APK manifest, then record provenance.
-- In a Flutter SDK or GitHub Actions environment, run `cd flutter_app && flutter analyze && flutter test` for the browser script assistant changes.
-- Device-smoke the new browser pending-save flow on Android: stage a script draft, save it, rename it, copy `browser-script run <id>`, run it from the Codex terminal, delete it, and confirm the browser stays attached.
-- Device-smoke the Codex browser script assistant on Android: perform a short browser flow, save recent actions, rename the script, copy `browser-script run <id>`, run it from the Codex terminal, delete the script, and verify the WebView remains attached.
-- Device-smoke the browser automation tools on Android: verify `browser_get_state`, `browser_control` for `capture_snapshot`, `list_interactables`, `type`, and `click`, plus shell fallbacks `browser-script state`, `browser-script interactables`, `browser-script snapshot`, `browser-script type`, and `browser-script click`; confirm visible WebView content changes after type/click.
-- Device-smoke terminal performance on Android: run a long Codex CLI conversation, open/close the right browser sidecar while output is active, verify terminal input/output still works, and verify closing the sidecar refreshes the latest terminal screen.
-- Device-smoke the freshly built arm64 APK on Android: launch, setup/runtime bootstrap, gateway start/stop, terminal, Codex browser MCP tools, verify first browser open shows the `Codex 浏览器自动化控制` instructions page instead of Gateway, and verify closing/reopening the compact right browser sidecar keeps `浏览器已连接`.
-- The current cloud build submission uses source metadata `2.0.50+140`; the successful GitHub Actions artifact is expected to use CI `APP_VERSION_CODE=141` or higher.
+- Device-smoke Codex browser multi-tab and UA behavior on Android: open multiple pages, switch tabs, close a tab, use back/forward/reload, switch desktop/mobile UA, and verify desktop pages no longer fall back to the mobile layout on representative sites.
+- Create the next cloud build only after bumping `flutter_app/pubspec.yaml` build metadata to the next number and verifying the resulting APK install screen shows `2.0.50+<next>`.
+- Device-smoke the freshly built arm64 APK on Android: launch, setup/runtime bootstrap, gateway start/stop, terminal, Codex browser MCP tools, first browser instructions page, and sidecar close/reopen attachment.
+- Device-smoke the browser pending-save and saved-script flow: stage a draft, save, rename, copy/run `browser-script run <id>`, delete, and verify the WebView remains attached.
+- Device-smoke browser automation fallbacks: verify `browser_get_state`, `browser_control`, and `browser-script` commands for snapshot/read/type/click flows on a live WebView.
+- Device-smoke terminal performance: run a long Codex CLI conversation, open/close the compact browser sidecar while output is active, and verify terminal input/output and refresh behavior.
+- In a Flutter SDK or GitHub Actions environment, run `cd flutter_app && flutter analyze && flutter test` for the browser script assistant and terminal sidecar changes.

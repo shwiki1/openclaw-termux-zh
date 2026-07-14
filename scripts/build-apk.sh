@@ -37,6 +37,8 @@ if [ -n "${BUILD_VERSION_CODE:-}" ]; then
 else
     VERSION_CODE="$((VERSION_CODE + 1))"
 fi
+VERSION_DISPLAY="${VERSION_NAME}+${VERSION_CODE}"
+echo "Version name shown during install: $VERSION_DISPLAY"
 flutter build apk --release \
     --split-per-abi \
     --target-platform android-arm64 \
@@ -50,6 +52,7 @@ APK_PATH="$FLUTTER_DIR/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk"
 if [ -f "$APK_PATH" ]; then
     echo "=== Build Successful ==="
     echo "APK: $APK_PATH"
+    echo "Install-visible version: $VERSION_DISPLAY"
     echo "Size: $(du -h "$APK_PATH" | cut -f1)"
     echo ""
     echo "Install: adb install $APK_PATH"

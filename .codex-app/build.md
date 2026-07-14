@@ -2,6 +2,8 @@
 
 ## Local Checks Only
 - Formatting: not run in this session; Flutter/Dart SDK unavailable locally.
+- 2026-07-14 Codex browser tabs/UA cloud-build prep: source metadata bumped to `2.0.50+141`; `git diff --check` passed; `npm test` passed with 14 checks; `npm run lint -- --no-warn-ignored` passed; `bash -n scripts/build-apk.sh`, `bash -n scripts/build-prebuilt-rootfs.sh`, `bash -n scripts/prebuilt-rootfs-metadata.sh`, `bash -n scripts/fetch-prebuilt-rootfs-asset.sh`, and `python3 -B -m py_compile scripts/build_release.py` passed. Local `dart`, `flutter`, and `kotlinc` remain unavailable; the GitHub Actions run is expected to use `APP_VERSION_CODE=142` because the latest remote successful run already consumed `141`.
+- 2026-07-14 Codex browser multi-tab/UA fixes: `git diff --check` passed; `npm test` passed with 14 checks; `npm run lint -- --no-warn-ignored` passed; focused `rg` checks confirmed generated tab/UA MCP and `browser-script` entries and found no stale `重命名标签`/`tab_rename` changelog or source references. Local `dart`, `flutter`, and `kotlinc` commands remain unavailable, so Dart format, Flutter analyze, Flutter tests, and Kotlin compiler checks were not run.
 - Source `2.0.50+140` cloud-build prep: `git diff --check` passed; `npm test` passed with 11 checks; `npm run lint -- --no-warn-ignored` passed. Local `dart`, `flutter`, and `kotlinc` commands remain unavailable.
 - Browser desktop UA/zoom and script pending-draft changes: `git diff --check` passed; `npm test` passed with 11 checks; `npm run lint -- --no-warn-ignored` passed on 2026-07-13. Local `dart`, `flutter`, and `kotlinc` commands remain unavailable.
 - Lint/static analysis: `npm run lint -- --no-warn-ignored` passed on 2026-07-13 after Codex browser script assistant changes and the bridge-only `browser_get_state` fix.
@@ -10,6 +12,9 @@
 - Browser control hardening: `git diff --check` passed; `npm test` passed with 11 checks; `npm run lint -- --no-warn-ignored` passed after adding `browser_control`, `browser-script` fallback commands, and bridge action normalization.
 - Terminal sidecar/performance polish: `git diff --check` passed; `npm test` passed with 11 checks; `npm run lint -- --no-warn-ignored` passed after removing browser sidecar header back/forward buttons, adding terminal display repaint throttling, and reducing Codex terminal display transcript rows. Local `dart`, `flutter`, and `kotlinc` commands were unavailable, and no executable `flutter_app/android/gradlew` was present.
 - Browser/terminal cloud-build retry: `git diff --check` passed; `npm test` passed with 11 checks; `npm run lint -- --no-warn-ignored` passed after escaping the generated `browser-script type` JavaScript regex and bumping source metadata to `2.0.50+139`.
+- Version-display stabilization: `git diff --check` passed; `npm test` passed with 13 checks; `npm run lint -- --no-warn-ignored` passed; `python3 -m py_compile scripts/build_release.py` passed; `bash -n scripts/build-apk.sh` passed. Local `flutter`/`dart` remain unavailable.
+- 2026-07-14 project-management analysis: `git diff --check` passed; `npm test` passed with 13 checks; `npm run lint -- --no-warn-ignored` passed; `python3 -m py_compile scripts/build_release.py` passed; `bash -n scripts/build-apk.sh` passed; `bash -n scripts/build-prebuilt-rootfs.sh` passed. Local `flutter`, `dart`, and `kotlinc` remain unavailable; `gradle` exists in Termux but Android/Flutter build verification still belongs in GitHub Actions or a full SDK environment.
+- 2026-07-14 Node/runtime documentation fix: `git diff --check` passed; `npm test` passed with 14 checks; `npm run lint -- --no-warn-ignored` passed; `bash -n scripts/build-apk.sh`, `bash -n scripts/build-prebuilt-rootfs.sh`, `bash -n scripts/prebuilt-rootfs-metadata.sh`, and `python3 -B -m py_compile scripts/build_release.py` passed. A focused `rg` check found no remaining stale Node version or obsolete terminal stack references in current source/docs targets. Local `flutter`, `dart`, and `kotlinc` remain unavailable.
 
 ## GitHub Cloud Build
 - Repository remotes: `origin` Gitee and `shwiki` GitHub. Confirm target remote before push/build operations.
@@ -22,15 +27,17 @@
 ## Version Management
 - Canonical version file: `flutter_app/pubspec.yaml` for Flutter app version/build, plus root `package.json` for npm package version. Keep them aligned for releases.
 - Current user-facing version: `2.0.50`.
-- Current build number: `140` in `flutter_app/pubspec.yaml`.
-- Known drift: none for current `2.0.50+140` metadata after 2026-07-13 browser script draft cloud-build prep.
-- Last cloud build version: source metadata `2.0.50+139`; GitHub Actions run `29283260131` generated CI version `2.0.50+140` for the arm64 split APK, and `aapt dump badging` reported manifest `versionCode=2140`, `versionName=2.0.50`.
-- Last cloud build artifact: `ciyuanxia-apks` artifact ID `8292276612`, containing `CiYuanXia-v2.0.50-140-arm64-v8a.apk`, downloaded to `artifacts/github-run-29283260131/`.
+- Current build number: `141` in `flutter_app/pubspec.yaml`.
+- Known drift: none for current `2.0.50+141` source metadata after the Codex browser tabs/UA cloud-build prep.
+- Last cloud build version before submitting the browser tabs/UA build: source metadata `2.0.50+140`; GitHub Actions run `29293286907` generated CI version `2.0.50+141` for the arm64 split APK.
+- Last cloud build artifact before submitting the browser tabs/UA build: `ciyuanxia-apks` artifact ID `8295917288`, containing `CiYuanXia-v2.0.50-141-arm64-v8a.apk`, artifact ZIP digest `sha256:153c4b895a1bf1838985266fd6dfcd4fb32e021d7704e70e16ed53ccaf7dbfe8`.
 - Version bump policy: Increment build number for every new cloud build; bump user-facing version only for release changes.
-- Workflow version policy: CI derives version name from `pubspec.yaml`, then sets versionCode to `GITHUB_RUN_NUMBER` if greater than pubspec build, otherwise `pubspec build + 1`.
+- Workflow version policy: CI derives logical build number from `pubspec.yaml`, then sets versionCode to `GITHUB_RUN_NUMBER` if greater than pubspec build, otherwise `pubspec build + 1`. The install-visible APK `versionName` is now `base+build` via `flutter.androidVersionName` in local properties, with Gradle fallback to combine `flutter.versionName` + `flutter.versionCode` when the explicit property is missing.
+- Android install-visible version policy: treat `versionName` as the user-visible string in the installer/settings screen. Do not append raw split-AAB/APK `versionCode` values to the display string, because Flutter split-per-ABI offsets can make them look like `2140`, `2141`, etc. Use the manifest `versionName` or `AppConstants.displayVersion`.
 - Failed cloud build: GitHub Actions run `29277705784` used remote commit `989e200f1388`, CI `APP_VERSION_CODE=137`, and failed before artifact upload because `Colors.white45` is not a Flutter color constant. Fixed by remote commit `1b0778b16da29083eea6d3101dfc50b69f93ede8`.
 - Failed cloud build: GitHub Actions run `29282846337` used remote commit `3559fd14e369`, CI `APP_VERSION_CODE=139`, and failed before artifact upload because a generated shell script regex in `CliApiConfigService` used an unescaped Dart `$` in `browser-script type`.
-- Current cloud build submission source metadata: `2.0.50+140`; expected CI artifact code `141` or higher.
+- No cloud build was submitted for the 2026-07-14 Node/runtime documentation fix. Source metadata has now been bumped to `2.0.50+141` for the Codex browser tabs/UA cloud build; the next workflow run should produce install-visible `2.0.50+142` or higher.
+- Install-visible APK versionName policy: manifest `versionName` now resolves to `base+build` through `flutter.androidVersionName` / Gradle fallback, so the Android installer and settings screen show the build increase directly.
 
 ## Dependencies And Release Safety
 - Package manager and lockfile: npm with `package-lock.json`; Flutter uses `pubspec.yaml` and intentionally ignores `pubspec.lock`.
@@ -42,10 +49,14 @@
 - Last successful artifact checksum: APK SHA256 `db236bd4a96d30f59340df9d060ae9b4ae9fbdd80f075ac82d5bf43840348ada`; artifact ZIP digest `sha256:fc8110fa4a2c0f62c21f7a658b1da764ab1f1bb4a7b14fe905be74085a21a0ff`.
 - Secret hygiene: `.gitignore` excludes `.env`, `flutter_app/android/key.properties`, `*.jks`, `*.keystore`, local configs with API keys, and build output.
 - Runtime assets: `openclaw-rootfs-noble-arm64.tar.gz` is currently a Git LFS pointer; `basic-resource` Release stores large runtime assets and SHA256 values.
+- Runtime Node defaults are aligned to Node.js `24.14.1`, matching the bundled/basic-resource fallback archive `flutter_app/assets/bootstrap/node-v24.14.1-linux-arm64.tar.xz`. Future Node upgrades must update Flutter constants, RootFS scripts, setup l10n copy, primary docs, resource docs, legacy installer URLs, cached asset names, and the `lib/test.js` drift guard together.
 
 ## Test Matrix
-- Static checks: npm ESLint and `git diff --check` passed again after bumping source metadata to `2.0.50+140`; GitHub Actions `flutter analyze --no-fatal-infos` completed successfully in run `29283260131` for the previous build.
-- Unit tests: Node self-test passed again after bumping source metadata to `2.0.50+140`; Flutter tests were not run locally or in the current workflow, which only runs analyze and the APK build.
+- Static checks: npm ESLint and `git diff --check` passed again after bumping source metadata to `2.0.50+141`; the GitHub Actions workflow runs `flutter analyze --no-fatal-infos` before the APK build.
+- Unit tests: Node self-test passed again after bumping source metadata to `2.0.50+141`; Flutter tests were not run locally and are not currently part of the workflow, which runs analyze and the APK build.
+- Current browser automation test coverage includes generated MCP/browser-script string assertions for tab list/new/switch/close and UA switching in `flutter_app/test/cli_api_config_service_test.dart`, but those Flutter tests could not be executed locally without the Flutter SDK.
+- Current Node self-test includes a runtime-version drift guard and passes with 14 checks.
+- Auto-inspection caveat: `inspect_app_project.py` currently detects only the root Node shell for this repo; future agents must verify the Flutter/Kotlin app manually from `flutter_app/pubspec.yaml`, `flutter_app/android/app/build.gradle`, and source entry points.
 - Integration/E2E tests: no Flutter `integration_test`, Maestro, Appium, or emulator test workflow found.
 - Device/emulator/browser smoke target: none run in this session. Use Android 10+ arm64 device/emulator for install/setup/gateway smoke.
 

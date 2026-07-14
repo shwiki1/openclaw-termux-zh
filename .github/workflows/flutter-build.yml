@@ -194,15 +194,18 @@ jobs:
             VERSION_CODE="$((PUBSPEC_VERSION_CODE + 1))"
           fi
           VERSION_NAME="$VERSION_BASE"
+          VERSION_DISPLAY="${VERSION_NAME}+${VERSION_CODE}"
           echo "APP_VERSION_NAME=${VERSION_NAME}" >> "$GITHUB_ENV"
           echo "APP_VERSION_CODE=${VERSION_CODE}" >> "$GITHUB_ENV"
-          echo "APP_FULL_VERSION=${VERSION_NAME}+${VERSION_CODE}" >> "$GITHUB_ENV"
+          echo "APP_FULL_VERSION=${VERSION_DISPLAY}" >> "$GITHUB_ENV"
+          echo "APP_ANDROID_VERSION_NAME=${VERSION_DISPLAY}" >> "$GITHUB_ENV"
 
           {
             echo "sdk.dir=${ANDROID_HOME}"
             echo "flutter.sdk=${FLUTTER_SDK}"
             echo "flutter.versionName=${VERSION_NAME}"
             echo "flutter.versionCode=${VERSION_CODE}"
+            echo "flutter.androidVersionName=${VERSION_DISPLAY}"
           } > android/local.properties
 
           flutter --version

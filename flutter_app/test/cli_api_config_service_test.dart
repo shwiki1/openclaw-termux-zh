@@ -96,6 +96,11 @@ void main() {
     expect(browserMcp, contains('browser_scroll'));
     expect(browserMcp, contains('browser_press_key'));
     expect(browserMcp, contains('browser_select_option'));
+    expect(browserMcp, contains('browser_tab_list'));
+    expect(browserMcp, contains('browser_tab_new'));
+    expect(browserMcp, contains('browser_tab_switch'));
+    expect(browserMcp, contains('browser_tab_close'));
+    expect(browserMcp, contains('browser_set_ua'));
     expect(browserMcp, contains('browser_script_list'));
     expect(browserMcp, contains('browser_script_stage'));
     expect(browserMcp, contains('browser_script_save'));
@@ -107,11 +112,16 @@ void main() {
     expect(browserMcp, contains('browser_scroll: "scroll"'));
     expect(browserMcp, contains('browser_press_key: "press_key"'));
     expect(browserMcp, contains('browser_select_option: "select_option"'));
+    expect(browserMcp, contains('browser_tab_list: "tab_list"'));
+    expect(browserMcp, contains('browser_tab_new: "tab_new"'));
+    expect(browserMcp, contains('browser_tab_switch: "tab_switch"'));
+    expect(browserMcp, contains('browser_tab_close: "tab_close"'));
+    expect(browserMcp, contains('browser_set_ua: "set_ua"'));
     expect(browserMcp, contains('browser_script_stage: "script_stage"'));
     expect(browserMcp, contains('browser_script_run: "script_run"'));
     expect(browserMcp, contains('function normalizeBridgeAction'));
     expect(browserMcp, contains('toolName === "browser_control"'));
-    expect(browserMcp, contains('version: "1.4.0"'));
+    expect(browserMcp, contains('version: "1.5.0"'));
     expect(
       browserMcp,
       contains('process.stdout.write(payload.toString("utf8") + "\\n")'),
@@ -128,16 +138,33 @@ void main() {
       browserScriptLauncher,
       contains('browser-script interactables [filter] [maxItems]'),
     );
+    expect(browserScriptLauncher, contains('browser-script tabs'));
+    expect(browserScriptLauncher, contains('browser-script new-tab [url]'));
+    expect(
+      browserScriptLauncher,
+      contains('browser-script switch-tab <tab-id>'),
+    );
+    expect(browserScriptLauncher, contains('browser-script ua <desktop|mobile>'));
     expect(browserScriptLauncher, contains('browser-script run <script-id>'));
     expect(
       browserScriptLauncher,
       contains('browser-script stage <file-name> <description>'),
     );
     expect(browserScriptLauncher, contains('bridge_action="capture_snapshot"'));
+    expect(browserScriptLauncher, contains('bridge_action="tab_list"'));
+    expect(browserScriptLauncher, contains('bridge_action="tab_new"'));
+    expect(browserScriptLauncher, contains('bridge_action="tab_switch"'));
+    expect(browserScriptLauncher, contains('bridge_action="tab_close"'));
+    expect(browserScriptLauncher, contains('bridge_action="set_ua"'));
     expect(browserScriptLauncher, contains('bridge_action="script_stage"'));
     expect(browserScriptLauncher, contains('bridge_action="script_run"'));
     expect(browserScriptLauncher, contains('const ACTION_ALIASES = {'));
     expect(browserScriptLauncher, contains('browser_type: "type"'));
+    expect(browserScriptLauncher, contains('browser_tab_list: "tab_list"'));
+    expect(browserScriptLauncher, contains('browser_tab_new: "tab_new"'));
+    expect(browserScriptLauncher, contains('browser_tab_switch: "tab_switch"'));
+    expect(browserScriptLauncher, contains('browser_tab_close: "tab_close"'));
+    expect(browserScriptLauncher, contains('browser_set_ua: "set_ua"'));
     expect(browserScriptLauncher, contains('OPENCLAW_BROWSER_BRIDGE_TOKEN'));
 
     final browserSkill =
@@ -149,6 +176,9 @@ void main() {
     expect(browserSkill, contains('browser_scroll'));
     expect(browserSkill, contains('browser_press_key'));
     expect(browserSkill, contains('browser_select_option'));
+    expect(browserSkill, contains('browser_tab_list'));
+    expect(browserSkill, contains('browser_tab_new'));
+    expect(browserSkill, contains('browser_set_ua'));
     expect(browserSkill, contains('browser_script_list'));
     expect(browserSkill, contains('browser_script_stage'));
     expect(browserSkill, contains('browser_script_save'));

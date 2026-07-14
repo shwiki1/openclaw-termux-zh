@@ -1518,14 +1518,14 @@ const TOOL_DEFS = [
   {
     name: "browser_control",
     description:
-      "Stable single-entry browser automation tool. Use this when fine-grained browser tools are not exposed reliably; pass action such as open, list_interactables, type, click, capture_snapshot, or a browser_* tool name, plus payload.",
+      "Stable single-entry browser automation tool. Use this when fine-grained browser tools are not exposed reliably; pass action such as open, tab_new, set_ua, list_interactables, type, click, capture_snapshot, or a browser_* tool name, plus payload.",
     inputSchema: {
       type: "object",
       properties: {
         action: {
           type: "string",
           description:
-            "Bridge action or browser_* tool name, for example open, browser_open, list_interactables, browser_type, click, or capture_snapshot.",
+            "Bridge action or browser_* tool name, for example open, browser_open, tab_new, browser_set_ua, list_interactables, browser_type, click, or capture_snapshot.",
         },
         tool: {
           type: "string",
@@ -1585,6 +1585,78 @@ const TOOL_DEFS = [
     inputSchema: {
       type: "object",
       properties: {},
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "browser_tab_list",
+    description:
+      "List all in-app browser tabs and the active tab. Use this before switching tabs.",
+    inputSchema: {
+      type: "object",
+      properties: {},
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "browser_tab_new",
+    description:
+      "Open a new in-app browser tab. Optionally provide a URL to load in the new tab.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        url: {
+          type: "string",
+          description: "Optional URL to open in the new tab.",
+        },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "browser_tab_switch",
+    description: "Switch the active in-app browser tab by numeric tab id.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: {
+          type: "integer",
+          description: "Browser tab id returned by browser_tab_list.",
+        },
+      },
+      required: ["id"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "browser_tab_close",
+    description:
+      "Close a browser tab by numeric tab id. If id is omitted, closes the active tab.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: {
+          type: "integer",
+          description: "Optional browser tab id returned by browser_tab_list.",
+        },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "browser_set_ua",
+    description:
+      "Switch the active browser tab user agent and reload the current page. Use desktop when a website shows a mobile layout unexpectedly.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        mode: {
+          type: "string",
+          enum: ["desktop", "mobile"],
+          description: "User-agent mode for the active tab.",
+        },
+      },
+      required: ["mode"],
       additionalProperties: false,
     },
   },
@@ -2071,7 +2143,7 @@ const TOOL_DEFS = [
   {
     name: "browser_get_state",
     description:
-      "Return the current browser state including title, URL, loading flag, and the last bridge error.",
+      "Return the current browser state including title, URL, tabs, active tab id, user-agent mode, loading flag, and the last bridge error.",
     inputSchema: {
       type: "object",
       properties: {},
@@ -2086,6 +2158,11 @@ const TOOL_TO_ACTION = {
   browser_back: "back",
   browser_forward: "forward",
   browser_reload: "reload",
+  browser_tab_list: "tab_list",
+  browser_tab_new: "tab_new",
+  browser_tab_switch: "tab_switch",
+  browser_tab_close: "tab_close",
+  browser_set_ua: "set_ua",
   browser_click: "click",
   browser_type: "type",
   browser_wait_for_text: "wait_for_text",
@@ -2231,7 +2308,7 @@ async function onRequest(message) {
       },
       serverInfo: {
         name: "openclaw-browser",
-        version: "1.4.0",
+        version: "1.5.0",
       },
       instructions:
         "Use the OpenClaw browser tools for deterministic page navigation, scrolling, clicking, typing, selection, waiting, extraction, and reusable saved browser scripts inside the in-app browser panel. If individual tools are not exposed, use browser_control with action and payload. After completing a reusable workflow, update the script assistant pending-save draft with browser_script_stage.",
@@ -2427,6 +2504,11 @@ Usage:
   browser-script call <action-or-browser_tool> [json-payload]
   browser-script control <action-or-browser_tool> [json-payload]
   browser-script open <url>
+  browser-script tabs
+  browser-script new-tab [url]
+  browser-script switch-tab <tab-id>
+  browser-script close-tab [tab-id]
+  browser-script ua <desktop|mobile>
   browser-script interactables [filter] [maxItems]
   browser-script snapshot [selector] [maxLength]
   browser-script click <selector>
@@ -2479,6 +2561,32 @@ case "\$command_name" in
     [ -n "\$url" ] || { usage >&2; exit 2; }
     bridge_action="open"
     payload=\$(node -e 'process.stdout.write(JSON.stringify({ url: process.argv[1] || "" }))' "\$url")
+    ;;
+  tabs|tab-list)
+    bridge_action="tab_list"
+    payload="{}"
+    ;;
+  new-tab|tab-new)
+    url="\${1:-}"
+    bridge_action="tab_new"
+    payload=\$(node -e 'const payload = {}; if (process.argv[1]) payload.url = process.argv[1]; process.stdout.write(JSON.stringify(payload));' "\$url")
+    ;;
+  switch-tab|tab-switch)
+    tab_id="\${1:-}"
+    [ -n "\$tab_id" ] || { usage >&2; exit 2; }
+    bridge_action="tab_switch"
+    payload=\$(node -e 'const id = Number.parseInt(process.argv[1] || "", 10); process.stdout.write(JSON.stringify({ id: Number.isFinite(id) ? id : 0 }))' "\$tab_id")
+    ;;
+  close-tab|tab-close)
+    tab_id="\${1:-}"
+    bridge_action="tab_close"
+    payload=\$(node -e 'const id = Number.parseInt(process.argv[1] || "", 10); const payload = {}; if (Number.isFinite(id)) payload.id = id; process.stdout.write(JSON.stringify(payload));' "\$tab_id")
+    ;;
+  ua|user-agent|set-ua)
+    mode="\${1:-}"
+    [ -n "\$mode" ] || { usage >&2; exit 2; }
+    bridge_action="set_ua"
+    payload=\$(node -e 'process.stdout.write(JSON.stringify({ mode: process.argv[1] || "" }))' "\$mode")
     ;;
   interactables|list-interactables)
     filter="\${1:-}"
@@ -2588,6 +2696,11 @@ const ACTION_ALIASES = {
   browser_back: "back",
   browser_forward: "forward",
   browser_reload: "reload",
+  browser_tab_list: "tab_list",
+  browser_tab_new: "tab_new",
+  browser_tab_switch: "tab_switch",
+  browser_tab_close: "tab_close",
+  browser_set_ua: "set_ua",
   browser_click: "click",
   browser_type: "type",
   browser_wait_for_text: "wait_for_text",
@@ -2723,18 +2836,22 @@ Rules:
 17. Prefer explicit reusable steps in `browser_script_stage`. If the exact steps are already in the recent action log, staging without steps is acceptable, but still provide the filename and purpose description.
 18. Saved scripts replay deterministic browser actions. Do not save secrets in descriptions, filenames, or variable names; use `{{name}}` placeholders for values that should change per run.
 19. For login, API-key creation, payment, posting, deletion, or other sensitive flows, stage reusable navigation and form structure only; replace passwords, tokens, one-time codes, and user-specific values with placeholders.
+20. Use `browser_tab_list` before switching if you need to preserve several open pages during a long workflow.
+21. Use `browser_tab_new` for starting an unrelated page, `browser_tab_switch` for returning to a saved context, and `browser_tab_close` only after the page state is no longer needed.
+22. Switch to `browser_set_ua` with `desktop` when a site falls back to a mobile layout despite the browser being in desktop mode; reload the current tab after switching.
 
 Typical flow:
 1. `browser_open`
 2. `browser_wait_for_text` or `browser_wait_for_selector`
 3. `browser_list_interactables`
-4. `browser_scroll` if the needed element is not visible
-5. `browser_highlight`
-6. `browser_click`, `browser_type`, `browser_select_option`, or `browser_press_key`
-7. `browser_capture_snapshot` or `browser_extract`
-8. `browser_script_stage` with an auto filename, purpose description, and reusable steps so the user can save it from the script assistant.
-9. Fall back to `browser_eval` only if the built-in actions are insufficient.
-10. If any listed tool is missing from the callable tools, run the same step through `browser_control`.
+4. `browser_tab_list` or `browser_tab_new` when the task spans multiple pages
+5. `browser_scroll` if the needed element is not visible
+6. `browser_highlight`
+7. `browser_click`, `browser_type`, `browser_select_option`, or `browser_press_key`
+8. `browser_capture_snapshot` or `browser_extract`
+9. `browser_script_stage` with an auto filename, purpose description, and reusable steps so the user can save it from the script assistant.
+10. Fall back to `browser_eval` only if the built-in actions are insufficient.
+11. If any listed tool is missing from the callable tools, run the same step through `browser_control`.
 
 Script flow:
 1. `browser_script_list` with a short filter from the user request.

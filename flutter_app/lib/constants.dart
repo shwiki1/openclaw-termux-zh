@@ -3,10 +3,9 @@ class AppConstants {
   static const String version =
       String.fromEnvironment('APP_VERSION_NAME', defaultValue: '2.0.50');
   static const String buildNumber =
-      String.fromEnvironment('APP_VERSION_CODE', defaultValue: '140');
+      String.fromEnvironment('APP_VERSION_CODE', defaultValue: '141');
   static const String fullVersion = '$version+$buildNumber';
-  static const String displayVersion =
-      buildNumber == '1' ? version : fullVersion;
+  static const String displayVersion = fullVersion;
   static const String packageName = 'com.agent.cyx';
 
   /// Matches ANSI escape sequences (e.g. color codes in terminal output).
@@ -53,7 +52,7 @@ class AppConstants {
 
   // Node.js binary tarball is downloaded by Flutter and extracted by Java.
   // Bypasses curl/gpg/NodeSource which fail inside proot.
-  static const String nodeVersion = '24.15.0';
+  static const String nodeVersion = '24.14.1';
   static const String nodeArmv7Version = '22.22.2';
   static const String openClawEstimatedSize = '~95 MB';
   static const String nodePrimaryMirrorBaseUrl =

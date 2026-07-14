@@ -1,6 +1,6 @@
 # 次元虾 — 源码结构文档
 
-> 版本：v2.0.50+140 | 协议：MIT | 更新日期：2026-07-13
+> 版本：v2.0.50+141 | 协议：MIT | 更新日期：2026-07-14
 >
 > 本文档用于二次开发前的源码理解，按"从外到内"的方式组织：先看项目全貌，再逐层深入。本文已按当前工作区源码重新核对。
 
@@ -75,7 +75,7 @@
 | App 框架 | Flutter | SDK >=3.2.0 |
 | UI 组件库 | Material Design 3 | `useMaterial3: true` |
 | 状态管理 | Provider | `provider: ^6.1.0` |
-| 终端模拟 | xterm + flutter_pty | `xterm: ^4.0.0` |
+| 终端模拟 | Android 原生 Termux `TerminalView` + Flutter `PlatformView` | `NativeTerminalView` |
 | Web 面板 | webview_flutter | `^4.4.0` |
 | 网络请求 | dio + http | `dio: ^5.4.0` |
 | WebSocket | web_socket_channel | `^3.0.0` |

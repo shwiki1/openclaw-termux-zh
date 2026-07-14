@@ -24,6 +24,24 @@ abstract class BrowserAutomationDelegate {
 
   Future<Map<String, dynamic>> reload();
 
+  Future<Map<String, dynamic>> listTabs();
+
+  Future<Map<String, dynamic>> newTab({
+    String? url,
+  });
+
+  Future<Map<String, dynamic>> switchTab({
+    required int id,
+  });
+
+  Future<Map<String, dynamic>> closeTab({
+    int? id,
+  });
+
+  Future<Map<String, dynamic>> setUserAgent({
+    required String mode,
+  });
+
   Future<Map<String, dynamic>> click({
     required String selector,
   });
@@ -162,6 +180,11 @@ class BrowserAutomationService extends ChangeNotifier {
     'browser_back': 'back',
     'browser_forward': 'forward',
     'browser_reload': 'reload',
+    'browser_tab_list': 'tab_list',
+    'browser_tab_new': 'tab_new',
+    'browser_tab_switch': 'tab_switch',
+    'browser_tab_close': 'tab_close',
+    'browser_set_ua': 'set_ua',
     'browser_click': 'click',
     'browser_type': 'type',
     'browser_wait_for_text': 'wait_for_text',
@@ -199,6 +222,10 @@ class BrowserAutomationService extends ChangeNotifier {
   DateTime? _lastToolCallAt;
   int _panelRequestNonce = 0;
   String _pendingOpenUrl = '';
+  int _activeTabId = 0;
+  String _userAgentMode = 'desktop';
+  String _userAgentLabel = '电脑';
+  List<Map<String, dynamic>> _tabs = const <Map<String, dynamic>>[];
   Completer<void>? _delegateReadyCompleter;
   final List<BrowserActionLogEntry> _recentActions = [];
   BrowserAutomationScriptDraft? _pendingScriptDraft;
@@ -260,6 +287,10 @@ class BrowserAutomationService extends ChangeNotifier {
     String? title,
     bool? loading,
     String? error,
+    List<Map<String, dynamic>>? tabs,
+    int? activeTabId,
+    String? userAgentMode,
+    String? userAgentLabel,
   }) {
     var changed = false;
     if (url != null && url != _currentUrl) {
@@ -276,6 +307,24 @@ class BrowserAutomationService extends ChangeNotifier {
     }
     if (error != null && error != _lastError) {
       _lastError = error;
+      changed = true;
+    }
+    if (tabs != null) {
+      _tabs = List<Map<String, dynamic>>.unmodifiable(
+        tabs.map((tab) => Map<String, dynamic>.from(tab)),
+      );
+      changed = true;
+    }
+    if (activeTabId != null && activeTabId != _activeTabId) {
+      _activeTabId = activeTabId;
+      changed = true;
+    }
+    if (userAgentMode != null && userAgentMode != _userAgentMode) {
+      _userAgentMode = userAgentMode;
+      changed = true;
+    }
+    if (userAgentLabel != null && userAgentLabel != _userAgentLabel) {
+      _userAgentLabel = userAgentLabel;
       changed = true;
     }
     final remembered = _rememberSuccessfulUrl(
@@ -615,6 +664,26 @@ class BrowserAutomationService extends ChangeNotifier {
         return delegate.forward();
       case 'reload':
         return delegate.reload();
+      case 'tab_list':
+        return delegate.listTabs();
+      case 'tab_new':
+        return delegate.newTab(
+          url: _nullableString(payload['url']),
+        );
+      case 'tab_switch':
+        return delegate.switchTab(
+          id: _int(payload['id'] ?? payload['tabId'], fallback: 0),
+        );
+      case 'tab_close':
+        return delegate.closeTab(
+          id: payload.containsKey('id') || payload.containsKey('tabId')
+              ? _int(payload['id'] ?? payload['tabId'], fallback: 0)
+              : null,
+        );
+      case 'set_ua':
+        return delegate.setUserAgent(
+          mode: _string(payload['mode']),
+        );
       case 'click':
         return delegate.click(
           selector: _string(payload['selector']),
@@ -1159,6 +1228,27 @@ class BrowserAutomationService extends ChangeNotifier {
     if (state.containsKey('error')) {
       _lastError = state['error']?.toString().trim() ?? '';
     }
+    final tabs = state['tabs'];
+    if (tabs is List) {
+      _tabs = List<Map<String, dynamic>>.unmodifiable(
+        tabs.whereType<Map>().map(
+              (tab) => tab.map(
+                (key, value) => MapEntry(key.toString(), value),
+              ),
+            ),
+      );
+    }
+    if (state.containsKey('activeTabId')) {
+      _activeTabId = _int(state['activeTabId'], fallback: _activeTabId);
+    }
+    final userAgentMode = _nullableString(state['userAgentMode']);
+    if (userAgentMode != null) {
+      _userAgentMode = userAgentMode;
+    }
+    final userAgentLabel = _nullableString(state['userAgentLabel']);
+    if (userAgentLabel != null) {
+      _userAgentLabel = userAgentLabel;
+    }
     _rememberSuccessfulUrl();
   }
 
@@ -1170,6 +1260,10 @@ class BrowserAutomationService extends ChangeNotifier {
       'url': _currentUrl,
       'title': _currentTitle,
       'lastSuccessfulUrl': _lastSuccessfulUrl,
+      'tabs': _tabs,
+      'activeTabId': _activeTabId,
+      'userAgentMode': _userAgentMode,
+      'userAgentLabel': _userAgentLabel,
       'loading': _loading,
       'lastError': _lastError,
       'activeToolCalls': _activeToolCalls,
