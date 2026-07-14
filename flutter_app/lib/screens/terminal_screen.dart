@@ -4,12 +4,10 @@ import 'package:flutter/material.dart';
 
 import '../services/browser_automation_service.dart';
 import '../services/native_bridge.dart';
-import '../services/terminal_input_controller.dart';
 import '../services/terminal_service.dart';
 import '../widgets/native_terminal_view.dart';
 import '../widgets/responsive_layout.dart';
 import '../widgets/terminal_browser_panel.dart';
-import '../widgets/terminal_toolbar.dart';
 
 class TerminalScreen extends StatefulWidget {
   final String sessionId;
@@ -36,9 +34,7 @@ class _TerminalScreenState extends State<TerminalScreen> {
   static final Map<String, int> _savedActiveIndexes = {};
 
   var _terminalKey = GlobalKey<NativeTerminalViewState>();
-  final _terminalViewportKey = GlobalKey();
   final _browserService = BrowserAutomationService.instance;
-  late final TerminalInputController _terminalInput;
   late Future<_NativeTerminalConfig> _configFuture;
   late final List<_TerminalSessionTab> _sessions;
   var _activeIndex = 0;
@@ -47,9 +43,6 @@ class _TerminalScreenState extends State<TerminalScreen> {
   var _browserPanelOpen = false;
   var _browserPanelCreated = false;
   var _lastBrowserPanelRequestNonce = 0;
-  var _imeToolbarLift = 0.0;
-  double? _terminalViewportBaselineTop;
-  var _imeLiftUpdateScheduled = false;
 
   _TerminalSessionTab get _activeSession => _sessions[_activeIndex];
 
@@ -80,11 +73,6 @@ class _TerminalScreenState extends State<TerminalScreen> {
     final savedIndex = _savedActiveIndexes[widget.sessionId] ?? 0;
     _activeIndex = savedIndex.clamp(0, _sessions.length - 1).toInt();
     _restartOnCreate = widget.restartOnOpen;
-    _terminalInput = TerminalInputController(
-      onWrite: (bytes) {
-        _terminalKey.currentState?.writeBytes(bytes);
-      },
-    );
     _configFuture = _loadConfig();
   }
 
@@ -111,7 +99,6 @@ class _TerminalScreenState extends State<TerminalScreen> {
     if (_isCodexSession) {
       _browserService.removeListener(_handleBrowserAutomationUpdate);
     }
-    _terminalInput.dispose();
     super.dispose();
   }
 
@@ -139,57 +126,6 @@ class _TerminalScreenState extends State<TerminalScreen> {
   void _persistSessionTabs() {
     _savedSessions[widget.sessionId] = List<_TerminalSessionTab>.of(_sessions);
     _savedActiveIndexes[widget.sessionId] = _activeIndex;
-  }
-
-  void _scheduleImeLiftUpdate() {
-    if (_imeLiftUpdateScheduled) {
-      return;
-    }
-    _imeLiftUpdateScheduled = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _imeLiftUpdateScheduled = false;
-      _updateImeLift();
-    });
-  }
-
-  void _updateImeLift() {
-    if (!mounted) {
-      return;
-    }
-    final mediaQuery = MediaQuery.maybeOf(context);
-    final renderObject = _terminalViewportKey.currentContext?.findRenderObject();
-    if (mediaQuery == null || renderObject is! RenderBox || !renderObject.hasSize) {
-      return;
-    }
-
-    final keyboardInset = mediaQuery.viewInsets.bottom;
-    final bottomSystemInset = mediaQuery.viewPadding.bottom;
-    final viewportTop = renderObject.localToGlobal(Offset.zero).dy;
-
-    if (keyboardInset <= bottomSystemInset + 0.5) {
-      _terminalViewportBaselineTop = viewportTop;
-      if (_imeToolbarLift != 0) {
-        setState(() {
-          _imeToolbarLift = 0;
-        });
-      }
-      return;
-    }
-
-    final baselineTop = _terminalViewportBaselineTop ?? viewportTop;
-    final systemPanLift = (baselineTop - viewportTop).clamp(0.0, keyboardInset);
-    final desiredToolbarLift =
-        (keyboardInset - bottomSystemInset).clamp(0.0, keyboardInset);
-    final additionalToolbarLift = (
-      desiredToolbarLift - systemPanLift
-    ).clamp(0.0, desiredToolbarLift);
-
-    if ((_imeToolbarLift - additionalToolbarLift).abs() < 1) {
-      return;
-    }
-    setState(() {
-      _imeToolbarLift = additionalToolbarLift;
-    });
   }
 
   void _restart() {
@@ -505,57 +441,28 @@ class _TerminalScreenState extends State<TerminalScreen> {
   }
 
   Widget _buildTerminal(_NativeTerminalConfig config) {
-    final mediaQuery = MediaQuery.of(context);
-    final screenWidth = mediaQuery.size.width;
-    final bottomSystemInset = mediaQuery.viewPadding.bottom;
-    final toolbarReservedHeight =
-        TerminalToolbar.toolbarHeight + bottomSystemInset;
+    final screenWidth = MediaQuery.of(context).size.width;
     final compactCodexBrowser = _isCodexSession && screenWidth < 960;
     final pauseTerminalRendering = compactCodexBrowser && _browserPanelOpen;
-    _scheduleImeLiftUpdate();
 
     final terminal = Column(
       children: [
         if (_isCodexSession) _buildBrowserStatusBanner(screenWidth),
         Expanded(
-          child: Stack(
-            key: _terminalViewportKey,
-            children: [
-              Positioned.fill(
-                child: Padding(
-                  // Reserve a stable bottom lane for the Flutter toolbar so
-                  // the native terminal view does not relayout with each IME
-                  // transition.
-                  padding: EdgeInsets.only(bottom: toolbarReservedHeight),
-                  child: NativeTerminalView(
-                    key: _terminalKey,
-                    sessionId: _activeSession.id,
-                    executable: config.executable,
-                    arguments: config.arguments,
-                    environment: config.environment,
-                    restart: _restartOnCreate,
-                    keepAlive: true,
-                    renderingPaused: pauseTerminalRendering,
-                    transcriptRows: _isCodexSession
-                        ? _codexTerminalTranscriptRows
-                        : _defaultTerminalTranscriptRows,
-                    fontSize: 18,
-                  ),
-                ),
-              ),
-              AnimatedPositioned(
-                duration: const Duration(milliseconds: 180),
-                curve: Curves.easeOutCubic,
-                left: 0,
-                right: 0,
-                bottom: _imeToolbarLift,
-                child: TerminalToolbar(
-                  onWrite: _terminalInput.writeBytes,
-                  ctrlNotifier: _terminalInput.ctrlNotifier,
-                  altNotifier: _terminalInput.altNotifier,
-                ),
-              ),
-            ],
+          child: NativeTerminalView(
+            key: _terminalKey,
+            sessionId: _activeSession.id,
+            executable: config.executable,
+            arguments: config.arguments,
+            environment: config.environment,
+            restart: _restartOnCreate,
+            keepAlive: true,
+            renderingPaused: pauseTerminalRendering,
+            useNativeToolbar: true,
+            transcriptRows: _isCodexSession
+                ? _codexTerminalTranscriptRows
+                : _defaultTerminalTranscriptRows,
+            fontSize: 18,
           ),
         ),
       ],

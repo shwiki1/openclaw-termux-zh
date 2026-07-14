@@ -15,6 +15,7 @@ class NativeTerminalView extends StatefulWidget {
   final bool keepAlive;
   final bool emitOutput;
   final bool renderingPaused;
+  final bool useNativeToolbar;
   final int transcriptRows;
   final int fontSize;
   final ValueChanged<String>? onOutput;
@@ -32,6 +33,7 @@ class NativeTerminalView extends StatefulWidget {
     this.keepAlive = false,
     this.emitOutput = false,
     this.renderingPaused = false,
+    this.useNativeToolbar = false,
     this.transcriptRows = 3000,
     this.fontSize = 18,
     this.onOutput,
@@ -117,6 +119,7 @@ class NativeTerminalViewState extends State<NativeTerminalView> {
         'keepAlive': widget.keepAlive,
         'emitOutput': widget.emitOutput,
         'renderingPaused': widget.renderingPaused,
+        'useNativeToolbar': widget.useNativeToolbar,
         'fontSize': widget.fontSize,
         'transcriptRows': widget.transcriptRows,
       },

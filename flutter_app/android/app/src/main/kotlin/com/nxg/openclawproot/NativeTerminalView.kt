@@ -6,12 +6,17 @@ import android.content.Context
 import android.graphics.Color
 import android.graphics.Rect
 import android.graphics.Typeface
+import android.graphics.drawable.GradientDrawable
 import android.os.SystemClock
+import android.util.TypedValue
+import android.view.Gravity
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
 import android.view.inputmethod.InputMethodManager
-import android.widget.FrameLayout
+import android.widget.HorizontalScrollView
+import android.widget.LinearLayout
+import android.widget.TextView
 import com.termux.terminal.TerminalEmulator
 import com.termux.terminal.TerminalSession
 import com.termux.terminal.TerminalSessionClient
@@ -48,14 +53,19 @@ class NativeTerminalPlatformView(
     viewId: Int,
     private val params: Map<*, *>,
 ) : PlatformView, MethodChannel.MethodCallHandler {
-    private val container = FrameLayout(context)
+    private val container = LinearLayout(context)
     private val terminalView = TerminalView(context, null)
     private val inputStripRect = Rect()
     private val containerInputStripRect = Rect()
     private val channel = MethodChannel(messenger, "com.agent.cyx/native_terminal_$viewId")
     private val sessionId = params.stringValue("sessionId") ?: "native-shell"
     private val keepAlive = params.booleanValue("keepAlive", false)
+    private val useNativeToolbar = params.booleanValue("useNativeToolbar", false)
     private var fontSize = params.intValue("fontSize", 18).coerceIn(MIN_FONT_SIZE, MAX_FONT_SIZE)
+    private var ctrlModifierActive = false
+    private var altModifierActive = false
+    private var ctrlButtonView: TextView? = null
+    private var altButtonView: TextView? = null
     private val client = NativeTerminalClient(
         appContext,
         terminalView,
@@ -66,9 +76,11 @@ class NativeTerminalPlatformView(
         ::setFontSize,
         ::focusAndShowKeyboard,
     )
+    private val toolbarStrip = if (useNativeToolbar) createToolbarStrip(context) else null
     private var holder: NativeTerminalSessionHolder? = null
 
     init {
+        container.orientation = LinearLayout.VERTICAL
         container.setBackgroundColor(Color.BLACK)
         terminalView.setTerminalViewClient(client)
         terminalView.setTextSize(fontSize)
@@ -82,11 +94,21 @@ class NativeTerminalPlatformView(
         }
         container.addView(
             terminalView,
-            FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                0,
+                1f,
             ),
         )
+        toolbarStrip?.let { toolbar ->
+            container.addView(
+                toolbar,
+                LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                ),
+            )
+        }
         channel.setMethodCallHandler(this)
         attachOrCreateSession(restart = params.booleanValue("restart", false))
         terminalView.post {
@@ -244,12 +266,212 @@ class NativeTerminalPlatformView(
         terminalView.updateSize()
     }
 
+    private fun createToolbarStrip(context: Context): HorizontalScrollView {
+        val scrollView = HorizontalScrollView(context).apply {
+            isHorizontalScrollBarEnabled = false
+            overScrollMode = View.OVER_SCROLL_NEVER
+            setBackgroundColor(Color.BLACK)
+        }
+        val row = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(dpToPx(4), dpToPx(4), dpToPx(4), dpToPx(4))
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        scrollView.setOnApplyWindowInsetsListener { _, insets ->
+            row.setPadding(
+                dpToPx(4),
+                dpToPx(4),
+                dpToPx(4),
+                dpToPx(4) + insets.systemWindowInsetBottom,
+            )
+            insets
+        }
+        scrollView.addView(
+            row,
+            HorizontalScrollView.LayoutParams(
+                HorizontalScrollView.LayoutParams.WRAP_CONTENT,
+                HorizontalScrollView.LayoutParams.WRAP_CONTENT,
+            ),
+        )
+        scrollView.requestApplyInsets()
+
+        addToolbarButton(row, "ESC") {
+            sendToolbarInput("\u001b")
+        }
+        ctrlButtonView = addToolbarButton(row, "CTRL") {
+            toggleCtrlModifier()
+        }
+        altButtonView = addToolbarButton(row, "ALT") {
+            toggleAltModifier()
+        }
+        addToolbarButton(row, "TAB") {
+            sendToolbarInput("\t")
+        }
+        addToolbarButton(row, "ENTER") {
+            sendToolbarInput("\r")
+        }
+        addToolbarSpacer(row)
+        addToolbarButton(row, "UP") {
+            sendToolbarInput("\u001b[A")
+        }
+        addToolbarButton(row, "DN") {
+            sendToolbarInput("\u001b[B")
+        }
+        addToolbarButton(row, "LT") {
+            sendToolbarInput("\u001b[D")
+        }
+        addToolbarButton(row, "RT") {
+            sendToolbarInput("\u001b[C")
+        }
+        addToolbarSpacer(row)
+        addToolbarButton(row, "HOME") {
+            sendToolbarInput("\u001b[H")
+        }
+        addToolbarButton(row, "END") {
+            sendToolbarInput("\u001b[F")
+        }
+        addToolbarButton(row, "PGUP") {
+            sendToolbarInput("\u001b[5~")
+        }
+        addToolbarButton(row, "PGDN") {
+            sendToolbarInput("\u001b[6~")
+        }
+        addToolbarSpacer(row)
+        addToolbarButton(row, "-") {
+            sendToolbarInput("-")
+        }
+        addToolbarButton(row, "/") {
+            sendToolbarInput("/")
+        }
+        addToolbarButton(row, "|") {
+            sendToolbarInput("|")
+        }
+        addToolbarButton(row, "~") {
+            sendToolbarInput("~")
+        }
+        addToolbarButton(row, "_") {
+            sendToolbarInput("_")
+        }
+        updateModifierButtons()
+        return scrollView
+    }
+
+    private fun addToolbarButton(
+        row: LinearLayout,
+        label: String,
+        onClick: () -> Unit,
+    ): TextView {
+        val button = TextView(row.context).apply {
+            text = label
+            gravity = Gravity.CENTER
+            setTextColor(Color.WHITE)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+            typeface = Typeface.MONOSPACE
+            minimumWidth = dpToPx(36)
+            minimumHeight = dpToPx(34)
+            setPadding(dpToPx(6), dpToPx(4), dpToPx(6), dpToPx(4))
+            isClickable = true
+            isFocusable = false
+            isFocusableInTouchMode = false
+            background = toolbarButtonBackground(active = false)
+            setOnClickListener {
+                onClick()
+            }
+        }
+        row.addView(
+            button,
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            ).apply {
+                marginStart = dpToPx(2)
+                marginEnd = dpToPx(2)
+            },
+        )
+        return button
+    }
+
+    private fun addToolbarSpacer(row: LinearLayout) {
+        row.addView(
+            View(row.context),
+            LinearLayout.LayoutParams(dpToPx(4), 1),
+        )
+    }
+
+    private fun toolbarButtonBackground(active: Boolean): GradientDrawable {
+        return GradientDrawable().apply {
+            cornerRadius = dpToPx(6).toFloat()
+            setColor(if (active) TOOLBAR_ACTIVE_COLOR else TOOLBAR_BUTTON_COLOR)
+        }
+    }
+
+    private fun updateModifierButtons() {
+        ctrlButtonView?.background = toolbarButtonBackground(ctrlModifierActive)
+        altButtonView?.background = toolbarButtonBackground(altModifierActive)
+    }
+
+    private fun toggleCtrlModifier() {
+        ctrlModifierActive = !ctrlModifierActive
+        if (ctrlModifierActive) {
+            altModifierActive = false
+        }
+        updateModifierButtons()
+        focusAndShowKeyboard()
+    }
+
+    private fun toggleAltModifier() {
+        altModifierActive = !altModifierActive
+        if (altModifierActive) {
+            ctrlModifierActive = false
+        }
+        updateModifierButtons()
+        focusAndShowKeyboard()
+    }
+
+    private fun sendToolbarInput(data: String) {
+        val session = holder?.session ?: run {
+            focusAndShowKeyboard()
+            return
+        }
+
+        if (ctrlModifierActive) {
+            ctrlModifierActive = false
+            updateModifierButtons()
+            if (data.length == 1) {
+                val code = data.lowercase()[0].code
+                if (code in 97..122) {
+                    val value = byteArrayOf((code - 96).toByte())
+                    session.write(value, 0, value.size)
+                    focusAndShowKeyboard()
+                    return
+                }
+            }
+            session.write(CTRL_SEQUENCE_MAP[data] ?: data)
+            focusAndShowKeyboard()
+            return
+        }
+
+        if (altModifierActive) {
+            altModifierActive = false
+            updateModifierButtons()
+            session.write("\u001b$data")
+            focusAndShowKeyboard()
+            return
+        }
+
+        session.write(data)
+        focusAndShowKeyboard()
+    }
+
     private fun visibleInputStripHeightPx(): Int {
         val density = container.resources.displayMetrics.density
         val minimumStripHeight = (72f * density).roundToInt()
         val estimatedPromptRowsHeight = (fontSize * 5.0f).roundToInt()
         return maxOf(minimumStripHeight, estimatedPromptRowsHeight)
     }
+
+    private fun dpToPx(dp: Int): Int =
+        (dp * container.resources.displayMetrics.density).roundToInt()
 
     private fun requestInputStripVisible() {
         if (terminalView.width <= 0 || terminalView.height <= 0) {
@@ -265,6 +487,9 @@ class NativeTerminalPlatformView(
         terminalView.requestRectangleOnScreen(inputStripRect, true)
         containerInputStripRect.set(inputStripRect)
         container.offsetDescendantRectToMyCoords(terminalView, containerInputStripRect)
+        if (useNativeToolbar) {
+            containerInputStripRect.bottom = container.height
+        }
         container.requestRectangleOnScreen(containerInputStripRect, true)
     }
 
@@ -274,6 +499,18 @@ class NativeTerminalPlatformView(
         private const val MIN_TRANSCRIPT_ROWS = 400
         private const val MAX_TRANSCRIPT_ROWS = 3000
         private const val DEFAULT_TRANSCRIPT_ROWS = 3000
+        private const val TOOLBAR_BUTTON_COLOR = 0xFF161616.toInt()
+        private const val TOOLBAR_ACTIVE_COLOR = 0xFF00C853.toInt()
+        private val CTRL_SEQUENCE_MAP = mapOf(
+            "\u001b[A" to "\u001b[1;5A",
+            "\u001b[B" to "\u001b[1;5B",
+            "\u001b[D" to "\u001b[1;5D",
+            "\u001b[C" to "\u001b[1;5C",
+            "\u001b[H" to "\u001b[1;5H",
+            "\u001b[F" to "\u001b[1;5F",
+            "\u001b[5~" to "\u001b[5;5~",
+            "\u001b[6~" to "\u001b[6;5~",
+        )
         private val sessions = mutableMapOf<String, NativeTerminalSessionHolder>()
     }
 }
