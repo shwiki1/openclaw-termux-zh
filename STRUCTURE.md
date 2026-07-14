@@ -1,6 +1,6 @@
 # 次元虾 — 源码结构文档
 
-> 版本：v2.0.50+141 | 协议：MIT | 更新日期：2026-07-14
+> 版本：v2.0.50+142 | 协议：MIT | 更新日期：2026-07-14
 >
 > 本文档用于二次开发前的源码理解，按"从外到内"的方式组织：先看项目全貌，再逐层深入。本文已按当前工作区源码重新核对。
 
@@ -85,15 +85,15 @@
 | 前端渲染 | flutter_markdown_plus | `^1.0.7` |
 | Android 原生 | Kotlin | |
 | 隔离环境 | PRoot | 无需 Root 的 chroot 替代 |
-| 运行时 | Node.js >= 22.19.0 | 32/64 位 ARM + x86_64；按 `openclaw@latest` engines 校验 |
+| 运行时 | Node.js 22 >= 22.22.3 或 Node.js 24 >= 24.15.0 | 32/64 位 ARM + x86_64；按 `openclaw@latest` engines 校验 |
 | CLI 引擎 | OpenClaw latest stable | 多渠道 AI 网关，推荐版本跟随 npm latest 稳定版 |
 | Android 包名 | `com.agent.cyx` | `applicationId`、`namespace`、Kotlin 包声明和 MethodChannel 均使用该包名 |
 
 当前版本默认运行时策略：
 
-- `arm64` / `x86_64`：Node.js `24.14.1`。
-- `armeabi-v7a` / `armhf`：Node.js `22.22.2`，用于避开 Node.js 24 不再提供官方 `linux-armv7l` 包的问题。
-- `openclaw@latest` 当前为 `2026.6.11`，要求 Node.js `>=22.19.0`，以上两个 Node.js 版本均满足。
+- `arm64` / `x86_64`：Node.js `24.15.0`。
+- `armeabi-v7a` / `armhf`：Node.js `22.22.3`，用于避开 Node.js 24 不再提供官方 `linux-armv7l` 包的问题。
+- `openclaw@latest` 当前要求 Node.js `>=22.22.3 <23`、`>=24.15.0 <25` 或更新的受支持主版本，以上两个 Node.js 版本均满足。
 - APK 不再内置大体积 `assets/bootstrap/` 运行时包，初始化时从默认资源、用户填写 URL 或本地压缩包导入。
 - App 品牌当前为“次元虾”，Android `applicationId` / `namespace` / Kotlin 包声明 / MethodChannel 包名为 `com.agent.cyx`。
 

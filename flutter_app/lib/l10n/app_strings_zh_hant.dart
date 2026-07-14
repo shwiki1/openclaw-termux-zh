@@ -243,7 +243,7 @@ const Map<String, String> appStringsZhHant = {
   'packageCpolarRecentLogsTitle': '\u6700\u8fd1\u65e5\u8a8c',
   'setupWizardTitle': '開始配置 OpenClaw',
   'setupWizardIntroIdle':
-      '這會將 Ubuntu 24.04.3、Node.js 24.14.1（arm64/x86_64，armv7 使用 22.22.2）和 OpenClaw 最新穩定版下載到一個自包含環境中。',
+      '這會將 Ubuntu 24.04.3、Node.js 24.15.0（arm64/x86_64，armv7 使用 22.22.3）和 OpenClaw 最新穩定版下載到一個自包含環境中。',
   'setupWizardIntroRunning': '正在配置環境，請盡量保持應用程式停留在前景。',
   'setupWizardConfigureApiKeys': '配置 API Key',
   'setupWizardRetry': '重新安裝',

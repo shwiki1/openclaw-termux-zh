@@ -52,7 +52,7 @@ Flutter UI
 Kotlin Android services
   -> PRoot process manager
 Ubuntu RootFS
-  -> Node.js 24.14.1 / OpenClaw Gateway / CLI tools
+  -> Node.js 24.15.0 / OpenClaw Gateway / CLI tools
 Android device capabilities
   -> camera / location / screen / flash / vibration / sensors / serial
 ```
@@ -79,8 +79,8 @@ Android device capabilities
 当前默认资源策略：
 
 - Ubuntu：`24.04.3 noble`
-- arm64 / x86_64：Node.js `24.14.1`
-- armv7 / armhf：Node.js `22.22.2`
+- arm64 / x86_64：Node.js `24.15.0`
+- armv7 / armhf：Node.js `22.22.3`
 - OpenClaw：默认选择 npm `openclaw@latest` 的稳定版，过滤 beta、rc、test、preview 等预发布版本。
 
 ## 重要提醒

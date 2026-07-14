@@ -1,6 +1,6 @@
 # Current App State
 
-Last updated: 2026-07-14 08:53 UTC
+Last updated: 2026-07-14 09:59 UTC
 
 ## Current Truth
 - App: `次元虾`, a Chinese Android integration for OpenClaw Gateway without a Termux app dependency.
@@ -10,24 +10,29 @@ Last updated: 2026-07-14 08:53 UTC
 - Active branch: `codex-termux-runtime-fix`.
 - Remotes: `origin` is Gitee `https://gitee.com/cds-y-code/openclaw-termux-zh.git`; `shwiki` is GitHub `https://github.com/shwiki1/openclaw-termux-zh.git`.
 - Cloud build: `.github/workflows/flutter-build.yml` builds an `arm64-v8a` APK and can create a GitHub Release.
-- Current source version: root `package.json` `2.0.50`; Flutter `pubspec.yaml` `2.0.50+141`.
+- Current source version: root `package.json` `2.0.50`; Flutter `pubspec.yaml` `2.0.50+142`.
 - App version: `2.0.50`.
-- Build number: `141` in `flutter_app/pubspec.yaml`; CI may use a higher GitHub run number.
-- Version metadata is aligned to `2.0.50+141` in Flutter defaults, README files, STRUCTURE, and CHANGELOG.
-- Runtime Node defaults are aligned to Node.js `24.14.1` across Flutter constants, prebuilt RootFS scripts, setup l10n copy, primary docs, basic-resource docs, bundled fallback asset name, and the legacy root Node CLI.
+- Build number: `142` in `flutter_app/pubspec.yaml`; CI may use a higher GitHub run number.
+- Version metadata is aligned to `2.0.50+142` in Flutter defaults, README files, STRUCTURE, and CHANGELOG.
+- Runtime Node defaults are aligned to Node.js `24.15.0` for arm64/x86_64 and `22.22.3` for armv7 across Flutter constants, prebuilt RootFS scripts, setup l10n copy, primary docs, basic-resource docs, fallback asset naming, license/source notices, and the legacy root Node CLI.
 - Terminal implementation docs now describe native Android Termux `TerminalView` through Flutter `PlatformView`, not the obsolete Web/PTY stack.
 - APK install-visible versionName now resolves to `base+build` (`2.0.50+141` for the next build) instead of raw base only; Android `versionCode` remains the numeric build and may be ABI-split-adjusted by Flutter.
 - Browser automation now supports in-memory multi-tab sessions, active-tab state snapshots, UI/MCP/browser-script UA switching, desktop UA request headers, WebView wide-viewport/text-zoom normalization, and a best-effort desktop viewport hint for responsive pages.
 - Browser automation keeps reusable workflow staging in a pending-save script draft before the user confirms saving.
 - Last recorded successful artifact before the browser tabs/UA build submission: GitHub Actions run `29293286907` produced `CiYuanXia-v2.0.50-141-arm64-v8a.apk` from `shwiki/codex-termux-runtime-fix` head `459a63536bdcbff5d5f05f96f3a81dc6d4d6889b`; artifact ID `8295917288`; artifact ZIP digest `sha256:153c4b895a1bf1838985266fd6dfcd4fb32e021d7704e70e16ed53ccaf7dbfe8`. The previous locally downloaded artifact remains `artifacts/github-run-29283260131/CiYuanXia-v2.0.50-140-arm64-v8a.apk`.
-- Management status: latest recorded cloud build is complete; no new cloud build was dispatched during the 2026-07-13 23:51 project-management analysis.
+- Latest attempted Codex browser tabs/UA cloud build: GitHub Actions run `29321533131` failed before APK upload in `Build bundled OpenClaw rootfs` because `openclaw@latest` rejected Node.js `v24.14.1`; the current retry updates the runtime floor to Node.js `24.15.0` / `22.22.3` and bumps source metadata to `2.0.50+142`.
+- Management status: retry prep checks passed locally; next step is commit, GitHub API push, and watching a new arm64-v8a cloud build.
 
 ## Active Task
-- Submitting a GitHub Actions cloud build for the local Codex browser automation fixes: multi-tab UI and bridge actions, UA switching, restored header back/forward controls, collapsed low-use browser tools into a more menu, unified address/title field, generated MCP/browser-script tab and UA commands, and best-effort desktop-page handling.
-- Source metadata was bumped to `2.0.50+141`; the next workflow run is expected to produce `APP_VERSION_CODE=142` and `CiYuanXia-v2.0.50-142-arm64-v8a.apk`.
+- Retrying the GitHub Actions cloud build for Codex browser automation fixes after the rootfs build failed on the OpenClaw Node.js engine floor.
+- Source metadata is bumped to `2.0.50+142`; the next workflow run is expected to produce CI `APP_VERSION_CODE=143` or higher and an arm64-v8a `CiYuanXia-v2.0.50-<code>-arm64-v8a.apk` artifact.
 
 ## Recently Changed
 - Bumped Flutter source/build metadata and release docs from `2.0.50+140` to `2.0.50+141` before submitting the Codex browser tabs/UA cloud build.
+- Recorded GitHub Actions run `29321533131` failure: `openclaw@latest` now requires Node.js `>=22.22.3 <23`, `>=24.15.0 <25`, or a newer supported major; bundled rootfs generation was still using Node.js `24.14.1`.
+- Bumped Flutter source/build metadata and release docs from `2.0.50+141` to `2.0.50+142` for the retry.
+- Updated Node.js runtime defaults to `24.15.0` for arm64/x86_64 and `22.22.3` for armv7 in app constants, prebuilt rootfs scripts, setup l10n strings, primary docs, bootstrap docs, legacy installer, license/source notices, and the runtime drift self-test.
+- Adjusted the runtime drift self-test so it checks current runtime sections while preserving historical changelog facts and the separately recorded local Node.js environment version.
 - Kept the remote rootfs cache restore fix in `scripts/fetch-prebuilt-rootfs-asset.sh` by using `gh release download --clobber`, matching the latest successful remote build.
 - Added Codex browser tab state in `TerminalBrowserPanel`: per-tab WebView controllers, titles/URLs/errors/loading/navigation state, active tab switching, close/new tab UI, and service state publication.
 - Added Codex browser UA switching from UI, MCP, and `browser-script ua <desktop|mobile>`; desktop mode now applies a desktop User-Agent through WebView settings and request headers, enables Android wide viewport, normalizes text zoom, and injects a desktop viewport hint after page load.
@@ -85,6 +90,7 @@ Last updated: 2026-07-14 08:53 UTC
 - GitHub Actions run `29283260131` succeeded from remote commit `7d9773731764`; downloaded `CiYuanXia-v2.0.50-140-arm64-v8a.apk` and verified ZIP integrity, arm64 PRoot libraries, APK SHA256, and manifest version fields.
 
 ## Checks
+- 2026-07-14 Node engine-floor cloud-build retry prep: `git diff --check` passed; `npm test` passed with 14 checks; `npm run lint -- --no-warn-ignored` passed; `bash -n scripts/build-apk.sh`, `bash -n scripts/build-prebuilt-rootfs.sh`, `bash -n scripts/prebuilt-rootfs-metadata.sh`, `bash -n scripts/fetch-prebuilt-rootfs-asset.sh`, and `python3 -B -m py_compile scripts/build_release.py` passed; `command -v dart`, `command -v flutter`, and `command -v kotlinc` returned no local paths.
 - 2026-07-14 Codex browser tabs/UA cloud-build prep checks: `git diff --check` passed; `npm test` passed with 14 checks; `npm run lint -- --no-warn-ignored` passed; `bash -n scripts/build-apk.sh`, `bash -n scripts/build-prebuilt-rootfs.sh`, `bash -n scripts/prebuilt-rootfs-metadata.sh`, `bash -n scripts/fetch-prebuilt-rootfs-asset.sh`, and `python3 -B -m py_compile scripts/build_release.py` passed; focused version check found no remaining current source metadata references to `2.0.50+140` in primary version docs/source.
 - 2026-07-14 Codex browser tabs/UA checks: `git diff --check` passed; `npm test` passed with 14 checks; `npm run lint -- --no-warn-ignored` passed; focused `rg` checks confirmed tab/UA generated tools and found no stale `重命名标签`/`tab_rename` references.
 - 2026-07-14 local SDK availability check: `command -v dart`, `command -v flutter`, and `command -v kotlinc` returned no local paths, so Dart format, Flutter analyze, Flutter tests, and Kotlin compiler checks were not run locally.
@@ -147,6 +153,7 @@ Last updated: 2026-07-14 08:53 UTC
 - Project policy in `AGENTS.md`: build/release only Android `arm64-v8a` APK unless explicitly requested.
 
 ## Next Actions
+- Commit and push the `2.0.50+142` Node engine-floor fix with the GitHub API helper, then watch the new `Build OpenClaw Apps` run to completion.
 - Device-smoke Codex browser multi-tab and UA behavior on Android: open multiple pages, switch tabs, close a tab, use back/forward/reload, switch desktop/mobile UA, and verify desktop pages no longer fall back to the mobile layout on representative sites.
 - Create the next cloud build only after bumping `flutter_app/pubspec.yaml` build metadata to the next number and verifying the resulting APK install screen shows `2.0.50+<next>`.
 - Device-smoke the freshly built arm64 APK on Android: launch, setup/runtime bootstrap, gateway start/stop, terminal, Codex browser MCP tools, first browser instructions page, and sidecar close/reopen attachment.

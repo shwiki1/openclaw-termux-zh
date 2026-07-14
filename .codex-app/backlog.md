@@ -20,9 +20,9 @@
 
 ## Do Not Forget
 - Keep app version/build number updated before every new cloud build.
-- Current metadata is aligned at source `2.0.50+141`; the latest completed GitHub artifact before the browser tabs/UA build submission was CI version `2.0.50+141` from run `29293286907`; bump build metadata before any later new cloud build.
+- Current metadata is aligned at source `2.0.50+142` for the Node engine-floor retry; the latest completed GitHub artifact before the browser tabs/UA build submission was CI version `2.0.50+141` from run `29293286907`, and run `29321533131` failed before APK upload; bump build metadata before any later new cloud build.
 - Current browser automation work is being submitted to GitHub Actions; after the APK is available, the next browser smoke target is Android device verification of tab/UA/mobile-desktop behavior.
-- Keep Node.js `24.14.1` aligned across constants, RootFS scripts, setup l10n copy, docs, bundled resource names, legacy installer URLs, and `lib/test.js` unless a future task upgrades the bundled runtime asset set.
+- Keep Node.js `24.15.0` for arm64/x86_64 and `22.22.3` for armv7 aligned across constants, RootFS scripts, setup l10n copy, docs, bootstrap resource names, license/source notices, legacy installer URLs, and `lib/test.js` unless a future task upgrades the runtime asset set.
 - `inspect_app_project.py` only auto-detects the root Node shell here; manually verify Flutter/Kotlin facts from `flutter_app/` before editing or reporting architecture.
 - Keep the stable `browser_control` MCP entrypoint and `browser-script call/control` fallbacks in sync with the bridge action aliases.
 - Keep terminal display throttling scoped to rendering/scrollback only; do not route CLI context management through Flutter terminal display text.

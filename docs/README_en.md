@@ -29,8 +29,8 @@ Main capabilities:
 ## Runtime Defaults
 
 - Ubuntu: `24.04.3 noble`
-- arm64 / x86_64 Node.js: `24.14.1`
-- armv7 / armhf Node.js: `22.22.2`
+- arm64 / x86_64 Node.js: `24.15.0`
+- armv7 / armhf Node.js: `22.22.3`
 - OpenClaw: npm `openclaw@latest` stable release, filtering prerelease tags such as beta, rc, test, and preview.
 
 Large runtime resources should not be assumed to be bundled directly in the APK. The app can restore them from the `basic-resource` release, use custom URLs, import local archives, or download from mirrors during first-run setup.
