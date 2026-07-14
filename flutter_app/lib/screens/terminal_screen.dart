@@ -450,7 +450,15 @@ class _TerminalScreenState extends State<TerminalScreen> {
   }
 
   Widget _buildTerminal(_NativeTerminalConfig config) {
-    final screenWidth = MediaQuery.sizeOf(context).width;
+    final mediaQuery = MediaQuery.of(context);
+    final screenWidth = mediaQuery.size.width;
+    final bottomSystemInset = mediaQuery.viewPadding.bottom;
+    final keyboardInset = mediaQuery.viewInsets.bottom;
+    final toolbarReservedHeight =
+        TerminalToolbar.toolbarHeight + bottomSystemInset;
+    final toolbarBottomOffset = keyboardInset > bottomSystemInset
+        ? keyboardInset - bottomSystemInset
+        : 0.0;
     final compactCodexBrowser = _isCodexSession && screenWidth < 960;
     final pauseTerminalRendering = compactCodexBrowser && _browserPanelOpen;
 
@@ -458,25 +466,44 @@ class _TerminalScreenState extends State<TerminalScreen> {
       children: [
         if (_isCodexSession) _buildBrowserStatusBanner(screenWidth),
         Expanded(
-          child: NativeTerminalView(
-            key: _terminalKey,
-            sessionId: _activeSession.id,
-            executable: config.executable,
-            arguments: config.arguments,
-            environment: config.environment,
-            restart: _restartOnCreate,
-            keepAlive: true,
-            renderingPaused: pauseTerminalRendering,
-            transcriptRows: _isCodexSession
-                ? _codexTerminalTranscriptRows
-                : _defaultTerminalTranscriptRows,
-            fontSize: 18,
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: Padding(
+                  // Reserve a stable bottom lane for the Flutter toolbar so
+                  // the native terminal view does not relayout with each IME
+                  // transition.
+                  padding: EdgeInsets.only(bottom: toolbarReservedHeight),
+                  child: NativeTerminalView(
+                    key: _terminalKey,
+                    sessionId: _activeSession.id,
+                    executable: config.executable,
+                    arguments: config.arguments,
+                    environment: config.environment,
+                    restart: _restartOnCreate,
+                    keepAlive: true,
+                    renderingPaused: pauseTerminalRendering,
+                    transcriptRows: _isCodexSession
+                        ? _codexTerminalTranscriptRows
+                        : _defaultTerminalTranscriptRows,
+                    fontSize: 18,
+                  ),
+                ),
+              ),
+              AnimatedPositioned(
+                duration: const Duration(milliseconds: 180),
+                curve: Curves.easeOutCubic,
+                left: 0,
+                right: 0,
+                bottom: toolbarBottomOffset,
+                child: TerminalToolbar(
+                  onWrite: _terminalInput.writeBytes,
+                  ctrlNotifier: _terminalInput.ctrlNotifier,
+                  altNotifier: _terminalInput.altNotifier,
+                ),
+              ),
+            ],
           ),
-        ),
-        TerminalToolbar(
-          onWrite: _terminalInput.writeBytes,
-          ctrlNotifier: _terminalInput.ctrlNotifier,
-          altNotifier: _terminalInput.altNotifier,
         ),
       ],
     );

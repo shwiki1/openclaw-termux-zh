@@ -4,6 +4,8 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 
 class TerminalToolbar extends StatefulWidget {
+  static const double toolbarHeight = 42;
+
   final ValueChanged<Uint8List> onWrite;
   final ValueNotifier<bool> ctrlNotifier;
   final ValueNotifier<bool> altNotifier;
@@ -162,6 +164,7 @@ class _TerminalToolbarState extends State<TerminalToolbar> {
       color: bgColor,
       child: SafeArea(
         top: false,
+        maintainBottomViewPadding: true,
         child: SingleChildScrollView(
           scrollDirection: Axis.horizontal,
           padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),

@@ -1,13 +1,14 @@
 # Backlog
 
 ## Priority Now
-- Publish a follow-up APK with the native terminal IME input-strip fix, because device feedback confirmed `CiYuanXia-v2.5-144-arm64-v8a.apk` still leaves terminal input behind the keyboard; the next build should be `145` with installer/app version `2.6`.
+- Device-smoke the published `CiYuanXia-v2.6-145-arm64-v8a.apk` on Android, prioritizing terminal input visibility above the IME, browser address-bar/readability checks, first-run bootstrap, browser multi-tab, UA switching, script assistant, browser fallbacks, and compact sidecar reconnect behavior.
 - Add `flutter test` to the GitHub Actions gate or run it in a dedicated Flutter SDK environment before the next release candidate; the repo already has Flutter tests, but the current green APK workflow does not execute them.
-- Device-smoke the follow-up `CiYuanXia-v2.6-145-arm64-v8a.apk` on Android, prioritizing terminal input visibility above the IME, browser address-bar/readability checks, first-run bootstrap, browser multi-tab, UA switching, script assistant, browser fallbacks, and compact sidecar reconnect behavior.
+- If device smoke still shows the terminal prompt hidden behind the keyboard, keep investigation focused on native Android `TerminalView`/`adjustPan` interactions rather than Flutter `TextField` behavior.
 - Decide the release promotion path for the next build: which branch is authoritative, which remote is used for cloud builds, who bumps the build number, and where changelog/release notes are cut from.
 
 ## Ready
 - Prepare a release-readiness checklist covering broad permissions/privacy review, rootfs asset restore/fallback expectations, version bump discipline, artifact verification, and install/update smoke before the next public release.
+- Replace `softprops/action-gh-release@v2` or otherwise update the release step before GitHub fully enforces the Node.js 20 deprecation warning now shown on run `29355437073`.
 - Device-smoke Codex browser multi-tab and UA behavior on Android: open multiple pages, switch tabs, close a tab, use back/forward/reload, switch desktop/mobile UA, and verify desktop pages no longer fall back to the mobile layout on representative sites.
 - Device-smoke Codex terminal performance: start a long Codex CLI conversation, open/close the compact browser sidecar while output is active, verify the sidecar stays connected, terminal input still works, and the terminal screen catches up after closing the sidecar.
 - Device-smoke the browser automation hardening: verify `browser_control` and `browser-script` fallback commands can complete snapshot/read/type/click flows on a live WebView, then confirm the compact right browser sidecar still stays connected after close/reopen.
@@ -27,9 +28,9 @@
 
 ## Do Not Forget
 - Keep app version/build number updated before every new cloud build.
-- Current source metadata anchor is `2.5.0+143`; latest successful GitHub Release asset is `CiYuanXia-v2.5-144-arm64-v8a.apk`, but user device testing says that build still does not pan the native terminal prompt above the keyboard.
-- Future user-facing builds now derive automatically from the target build number: `144 -> 2.5`, `145 -> 2.6`, `146 -> 2.7`, `147 -> 2.8`, `148 -> 2.9`, `149 -> 3.0`.
-- The next fresh build should be `145 -> 2.6` and must include the native terminal bottom input-strip IME follow-up in `NativeTerminalView.kt`.
+- Current source metadata anchor is `2.5.0+143`; latest successful GitHub Release asset is `CiYuanXia-v2.6-145-arm64-v8a.apk`, which includes the native terminal bottom input-strip IME follow-up but still needs Android device smoke.
+- Future user-facing builds now derive automatically from the target build number: `145 -> 2.6`, `146 -> 2.7`, `147 -> 2.8`, `148 -> 2.9`, `149 -> 3.0`, `150 -> 3.1`.
+- The next fresh build should be `146 -> 2.7` if another new artifact is required after device smoke or workflow/test changes.
 - Current browser automation work is being submitted to GitHub Actions; after the APK is available, the next browser smoke target is Android device verification of tab/UA/mobile-desktop behavior.
 - The current APK workflow is green without running `flutter test`; keep that gap visible until CI or a dedicated SDK environment closes it.
 - Keep Node.js `24.15.0` for arm64/x86_64 and `22.22.3` for armv7 aligned across constants, RootFS scripts, setup l10n copy, docs, bootstrap resource names, license/source notices, legacy installer URLs, and `lib/test.js` unless a future task upgrades the runtime asset set.

@@ -1,6 +1,6 @@
 # Current App State
 
-Last updated: 2026-07-14 17:24 UTC
+Last updated: 2026-07-14 18:03 UTC
 
 ## Current Truth
 - App: `次元虾`, a Chinese Android integration for OpenClaw Gateway without a Termux app dependency.
@@ -12,8 +12,8 @@ Last updated: 2026-07-14 17:24 UTC
 - Cloud build: `.github/workflows/flutter-build.yml` builds an `arm64-v8a` APK and can create a GitHub Release.
 - GitHub Actions currently runs checkout, rootfs restore/build, `flutter analyze --no-fatal-infos`, APK packaging, and GitHub Release publication, but does not run `flutter test`.
 - Current source version: root `package.json` `2.5.0`; Flutter `pubspec.yaml` `2.5.0+143`.
-- App version: `2.5` (installer/app display) as the current fixed `0.0` display-series anchor.
-- Build number: anchor `143` in `flutter_app/pubspec.yaml`; local/CI artifacts derive higher build numbers from there.
+- App version: latest published installer/app display `2.6`; the repo keeps the semantic/source anchor at `2.5.0+143` and derives future user-facing versions from the build number in fixed one-tenth steps.
+- Build number: latest published build `145`; the source anchor remains `143` in `flutter_app/pubspec.yaml` for CI derivation.
 - Flutter unit tests exist under `flutter_app/test/` (12 files), but the current Termux session has no local `flutter` or `dart` SDK to execute them.
 - Version metadata is aligned to semantic source anchor `2.5.0+143` in Flutter defaults, Node compatibility CLI/package metadata, README files, STRUCTURE, and CHANGELOG.
 - Runtime Node defaults are aligned to Node.js `24.15.0` for arm64/x86_64 and `22.22.3` for armv7 across Flutter constants, prebuilt RootFS scripts, setup l10n copy, primary docs, basic-resource docs, fallback asset naming, license/source notices, and the legacy root Node CLI.
@@ -22,20 +22,25 @@ Last updated: 2026-07-14 17:24 UTC
 - Browser automation now supports in-memory multi-tab sessions, active-tab state snapshots, UI/MCP/browser-script UA switching, desktop UA request headers, WebView wide-viewport/text-zoom normalization, and a best-effort desktop viewport hint for responsive pages.
 - Browser automation keeps reusable workflow staging in a pending-save script draft before the user confirms saving.
 - Last recorded successful artifact before the browser tabs/UA build submission: GitHub Actions run `29293286907` produced `CiYuanXia-v2.0.50-141-arm64-v8a.apk` from `shwiki/codex-termux-runtime-fix` head `459a63536bdcbff5d5f05f96f3a81dc6d4d6889b`; artifact ID `8295917288`; artifact ZIP digest `sha256:153c4b895a1bf1838985266fd6dfcd4fb32e021d7704e70e16ed53ccaf7dbfe8`. The previous locally downloaded artifact remains `artifacts/github-run-29283260131/CiYuanXia-v2.0.50-140-arm64-v8a.apk`.
-- Latest IME/browser/version cloud build: GitHub Actions run `29343651061` completed successfully from remote commit `ff961e903cd9c04ac1a8523f8751c33c4f12f638` and published GitHub Release `v2.5.0`.
-- Latest GitHub Release asset: `CiYuanXia-v2.5-144-arm64-v8a.apk`; APK SHA256 `2c283b7d810b11d9c7abb381d358aca492419a86726743730148b9cbd1947f31`; Actions artifact ID `8315303372`; artifact ZIP digest/SHA256 `sha256:108950af36fc43196b1d81da56c3a8fa7819d2392c37413f21bdbe708d1f6235`.
-- User device feedback on that `144` release: browser/header/version fixes shipped, but the native terminal prompt still is not panned above the keyboard and typed terminal input remains hidden.
-- Latest locally downloaded artifact remains `artifacts/github-run-29323908852/CiYuanXia-v2.0.50-143-arm64-v8a.apk`; APK SHA256 `dedeed3176251da991d9e55435b633a6034d8e9cb80a2549054d12f75df48010`.
-- Management status: the previously published IME/browser/version build fixed the browser/header/version work but not the native terminal IME visibility bug; source now includes a Kotlin-side terminal input-strip follow-up and its regression test, pending a fresh cloud build/device smoke.
+- Latest IME/browser/version cloud build: GitHub Actions run `29355437073` completed successfully from remote commit `57c25971903dede564b06531378428589a73232e` and published GitHub Release `v2.6.0`.
+- Latest GitHub Release asset: `CiYuanXia-v2.6-145-arm64-v8a.apk`; APK SHA256 `069a55a8d36826688f44b8d9d073942b107a9d01d27ac0d432197d438ee23cc5`; Actions artifact ID `8320095459`; artifact ZIP digest/SHA256 `sha256:f37da8b0dda21f21b497d9ab6d13795bf5deb1261653e2f4a05301db0a2408d9`.
+- User device feedback on the previous `144` release prompted the native terminal follow-up; the final `145 / 2.6` build is now available but still has not been device-smoked in this session.
+- Latest locally downloaded artifact: `dist/github-release-v2.6.0/CiYuanXia-v2.6-145-arm64-v8a.apk`; local SHA256 matches the GitHub release digest `069a55a8d36826688f44b8d9d073942b107a9d01d27ac0d432197d438ee23cc5`.
+- Management status: source, GitHub workflow, and published release are aligned on the terminal/browser/version fixes; the remaining release gap is Android device smoke plus the missing `flutter test` CI gate.
 - Project phase: feature work for Codex browser automation is ahead of validation; the immediate management focus is release-stabilization, not another feature branch.
-- Release topology note: local branch `codex-termux-runtime-fix` currently tracks `shwiki/main` and is ahead by 18 commits; future build/promotion work should name the exact remote and branch on purpose.
-- Next artifact expectation: the next fresh APK build (`145`) should show installer/app version `2.6` and use the short artifact name `CiYuanXia-v2.6-145-arm64-v8a.apk`.
+- Release topology note: local branch `codex-termux-runtime-fix` still reports ahead of the local `shwiki/main` ref; the authoritative GitHub `main` head was re-confirmed through `gh api` at `57c25971903dede564b06531378428589a73232e`, so future build provenance should continue naming the remote and SHA explicitly.
+- Next artifact expectation: if another fresh APK is required from the same source anchor, build `146` should display installer/app version `2.7` and use the short artifact name `CiYuanXia-v2.7-146-arm64-v8a.apk`.
 
 ## Active Task
-- Publish a follow-up cloud build that includes the native terminal bottom input-strip IME helper in `NativeTerminalView.kt`.
-- Device-smoke the follow-up `145` / `2.6` APK on Android, confirming terminal input is lifted above the keyboard, browser inputs remain visible, and installer/settings still show the derived short version correctly.
+- Device-smoke the published `145` / `2.6` APK on Android, confirming native terminal input is lifted above the keyboard, terminal/browser inputs remain visible, and installer/settings still show the derived short version correctly.
+- Tighten the release path before the next fresh artifact by adding `flutter test` or equivalent SDK-side coverage to the GitHub workflow or a dedicated pre-release environment.
 
 ## Recently Changed
+- GitHub Actions run `29353875406` failed after the first Kotlin attempt because `NativeTerminalView.kt` tried to extend `TerminalView`, which is final in the Termux dependency.
+- Reworked `NativeTerminalView.kt` to keep a raw `TerminalView`, compute a bottom input-strip rectangle, and repeatedly call `requestRectangleOnScreen(...)` while opening the IME instead of subclassing the final view.
+- GitHub Actions run `29354705042` proved the Kotlin IME fix compiled and packaged, but CI still derived `APP_VERSION_NAME=2.5.0`, `APP_VERSION_DISPLAY=2.5`, and `APP_VERSION_CODE=144` because the workflow fallback did not advance from the previous release asset.
+- Updated `.github/workflows/flutter-build.yml` so CI derives the next build number from the latest release asset name, then pushed remote commit `57c25971903dede564b06531378428589a73232e`; GitHub Actions run `29355437073` succeeded with `APP_VERSION_NAME=2.6.0`, `APP_VERSION_DISPLAY=2.6`, `APP_VERSION_CODE=145`, and published `CiYuanXia-v2.6-145-arm64-v8a.apk`.
+- Downloaded GitHub Release `v2.6.0` locally to `dist/github-release-v2.6.0/` and verified the APK SHA256 matches the release digest.
 - Locked `TerminalScreen` to `resizeToAvoidBottomInset: false` and switched the terminal route to Android `adjustPan` while it is visible, so IME open/close keeps terminal/browser inputs visible without relayouting both platform views together.
 - Added a bottom input-strip helper in `NativeTerminalView.kt` so the native terminal repeatedly requests the lower prompt area onto the screen while opening the IME, instead of relying on `adjustPan` alone.
 - Restored `OnlineModelCatalogService._userAgent` to a `const` after GitHub Actions run `29343049542` failed on a non-constant Dart map literal.
@@ -116,6 +121,8 @@ Last updated: 2026-07-14 17:24 UTC
 - GitHub Actions run `29283260131` succeeded from remote commit `7d9773731764`; downloaded `CiYuanXia-v2.0.50-140-arm64-v8a.apk` and verified ZIP integrity, arm64 PRoot libraries, APK SHA256, and manifest version fields.
 
 ## Checks
+- 2026-07-14 final memory sync and verification: `npm test` passed with 24 checks; `npm run lint -- --no-warn-ignored` passed; `git diff --check` passed; `python3 /data/data/com.termux/files/home/.codex/skills/app-development-governor/scripts/validate_app_memory.py --project /storage/emulated/0/ZeroTermux/开发/openclaw-termux-zh-5.5` passed with no errors and no warnings; local `flutter`, `dart`, and `kotlinc` remain unavailable, so Flutter analyze/test and native compile checks were not run locally.
+- 2026-07-14 final `145 / 2.6` cloud-build verification: `gh auth status` confirmed the authenticated `shwiki1` GitHub session; `gh api repos/shwiki1/openclaw-termux-zh/branches/main --jq .commit.sha` confirmed remote `main` at `57c25971903dede564b06531378428589a73232e`; `gh run view 29353875406 --log-failed | rg "final|TerminalView"` confirmed the failed subclassing attempt; `gh run view 29354705042 --job 87159321179 --log | rg "APP_VERSION_(NAME|DISPLAY|CODE)"` confirmed the stale `144 / 2.5` versioning; `gh run view 29355437073` succeeded; `gh run view 29355437073 --job 87161764185 --log | rg "APP_VERSION_(NAME|DISPLAY|CODE)"` confirmed `2.6.0 / 2.6 / 145`; `gh release view v2.6.0 --json tagName,name,assets,isDraft,isPrerelease` returned the release metadata; `gh release download v2.6.0 --clobber` downloaded the published APK locally; `sha256sum dist/github-release-v2.6.0/CiYuanXia-v2.6-145-arm64-v8a.apk` matched `069a55a8d36826688f44b8d9d073942b107a9d01d27ac0d432197d438ee23cc5`. Local `flutter`, `dart`, and `kotlinc` remain unavailable, so Flutter analyze/test and native compile checks were not run locally.
 - 2026-07-14 terminal native IME input-strip follow-up: `npm test` passed with 23 checks; `npm run lint -- --no-warn-ignored` passed; `git diff --check` passed; `gh auth status` confirmed the authenticated `shwiki1` GitHub session; `gh api repos/shwiki1/openclaw-termux-zh/branches/main --jq .commit.sha` confirmed remote `main` is still `ff961e903cd9c04ac1a8523f8751c33c4f12f638`; local `flutter`, `dart`, and `kotlinc` remain unavailable, so Flutter analyze/test and native compile checks were not run locally.
 - 2026-07-14 IME/browser/version cloud-build completion: `npm test` passed with 22 checks; `npm run lint -- --no-warn-ignored` passed; `git diff --check` passed; `gh auth status` confirmed the authenticated `shwiki1` GitHub session; GitHub Actions run `29343651061` succeeded and published release `v2.5.0`. Local `flutter`, `dart`, and `kotlinc` remain unavailable, so Flutter analyze/test and native compile checks were not run locally.
 - 2026-07-14 terminal IME lag fix: `npm test` passed with 21 checks; `npm run lint -- --no-warn-ignored` passed; `git diff --check` passed; `python3 /data/data/com.termux/files/home/.codex/skills/app-development-governor/scripts/validate_app_memory.py --project /storage/emulated/0/ZeroTermux/开发/openclaw-termux-zh-5.5` passed with no errors and no warnings; local `flutter`, `dart`, and `kotlinc` remain unavailable, so Flutter analyze/test and native compile checks were not run locally.
