@@ -110,6 +110,7 @@
 - Signing secrets: `KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD` for GitHub Actions release signing.
 
 ## Notes
+- 2026-07-15 release recovery policy: after deleting withdrawn `3.5 / 154` and `3.6 / 155` cloud resources, `.github/workflows/flutter-build.yml` enforces `MINIMUM_RELEASE_BUILD=156`. This intentionally builds the verified `3.4` source tree as `3.7 / 156` so Android update versionCodes are never reused.
 - Do not commit secret values.
 - Use GitHub Actions for native packaging and release artifacts.
 - Project instruction: build/release only Android `arm64-v8a` APK unless the user explicitly asks for another ABI/AAB.

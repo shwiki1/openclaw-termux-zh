@@ -1,8 +1,10 @@
 # Current App State
 
-Last updated: 2026-07-15 00:03 UTC
+Last updated: 2026-07-15 21:28 UTC
 
 ## Current Truth
+- Rollback baseline: local `f206113` and remote `e698148` share the exact verified `3.4` source tree. GitHub `v3.5.0`/`v3.6.0`, their tags, APK assets, and associated Actions runs were removed; `v3.4.0` is the latest release.
+- Active release task: publish the unchanged `3.4` feature tree as `3.7 / 156`. The workflow now enforces build `156` as the minimum because builds `154` and `155` were withdrawn; this prevents versionCode reuse while preserving the `2.5.0+143` source anchor and derives `3.7.0` / display `3.7`.
 - App: `次元虾`, a Chinese Android integration for OpenClaw Gateway without a Termux app dependency.
 - Repository root: `/storage/emulated/0/ZeroTermux/开发/openclaw-termux-zh-5.5`.
 - Stack: Flutter/Dart Android app shell, Kotlin native Android services, PRoot Ubuntu RootFS runtime, and a legacy Node.js CLI package.

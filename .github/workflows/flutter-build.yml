@@ -192,6 +192,13 @@ jobs:
             PUBSPEC_VERSION_CODE="1"
           fi
           VERSION_CODE="$((PUBSPEC_VERSION_CODE + 1))"
+          # Builds 154 and 155 were withdrawn. Keep the 3.4 source anchor,
+          # but skip their Android versionCodes so the replacement can update
+          # devices that installed either withdrawn build.
+          MINIMUM_RELEASE_BUILD=156
+          if [ "$VERSION_CODE" -lt "$MINIMUM_RELEASE_BUILD" ]; then
+            VERSION_CODE="$MINIMUM_RELEASE_BUILD"
+          fi
           LATEST_RELEASE_BUILD="$(
             {
               gh api "repos/${GITHUB_REPOSITORY}/releases/latest" --jq '.assets[]?.name' 2>/dev/null || true
