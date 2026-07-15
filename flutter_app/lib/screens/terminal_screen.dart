@@ -41,7 +41,6 @@ class _TerminalScreenState extends State<TerminalScreen> {
   var _restartOnCreate = false;
   var _closedAllSessions = false;
   var _browserPanelOpen = false;
-  var _browserPanelCreated = false;
   var _lastBrowserPanelRequestNonce = 0;
 
   _TerminalSessionTab get _activeSession => _sessions[_activeIndex];
@@ -511,7 +510,6 @@ class _TerminalScreenState extends State<TerminalScreen> {
       return;
     }
     setState(() {
-      _browserPanelCreated = true;
       _browserPanelOpen = true;
     });
   }
@@ -531,7 +529,7 @@ class _TerminalScreenState extends State<TerminalScreen> {
   }) {
     final panelWidth = _browserPanelWidth(screenWidth);
     final shouldKeepBrowserMounted =
-        _browserPanelCreated || _browserService.isBrowserAttached;
+        _browserPanelOpen || _browserService.isToolCallActive;
 
     return Stack(
       children: [

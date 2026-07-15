@@ -1,7 +1,13 @@
 # Build And Verification
 
 ## Local Checks Only
+- 2026-07-15 Codex terminal IME lag follow-up: `git diff --check` passed; `npm test` passed with 28 checks; `npm run lint -- --no-warn-ignored` passed; local `flutter`, `dart`, and `kotlinc` remain unavailable, so Flutter analyze/test and native compile checks were not run locally.
 - Formatting: not run in this session; Flutter/Dart SDK unavailable locally.
+- 2026-07-15 terminal shortcut feedback build: `git diff --check` passed; `npm test` passed with 28 checks; `npm run lint -- --no-warn-ignored` passed; `gh auth status` confirmed the authenticated `shwiki1` GitHub session; GitHub Actions run `29377510459` succeeded and published release `v3.2.0`. Local `flutter`, `dart`, and `kotlinc` remain unavailable, so Flutter analyze/test and native compile checks were not run locally.
+- 2026-07-14 browser/terminal IME focus handoff follow-up: `git diff --check` passed; `npm test` passed with 28 checks; `npm run lint -- --no-warn-ignored` passed. Local `flutter`, `dart`, and `kotlinc` remain unavailable, so Flutter analyze/test and native compile checks were not run locally.
+- 2026-07-14 native terminal IME global-layout compensation follow-up: `npm test` passed with 26 checks; `npm run lint -- --no-warn-ignored` passed; `git diff --check` passed. Local `flutter`, `dart`, and `kotlinc` remain unavailable, so Flutter analyze/test and native compile checks were not run locally.
+- 2026-07-14 terminal native-toolbar unification follow-up: `npm test` passed with 26 checks; `npm run lint -- --no-warn-ignored` passed; `git diff --check` passed before the cloud-build submission. Local `flutter`, `dart`, and `kotlinc` remain unavailable, so Flutter analyze/test and native compile checks were not run locally.
+- 2026-07-14 terminal shortcut-bar double-lift compensation follow-up: `npm test` passed with 25 checks; `npm run lint -- --no-warn-ignored` passed; `git diff --check` passed before the cloud-build submission. Local `flutter`, `dart`, and `kotlinc` remain unavailable, so Flutter analyze/test and native compile checks were not run locally.
 - 2026-07-14 terminal native IME input-strip follow-up: `npm test` passed with 23 checks; `npm run lint -- --no-warn-ignored` passed; `git diff --check` passed; `gh auth status` confirmed the authenticated `shwiki1` GitHub session; `gh api repos/shwiki1/openclaw-termux-zh/branches/main --jq .commit.sha` confirmed remote `main` is still `ff961e903cd9c04ac1a8523f8751c33c4f12f638`; local `flutter`, `dart`, and `kotlinc` remain unavailable, so Flutter analyze/test and native compile checks were not run locally.
 - 2026-07-14 IME/browser/version cloud-build completion: `npm test` passed with 22 checks; `npm run lint -- --no-warn-ignored` passed; `git diff --check` passed; `gh auth status` confirmed the authenticated `shwiki1` GitHub session. Local `flutter`, `dart`, and `kotlinc` remain unavailable, so Flutter analyze/test and native compile checks were not run locally.
 - 2026-07-14 terminal IME adjustPan fix: `npm test` passed with 22 checks; `npm run lint -- --no-warn-ignored` passed; `git diff --check` passed. Local `flutter`, `dart`, and `kotlinc` remain unavailable, so Flutter analyze/test and native compile checks were not run locally.
@@ -23,7 +29,7 @@
 
 ## GitHub Cloud Build
 - Repository remotes: `origin` Gitee and `shwiki` GitHub. Confirm target remote before push/build operations.
-- Branch hygiene: as of 2026-07-14, local `codex-termux-runtime-fix` still reports ahead of the local `shwiki/main` ref, while the authoritative GitHub `main` head was re-confirmed through `gh api` at `57c25971903dede564b06531378428589a73232e`. Before the next build or release promotion, explicitly choose the authoritative branch and remote instead of assuming the local tracking ref is current.
+- Branch hygiene: as of 2026-07-14, local `codex-termux-runtime-fix` still reports ahead of the local `shwiki/main` ref, while the authoritative GitHub `main` head is `db7ce2e9e992be903fa80df9146362aee6c291c2`. Before the next build or release promotion, explicitly choose the authoritative branch and remote instead of assuming the local tracking ref is current.
 - Workflow files: `.github/workflows/flutter-build.yml`.
 - Artifact path/names: workflow copies `flutter_app/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk` to `artifacts/CiYuanXia-v<version>-<versionCode>-arm64-v8a.apk` and uploads artifact `ciyuanxia-apks`.
 - Runner requirements: Ubuntu latest, Java 17, Flutter stable, Android SDK platform/build-tools 36, NDK 27.0.12077973 and 28.2.13676358, Gradle 8.11.1, host tools including curl/gzip/qemu/xz/zstd.
@@ -32,12 +38,14 @@
 
 ## Version Management
 - Canonical version file: `flutter_app/pubspec.yaml` for Flutter app version/build, plus root `package.json` for npm package version. Keep them aligned for releases.
-- Current user-facing version: latest published display `2.6`; the repo still keeps the source anchor at `2.5.0+143` and derives display versions from the target build number.
-- Current build number: latest published build `145`; the repo anchor remains `143` in `flutter_app/pubspec.yaml`.
+- Current user-facing version: latest published display `3.2`; the repo still keeps the source anchor at `2.5.0+143` and derives display versions from the target build number.
+- Current build number: latest published build `151`; the repo anchor remains `143` in `flutter_app/pubspec.yaml`.
 - Current source semantic anchor: `2.5.0` in `flutter_app/pubspec.yaml` and `package.json`.
-- Latest successful display-version cloud build: GitHub Actions run `29355437073` used remote commit `57c25971903dede564b06531378428589a73232e`, published release `v2.6.0`, and produced `CiYuanXia-v2.6-145-arm64-v8a.apk`.
-- User device feedback on the previous `144` release led to the native terminal input-strip follow-up; that follow-up is now packaged in `145 / 2.6` and still requires Android device smoke.
-- Next expected cloud build from the current source anchor: if another fresh artifact is required, target build `146`, semantic/app version `2.7.0`, installer/app display `2.7`.
+- Latest successful display-version cloud build: GitHub Actions run `29373389340` used remote commit `db7ce2e9e992be903fa80df9146362aee6c291c2`, published release `v3.0.0`, and produced `CiYuanXia-v3.0-149-arm64-v8a.apk`.
+- Latest successful display-version cloud build: GitHub Actions run `29375096798` used remote commit `92b8b59d29a298a05dcb01f290f32df34beb1254`, published release `v3.1.0`, and produced `CiYuanXia-v3.1-150-arm64-v8a.apk`.
+- Latest successful display-version cloud build: GitHub Actions run `29377510459` used remote commit `f250722d5dd2709b388ee42030c10559977aba74`, published release `v3.2.0`, and produced `CiYuanXia-v3.2-151-arm64-v8a.apk`.
+- User device feedback on the previous `146 / 2.7` release led to the terminal shortcut-bar double-lift compensation follow-up; that follow-up is now packaged in `147 / 2.8` and still requires Android device smoke.
+- Next expected published cloud build from the current source anchor: the next fresh artifact should publish build `152`, semantic/app version `3.3.0`, installer/app display `3.3`.
 - Last cloud build version before submitting the browser tabs/UA build: source metadata `2.0.50+140`; GitHub Actions run `29293286907` generated CI version `2.0.50+141` for the arm64 split APK.
 - Last cloud build artifact before submitting the browser tabs/UA build: `ciyuanxia-apks` artifact ID `8295917288`, containing `CiYuanXia-v2.0.50-141-arm64-v8a.apk`, artifact ZIP digest `sha256:153c4b895a1bf1838985266fd6dfcd4fb32e021d7704e70e16ed53ccaf7dbfe8`.
 - Version bump policy: Increment the numeric build number for every new cloud build. Keep the repo semantic anchor at `2.5.0+143`, then derive artifact versions automatically from the target build number in fixed one-tenth steps: `144 -> 2.5.0 / 2.5`, `145 -> 2.6.0 / 2.6`, `146 -> 2.7.0 / 2.7`, `147 -> 2.8.0 / 2.8`, `148 -> 2.9.0 / 2.9`, `149 -> 3.0.0 / 3.0`.
@@ -52,11 +60,18 @@
 - Successful cloud build: GitHub Actions run `29343651061` used remote commit `ff961e903cd9c04ac1a8523f8751c33c4f12f638`, published release `v2.5.0`, and produced `CiYuanXia-v2.5-144-arm64-v8a.apk`.
 - Successful cloud build: GitHub Actions run `29354705042` used remote commit `4673bf4510177b8aebdd97cdf74c07003e263038`, but still produced `APP_VERSION_NAME=2.5.0`, `APP_VERSION_DISPLAY=2.5`, `APP_VERSION_CODE=144`, and release asset `CiYuanXia-v2.5-144-arm64-v8a.apk`, exposing the workflow version-source bug.
 - Successful cloud build: GitHub Actions run `29355437073` used remote commit `57c25971903dede564b06531378428589a73232e`, published release `v2.6.0`, logged `APP_VERSION_NAME=2.6.0`, `APP_VERSION_DISPLAY=2.6`, `APP_VERSION_CODE=145`, and produced `CiYuanXia-v2.6-145-arm64-v8a.apk`.
-- Latest GitHub Release asset: `CiYuanXia-v2.6-145-arm64-v8a.apk`.
-- Latest APK SHA256: `069a55a8d36826688f44b8d9d073942b107a9d01d27ac0d432197d438ee23cc5`.
-- Latest locally downloaded artifact path: `dist/github-release-v2.6.0/CiYuanXia-v2.6-145-arm64-v8a.apk`.
-- Latest artifact ZIP digest/SHA256: `sha256:f37da8b0dda21f21b497d9ab6d13795bf5deb1261653e2f4a05301db0a2408d9`.
-- Latest artifact ID: `8320095459`.
+- Successful cloud build: GitHub Actions run `29357456971` used remote commit `5ed533b9eec1a9016e12ff06b5d352b9240c8b37`, published release `v2.7.0`, logged `APP_VERSION_NAME=2.7.0`, `APP_VERSION_DISPLAY=2.7`, `APP_VERSION_CODE=146`, and produced `CiYuanXia-v2.7-146-arm64-v8a.apk`.
+- Successful cloud build: GitHub Actions run `29359468536` used remote commit `0a341a9aaeb65bdb8460e3d4fa278a68094c6fcf`, published release `v2.8.0`, logged `APP_VERSION_NAME=2.8.0`, `APP_VERSION_DISPLAY=2.8`, `APP_VERSION_CODE=147`, and produced `CiYuanXia-v2.8-147-arm64-v8a.apk`.
+- Failed cloud build: GitHub Actions run `29361347483` used remote commit `297f1eb223342f08750aeb5924c3343ed828abb9`, derived `APP_VERSION_NAME=2.9.0`, `APP_VERSION_DISPLAY=2.9`, and `APP_VERSION_CODE=148`, then failed in `Build arm64-v8a APK` because `NativeTerminalView.kt` referenced `HorizontalScrollView.LayoutParams`, which is unresolved there.
+- Successful cloud build: GitHub Actions run `29370762550` used remote commit `c5be0df884a6e066fdedb07d6d245af03802a0fc`, published release `v2.9.0`, logged `APP_VERSION_NAME=2.9.0`, `APP_VERSION_DISPLAY=2.9`, `APP_VERSION_CODE=148`, and produced `CiYuanXia-v2.9-148-arm64-v8a.apk`.
+- Successful cloud build: GitHub Actions run `29373389340` used remote commit `db7ce2e9e992be903fa80df9146362aee6c291c2`, published release `v3.0.0`, logged `APP_VERSION_NAME=3.0.0`, `APP_VERSION_DISPLAY=3.0`, `APP_VERSION_CODE=149`, and produced `CiYuanXia-v3.0-149-arm64-v8a.apk`.
+- Successful cloud build: GitHub Actions run `29375096798` used remote commit `92b8b59d29a298a05dcb01f290f32df34beb1254`, published release `v3.1.0`, logged `APP_VERSION_NAME=3.1.0`, `APP_VERSION_DISPLAY=3.1`, `APP_VERSION_CODE=150`, and produced `CiYuanXia-v3.1-150-arm64-v8a.apk`.
+- Successful cloud build: GitHub Actions run `29377510459` used remote commit `f250722d5dd2709b388ee42030c10559977aba74`, published release `v3.2.0`, logged `APP_VERSION_NAME=3.2.0`, `APP_VERSION_DISPLAY=3.2`, `APP_VERSION_CODE=151`, and produced `CiYuanXia-v3.2-151-arm64-v8a.apk`.
+- Latest GitHub Release asset: `CiYuanXia-v3.2-151-arm64-v8a.apk`.
+- Latest APK SHA256: `7b965bf4c25bdef528389dc2b95815273f6b267af6a74d4484623e62da7b638a`.
+- Latest locally downloaded artifact path: `dist/github-release-v3.2.0/CiYuanXia-v3.2-151-arm64-v8a.apk`.
+- Latest artifact ZIP digest/SHA256: `sha256:4d114774e06620aa4d5269aef645c0ec974df5443d3f5c5680eb60efdde813c4`.
+- Latest artifact ID: `8328525344`.
 - Install-visible APK versionName policy: manifest `versionName` now resolves to the short display version, for example semantic `2.5.0` -> installer/app display `2.5`.
 
 ## Dependencies And Release Safety
@@ -66,17 +81,18 @@
 - Android dependencies: Termux terminal-view, RecyclerView, Media3, ffmpeg-kit-full, commons-compress, xz, zstd-jni.
 - Signing: workflow accepts `KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD`; if absent, release artifacts use debug signing fallback.
 - Release artifact naming: `CiYuanXia-v<version>-<versionCode>-arm64-v8a.apk`.
-- Last successful artifact checksum: APK SHA256 `069a55a8d36826688f44b8d9d073942b107a9d01d27ac0d432197d438ee23cc5`; artifact ZIP digest `sha256:f37da8b0dda21f21b497d9ab6d13795bf5deb1261653e2f4a05301db0a2408d9`.
+- Last successful artifact checksum: APK SHA256 `796a0f46ac20948f4f7b7115cb58ff30aa15017c4dc316011a800bc01edbb6e8`; artifact ZIP digest `sha256:1c1a4cf53a8c370c5579798184a9f9265921cbab75d0992120e53cdf749f3184`.
 - Secret hygiene: `.gitignore` excludes `.env`, `flutter_app/android/key.properties`, `*.jks`, `*.keystore`, local configs with API keys, and build output.
 - Runtime assets: `openclaw-rootfs-noble-arm64.tar.gz` is currently a Git LFS pointer; `basic-resource` Release stores large runtime assets and SHA256 values.
 - Runtime Node defaults are aligned to Node.js `24.15.0` for arm64/x86_64 and `22.22.3` for armv7. Future Node upgrades must update Flutter constants, RootFS scripts, setup l10n copy, primary docs, resource docs, legacy installer URLs, cached asset names, license/source notices, and the `lib/test.js` drift guard together.
 
 ## Test Matrix
-- Static checks: latest npm ESLint and `git diff --check` passed after the terminal IME follow-up, workflow version-source fix, and final memory sync; the GitHub Actions workflow still runs `flutter analyze --no-fatal-infos` before the APK build.
-- Unit tests: `npm test` passed locally with 24 checks after the terminal IME/browser/version work and now covers the workflow version-source guard; Flutter tests were not run locally and are not currently part of the workflow, which runs analyze and the APK build.
+- Static checks: latest npm ESLint and `git diff --check` passed after the terminal shortcut-bar double-lift compensation follow-up and before the `147 / 2.8` cloud build; the GitHub Actions workflow still runs `flutter analyze --no-fatal-infos` before the APK build.
+- Static checks: the native-toolbar retry fix passed latest npm ESLint and `git diff --check` before triggering run `29370762550`; GitHub Actions then completed `flutter analyze --no-fatal-infos`, APK packaging, artifact upload, and release publication successfully.
+- Unit tests: `npm test` passed locally with 28 checks after the browser/terminal IME focus handoff follow-up and now covers the browser soft-input arbitration guard, the reduced native terminal IME retry guard, the native-toolbar path guard, the native IME compensation guard, and the workflow version-source guard; Flutter tests were not run locally and are not currently part of the workflow, which runs analyze and the APK build.
 - Current release-management gap: `.github/workflows/flutter-build.yml` can produce a green APK artifact without executing `flutter test`, even though focused Flutter unit tests exist under `flutter_app/test/`.
 - Current browser automation test coverage includes generated MCP/browser-script string assertions for tab list/new/switch/close and UA switching in `flutter_app/test/cli_api_config_service_test.dart`, but those Flutter tests could not be executed locally without the Flutter SDK.
-- Current Node self-test includes the runtime-version drift guard, browser header/menu guards, route-scoped terminal IME guards, and the native terminal input-strip guard; it now passes with 23 checks.
+- Current Node self-test includes the runtime-version drift guard, browser header/menu guards, route-scoped terminal IME guards, the native terminal input-strip guard, the native-toolbar path guard, and the native global-layout IME compensation guard; it now passes with 26 checks.
 - Auto-inspection caveat: `inspect_app_project.py` currently detects only the root Node shell for this repo; future agents must verify the Flutter/Kotlin app manually from `flutter_app/pubspec.yaml`, `flutter_app/android/app/build.gradle`, and source entry points.
 - Integration/E2E tests: no Flutter `integration_test`, Maestro, Appium, or emulator test workflow found.
 - Device/emulator/browser smoke target: none run in this session. Use Android 10+ arm64 device/emulator for install/setup/gateway smoke.

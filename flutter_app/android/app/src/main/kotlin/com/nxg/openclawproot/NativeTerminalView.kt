@@ -279,7 +279,9 @@ class NativeTerminalPlatformView(
         if (disposed) {
             return
         }
-        terminalView.requestFocus()
+        if (!terminalView.hasFocus()) {
+            terminalView.requestFocus()
+        }
         requestInputStripVisible()
         requestKeyboardShow()
         terminalView.removeCallbacks(keyboardRetryRunnable)
