@@ -312,6 +312,10 @@ Included icons:
   dependencies; see the component entries in this file.
 - Used as: `assets/bootstrap/openclaw-rootfs-noble-arm64.tar.gz` packaged
   inside the APK to avoid slow first-run environment and plugin downloads.
+- Companion manifest: `assets/bootstrap/openclaw-rootfs-noble-arm64.json`
+  records the exact resolved package versions, fingerprint, SHA256, and build
+  timestamp used for the current prebuilt bundle and the reusable
+  `basic-resource` GitHub Release.
 - Upstream: Ubuntu Base, Node.js, npm registry packages, and OpenClaw plugin
   package sources listed below.
 - Source for distributed binary: see `OPEN_SOURCE_SOURCES.md` and package
@@ -324,8 +328,8 @@ Included icons:
 
 ## OpenClaw npm Package
 
-- Version: `latest` at prebuilt-rootfs build time; latest observed by the
-  2026-07-09 registry check was 2026.6.11.
+- Version: installed through `openclaw@latest` during prebuilt-rootfs build;
+  latest observed by the 2026-07-15 registry check is `2026.7.1`.
 - License: MIT.
 - Used as: OpenClaw CLI/runtime inside the proot environment.
 - Upstream: https://www.npmjs.com/package/openclaw
@@ -337,8 +341,9 @@ Included icons:
 
 ## Tencent Connect OpenClaw QQ Bot Plugin
 
-- Version: `@tencent-connect/openclaw-qqbot@latest` at prebuilt-rootfs build
-  time; latest observed by the 2026-07-09 registry check was 1.7.2.
+- Version: installed through `@tencent-connect/openclaw-qqbot@latest` during
+  prebuilt-rootfs build; latest observed by the 2026-07-15 registry check is
+  `2.0.0`.
 - License: MIT; package tarball includes `LICENSE`.
 - Used as: QQ Bot channel plugin preinstalled in the bundled OpenClaw rootfs.
 - Upstream: https://github.com/tencent-connect/openclaw-qqbot
@@ -349,8 +354,9 @@ Included icons:
 
 ## Tencent Weixin OpenClaw Plugin
 
-- Version: `@tencent-weixin/openclaw-weixin@latest` at prebuilt-rootfs build
-  time; latest observed by the 2026-07-09 registry check was 2.4.6.
+- Version: installed through `@tencent-weixin/openclaw-weixin@latest` during
+  prebuilt-rootfs build; latest observed by the 2026-07-15 registry check is
+  `2.4.6`.
 - License: MIT; package metadata and tarball license both declare MIT.
 - Used as: Weixin channel plugin preinstalled in the bundled OpenClaw rootfs.
 - Upstream: https://www.npmjs.com/package/@tencent-weixin/openclaw-weixin

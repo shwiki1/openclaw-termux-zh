@@ -270,11 +270,14 @@ const Map<String, String> appStringsJa = {
   'setupWizardSelectedVersionHint': '{version} · {size} をインストールします',
   'setupWizardRecommended': '最新推奨',
   'setupWizardBootstrapResourcesTitle': '事前構築リソース',
-  'setupWizardBootstrapResourcesConfigured': 'カスタムリソースを設定済み',
-  'setupWizardBootstrapResourcesOptional': '任意: URL またはローカルファイル',
-  'setupWizardBootstrapResourcesIntro': 'これは任意設定です。空のままなら既定のオンライン手順を使います。',
+  'setupWizardBootstrapResourcesConfigured':
+      'カスタム上書きリソースを設定済み',
+  'setupWizardBootstrapResourcesOptional':
+      '既定では同梱済みの事前構築パッケージを優先',
+  'setupWizardBootstrapResourcesIntro':
+      'これは任意の上書き設定です。空のままなら、まずアプリ同梱の事前構築リソースを使い、検証や展開に失敗した場合のみ標準のオンライン初期化へ戻ります。',
   'setupWizardBootstrapUseGithub': 'GitHub リソースを使用',
-  'setupWizardBootstrapUseDefault': '既定手順を使用',
+  'setupWizardBootstrapUseDefault': 'アプリ既定に戻す',
   'setupWizardBootstrapSave': '設定を保存',
   'setupWizardBootstrapPrebuiltRootfsTitle': '事前構築 RootFS',
   'setupWizardBootstrapPrebuiltRootfsSubtitle': '優先推奨。初回セットアップ時の apt 処理を減らせます。',

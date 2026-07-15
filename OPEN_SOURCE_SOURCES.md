@@ -30,14 +30,17 @@ No modifications are made to FFmpegKit itself. Project-owned code calls the publ
 ## Bundled Ubuntu/OpenClaw Rootfs
 
 - Generated artifact: `flutter_app/assets/bootstrap/openclaw-rootfs-noble-arm64.tar.gz`
+- Companion manifest: `flutter_app/assets/bootstrap/openclaw-rootfs-noble-arm64.json`
 - Generator: `scripts/build-prebuilt-rootfs.sh`
 - Ubuntu base: Ubuntu Base 24.04.3 arm64, downloaded from Ubuntu cdimage
   mirrors configured in the generator script.
 - Installed Ubuntu packages: `ca-certificates`, `git`, `python3`, `make`,
   `g++`, `curl`, `wget`, `lsof`, plus their transitive dependencies.
-- Additional runtime packages: Node.js 24.15.0 arm64, `openclaw@latest`,
-  `@tencent-connect/openclaw-qqbot@latest`, and
-  `@tencent-weixin/openclaw-weixin@latest`.
+- Additional runtime packages: Node.js 24.15.0 arm64,
+  `openclaw@latest` (currently resolving to `2026.7.1`),
+  `@tencent-connect/openclaw-qqbot@latest` (currently resolving to `2.0.0`),
+  and `@tencent-weixin/openclaw-weixin@latest`
+  (currently resolving to `2.4.6`).
 
 ### Source Access
 
@@ -56,6 +59,10 @@ OpenClaw and plugin npm package source/provenance is available from:
 - https://github.com/openclaw/openclaw
 - https://github.com/tencent-connect/openclaw-qqbot
 - npm package metadata for `@tencent-weixin/openclaw-weixin`
+
+The generated manifest shipped beside the archive records the resolved package
+versions, bundle fingerprint, SHA256, and build time used for the current
+prebuilt bundle and the reusable `basic-resource` GitHub Release.
 
 ### Project Modifications
 

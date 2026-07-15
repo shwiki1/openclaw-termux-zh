@@ -9,6 +9,8 @@
 - **运行时资源对齐**：默认 Node.js 版本更新到 `24.15.0`，armv7 兜底更新到 `22.22.3`，满足当前 `openclaw@latest` 的 engines 校验。
 - **OpenClaw 推荐版本跟随 latest 稳定版**：首次安装和版本选择默认推荐 npm `openclaw@latest` 的稳定版本；版本列表过滤 beta、rc、test、preview 等预发布版本。
 - **运行时要求已按最新 OpenClaw 核对**：当前 `openclaw@latest` 要求 Node.js `>=22.22.3 <23`、`>=24.15.0 <25` 或更新的受支持主版本；初始化环境文案同步为 Ubuntu 24.04.3、Node.js 24.15.0（arm64/x86_64）与 Node.js 22.22.3（armv7）。
+- **预构建资源默认流程改为先用安装包内已有包**：首次启动未设置覆盖资源时，安装会先使用 APK 内打包好的预构建 RootFS，仅在校验或解压失败后才回退到标准在线初始化。
+- **`basic-resource` 复用仓库增加版本指纹校验**：预构建 RootFS 清单开始记录 OpenClaw 与插件的实际解析版本、校验指纹和 SHA256，避免 `latest` 指向变化后继续误复用旧资源包。
 - **新增 Android 推荐预配置**：安装完成后可直接写入 Android 友好的 `openclaw.json`，包含本地网关、随机 token、工作区、节点能力白名单和 Web 控制台设置，减少用户面对终端初始化问答的负担。
 - **Codex 浏览器自动化增强**：内置 browser MCP 新增等待选择器、滚动页面、键盘按键和下拉选择工具，提升 Codex CLI 在移动端 WebView 内处理登录、搜索、长页面和表单流程的稳定性。
 - **Codex 浏览器侧栏保持连接**：移动端终端右侧浏览器侧栏改为隐藏时保持 WebView 挂载，关闭侧滑后不会断开 Codex 浏览器自动化连接。

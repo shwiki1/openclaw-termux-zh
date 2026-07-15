@@ -4,6 +4,22 @@ class OpenClawReleaseNotesZh {
   // Pinned at app build time. Versions not listed here intentionally fall back
   // to the official upstream changelog text so future releases are not stale.
   static const Map<String, String> notesByVersion = {
+    '2026.7.1': r'''
+### 亮点
+- 新增 Featherless、ClawRouter、Claude Sonnet 5、Mythos 5、Meta Muse Spark 1.1 等模型与 Provider，并把新安装默认模型切到 GPT-5.6。
+- Control UI、原生 macOS 和移动端聊天继续增强：会话侧栏、上下文环、离线会话缓存、语音对话和自动标题/分组管理更完整。
+- Telegram 与 Codex 的 `/login`、`/steer`、`/tell` 和恢复链路继续加固，长会话连续性更稳。
+
+### 变更
+- 会话标题可经 utility model 自动生成，Gateway / Web / iOS / Android 统一补齐分组、重命名、归档和删除等管理能力。
+- Crestodian 对话式引导贯通 CLI、Web 安装和 macOS App，Provider 配置、审批和回退流程更清晰。
+- Android 聊天页补齐更完整的代码高亮，控制界面也增加更多 Gateway、Cron、Talk 和 Provider 状态信息。
+
+### 修复
+- 修复 Codex 运行时路由、Node 24 下浏览器请求取消、Telegram token 脱敏与 durable turn 恢复等问题。
+- 修复本地模型、插件更新、容器升级、Control UI 审批和多种消息通道投递边界问题。
+- 修复 Android 外接键盘 Enter 发送、CJK Markdown 强调、备份重试和 Codex app-server 兼容性问题。
+''',
     '2026.6.11': r'''
 ### 亮点
 - 增强 Slack、Mattermost、私聊模型覆盖等频道控制能力，自动化和路由配置更稳定。

@@ -4,11 +4,18 @@ The release workflow generates and packages this archive into the arm64-v8a
 APK:
 
 - `openclaw-rootfs-noble-arm64.tar.gz`
+- `openclaw-rootfs-noble-arm64.json`
 
 It is produced by `scripts/build-prebuilt-rootfs.sh` and includes Ubuntu base
 packages, Node.js, OpenClaw, and the QQ/Weixin bot plugins. First-run setup
 prefers this bundled archive and only falls back to the standard online flow if
 the archive is missing, corrupt, or fails validation.
+
+The JSON manifest is published to the reusable `basic-resource` GitHub Release
+alongside the archive. It records the resolved upstream package versions,
+fingerprint, checksum, and build timestamp so CI can detect when
+`openclaw@latest` or bundled plugin `latest` tags have moved and rebuild the
+archive instead of reusing stale assets.
 
 Other archives in this directory are local caches or manual fallback resources
 unless they are explicitly declared in `flutter_app/pubspec.yaml`.

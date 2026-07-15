@@ -100,7 +100,7 @@ jobs:
           sudo rm -rf .tmp/prebuilt-rootfs .tmp/rootfs-cache
 
       - name: Publish bundled OpenClaw rootfs
-        if: ${{ vars.BUILD_BUNDLED_ROOTFS == 'true' && steps.restore_rootfs.outputs.restored != 'true' }}
+        if: ${{ steps.restore_rootfs.outputs.restored != 'true' && (vars.BUILD_BUNDLED_ROOTFS == 'true' || (github.ref == 'refs/heads/main' && github.event_name == 'push')) }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: |

@@ -31,8 +31,9 @@ class AppConstants {
 
   static const String authorName = 'JunWan';
   static const String authorEmail = 'susuya0712@gmail.com';
+  static const String githubRepoSlug = 'shwiki1/openclaw-termux-zh';
   static const String githubUrl =
-      'https://github.com/JunWan666/openclaw-termux-zh';
+      'https://github.com/$githubRepoSlug';
   static const String license = 'MIT';
 
   static const String appUpdateBaseUrl = 'http://api.lziyu.cn/openclaw';
@@ -87,7 +88,7 @@ class AppConstants {
   static const String nodeBaseUrl =
       '$nodePrimaryMirrorBaseUrl/v$nodeVersion/node-v$nodeVersion-linux-';
   static const String basicResourceReleaseBaseUrl =
-      'https://github.com/JunWan666/openclaw-termux-zh/releases/download/basic-resource';
+      'https://github.com/$githubRepoSlug/releases/download/basic-resource';
   static const String basicResourcePrebuiltRootfsArm64 =
       '$basicResourceReleaseBaseUrl/openclaw-rootfs-$ubuntuCodename-arm64.tar.gz';
   static const String basicResourceUbuntuRootfsArm64 =

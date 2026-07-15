@@ -3,7 +3,7 @@ import 'dart:math' as math;
 
 import '../l10n/app_localizations.dart';
 
-const String fallbackRecommendedOpenClawReleaseVersion = '2026.6.11';
+const String fallbackRecommendedOpenClawReleaseVersion = '2026.7.1';
 const String defaultRecommendedOpenClawReleaseVersion =
     fallbackRecommendedOpenClawReleaseVersion;
 const Set<String> recommendedOpenClawReleaseVersions = {

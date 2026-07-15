@@ -623,12 +623,14 @@ const Map<String, String> appStringsEn = {
   'setupWizardSelectedVersionHint': 'Will install {version} · {size}',
   'setupWizardRecommended': 'Recommended latest',
   'setupWizardBootstrapResourcesTitle': 'Bootstrap resources',
-  'setupWizardBootstrapResourcesConfigured': 'Custom resources configured',
-  'setupWizardBootstrapResourcesOptional': 'Optional: URLs or local files',
+  'setupWizardBootstrapResourcesConfigured':
+      'Custom override resources configured',
+  'setupWizardBootstrapResourcesOptional':
+      'Default: prefer the packaged prebuilt bundle',
   'setupWizardBootstrapResourcesIntro':
-      'This is optional. If left empty, setup uses the default online flow.',
+      'This is an optional override. If left empty, setup first uses the packaged prebuilt resources and only falls back to the standard online bootstrap flow if validation or extraction fails.',
   'setupWizardBootstrapUseGithub': 'Use GitHub assets',
-  'setupWizardBootstrapUseDefault': 'Use default flow',
+  'setupWizardBootstrapUseDefault': 'Restore app defaults',
   'setupWizardBootstrapSave': 'Save configuration',
   'setupWizardBootstrapPrebuiltRootfsTitle': 'Prebuilt RootFS',
   'setupWizardBootstrapPrebuiltRootfsSubtitle':

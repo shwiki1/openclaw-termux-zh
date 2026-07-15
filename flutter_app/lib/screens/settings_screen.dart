@@ -498,7 +498,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                 ),
                 ListTile(
                   title: Text(l10n.t('settingsGithub')),
-                  subtitle: const Text('JunWan666/openclaw-termux-zh'),
+                  subtitle: const Text(AppConstants.githubRepoSlug),
                   leading: const Icon(Icons.code),
                   trailing: const Icon(Icons.open_in_new, size: 18),
                   onTap: () => launchUrl(

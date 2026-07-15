@@ -27,11 +27,11 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/JunWan666/openclaw-termux-zh.git"
+    "url": "git+https://github.com/shwiki1/openclaw-termux-zh.git"
   },
-  "homepage": "https://github.com/JunWan666/openclaw-termux-zh#readme",
+  "homepage": "https://github.com/shwiki1/openclaw-termux-zh#readme",
   "bugs": {
-    "url": "https://github.com/JunWan666/openclaw-termux-zh/issues"
+    "url": "https://github.com/shwiki1/openclaw-termux-zh/issues"
   },
   "engines": {
     "node": ">=18.0.0"
