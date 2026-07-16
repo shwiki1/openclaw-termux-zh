@@ -5,9 +5,9 @@ Last updated: 2026-07-16 UTC
 ## Current Truth
 - Active fix task: keep Codex and non-Codex terminal sessions on the same native shortcut-bar structure. `TerminalScreen` now keeps the shortcut bar inside `NativeTerminalView` for Codex too, the old native IME overlap compensation chain is removed, and the OpenAI-compatible Codex proxy preserves `responses` tool-call structures instead of flattening them into plain text. The fixes are prepared for the next cloud build, but Android device smoke is still required after release.
 - Release baseline: local `f206113` and remote `e698148` share the exact verified `3.4` source tree. GitHub `v3.5.0`/`v3.6.0`, their tags, APK assets, and associated Actions runs were removed; `basic-resource` remains the valid 3.4 baseline resource.
-- Current published release: `v4.4.0 / 4.4 / 163`, derived from source anchor `2.5.0+143`. Workflow `.github/workflows/flutter-build.yml` enforces logical build `163` as its release floor and only packages `arm64-v8a`.
-- Cloud result: Actions run `29479840309` succeeded at remote commit `c44deeb4da325d44d0e171fcf3d06ae6490a2f53` and published `CiYuanXia-v4.4-163-arm64-v8a.apk` in GitHub Release `v4.4.0`. The build and release jobs both completed successfully.
-- Local artifact: the prior verified `v4.3.0` APK remains at `dist/github-release-v4.3.0/`; the `v4.4.0` release asset is downloading to `dist/github-release-v4.4.0/` and must be checksum, ZIP, zipalign, and signer verified after completion.
+- Current published release: `v4.7.0 / 4.7 / 166`, derived from source anchor `2.5.0+143`. Workflow `.github/workflows/flutter-build.yml` enforces logical build `166` as its release floor and only packages `arm64-v8a`.
+- Cloud result: Actions run `29521331282` succeeded at remote commit `cdd65c5b96cfb0aefb89b74148cf2e3ccbc4acff` and published `CiYuanXia-v4.7-166-arm64-v8a.apk` in GitHub Release `v4.7.0`. The build and release jobs both completed successfully.
+- Local artifact: `dist/github-release-v4.7.0/CiYuanXia-v4.7-166-arm64-v8a.apk` matches GitHub Release SHA-256 `f3d8746cb63394a110103006dc52288913f5de2fffb8a9f6a2badd6368c976cb`.
 - Signing: APK verifies with the existing release signer SHA-256 `0618eafd1855855749abb7c04d6f44edf9a4b7cb09e26fd882e856d5c994dde6`, so normal in-place update compatibility is retained.
 - App: `次元虾`, a Chinese Android integration for OpenClaw Gateway without a Termux app dependency.
 - Repository root: `/storage/emulated/0/ZeroTermux/开发/openclaw-termux-zh-5.5`.
@@ -19,7 +19,7 @@ Last updated: 2026-07-16 UTC
 - GitHub Actions currently runs checkout, rootfs restore/build, `flutter analyze --no-fatal-infos`, APK packaging, and GitHub Release publication, but does not run `flutter test`.
 - Current source version: root `package.json` `2.5.0`; Flutter `pubspec.yaml` `2.5.0+143`.
 - App version: latest published installer/app display `4.4`; the repo keeps the semantic/source anchor at `2.5.0+143` and derives user-facing versions from the build number in fixed one-tenth steps.
-- Build number: latest published logical build `163`; failed builds `157`, `158`, `160`, `161`, and `165` remain reserved. The source anchor remains `143` in `flutter_app/pubspec.yaml` for CI derivation.
+- Build number: latest published logical build `166`; failed builds `157`, `158`, `160`, `161`, and `165` remain reserved. The source anchor remains `143` in `flutter_app/pubspec.yaml` for CI derivation.
 - Flutter unit tests exist under `flutter_app/test/` (12 files), but the current Termux session has no local `flutter` or `dart` SDK to execute them.
 - Version metadata is aligned to semantic source anchor `2.5.0+143` in Flutter defaults, Node compatibility CLI/package metadata, README files, STRUCTURE, and CHANGELOG.
 - Runtime Node defaults are aligned to Node.js `24.15.0` for arm64/x86_64 and `22.22.3` for armv7 across Flutter constants, prebuilt RootFS scripts, setup l10n copy, primary docs, basic-resource docs, fallback asset naming, license/source notices, and the legacy root Node CLI.
@@ -38,13 +38,14 @@ Last updated: 2026-07-16 UTC
 - Management status: source anchor `2.5.0+143`, workflow release floor `163`, and the published `v4.4.0 / 4.4 / 163` release are aligned; the remaining governance gaps are Android device smoke for the latest IME fix, reconciliation of the ahead/behind branch topology, and the missing `flutter test` CI gate.
 - Project phase: feature work for Codex browser automation is ahead of validation; the immediate management focus is release-stabilization, not another feature branch.
 - Release topology note: `codex-terminal-ime-lag-fix` is currently `ahead 8, behind 9` versus `shwiki/main`, and `main` also diverges from `origin/main`. Future build provenance should continue naming both the remote and exact SHA instead of assuming the checked-out branch is authoritative.
-- Next artifact expectation: the queued Codex native-terminal redesign/tool-proxy retry should use logical build `166`, display installer/app version `4.7`, and publish `CiYuanXia-v4.7-166-arm64-v8a.apk`.
+- Next artifact expectation: the next fresh cloud build must use a logical build greater than `166`.
 - Compact Codex browser sidecar now disposes when closed on narrow screens, so the terminal route no longer carries a hidden WebView tree through IME reopen checks; the native terminal also skips redundant `requestFocus()` calls when keyboard reopen is already focused.
 
 ## Active Task
 - Submit the Codex terminal redesign and tool-call proxy fix for the next GitHub Actions arm64 release build, then record the resulting run/artifact provenance and keep Android device smoke as the immediate post-build validation step.
 
 ## Recently Changed
+- Added a native IME post-layout refresh path in `NativeTerminalView.kt`: when the keyboard actually changes the window-visible frame and the native shortcut lane would still be overlapped, the platform view now re-runs `requestInputStripVisible()` once after layout so the terminal plus shortcut bar are re-requested above the IME without reviving the older bottom-padding compensation chain.
 - Reworked `TerminalScreen` so Codex sessions use the same native platform-view shortcut bar as other terminal sessions. The terminal route no longer mounts a separate Flutter `TerminalToolbar`.
 - Reworked `NativeTerminalView.kt` to follow the simpler ZeroTermux-style structure: terminal surface plus native shortcut strip in one Android container, `adjustPan` plus the bottom input-strip visibility helper for IME motion, and no native global-layout overlap compensation chain.
 - Confirmed the ZeroTermux upstream reference is GPLv3-only, so this repo keeps only the layout/interaction idea and uses an original rewrite instead of copying upstream source.
