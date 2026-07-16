@@ -1516,6 +1516,27 @@ const TOOL_DEFS = [
     },
   },
   {
+    name: "browser_health_check",
+    description: "Wait until JavaScript, DOM readiness, DOM quiet time, and WebView resource activity indicate that the current page is ready after hydration.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        quietWindowMs: { type: "integer", description: "Required quiet window in milliseconds; default 500." },
+        timeoutMs: { type: "integer", description: "Maximum wait in milliseconds; default 10000." },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "browser_reset_tab",
+    description: "Replace the active browser tab with a fresh WebView session, clearing stuck navigation. Optionally open a URL after reset.",
+    inputSchema: {
+      type: "object",
+      properties: { url: { type: "string", description: "Optional URL to open after reset." } },
+      additionalProperties: false,
+    },
+  },
+  {
     name: "browser_control",
     description:
       "Stable single-entry browser automation tool. Use this when fine-grained browser tools are not exposed reliably; pass action such as open, tab_new, set_ua, list_interactables, type, click, capture_snapshot, or a browser_* tool name, plus payload.",
@@ -1696,6 +1717,55 @@ const TOOL_DEFS = [
         },
       },
       required: ["selector", "text"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "browser_paste",
+    description: "Paste text into a CSS-selected editable element using input, change, and composition events so React-style controlled fields stay synchronized.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        selector: { type: "string", description: "CSS selector for the editable element." },
+        text: { type: "string", description: "Text to paste." },
+        submit: { type: "boolean", description: "Whether to submit after pasting." },
+      },
+      required: ["selector", "text"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "browser_wait_for_resource",
+    description: "Wait for a loaded WebView resource whose URL contains a pattern, then return its URL and timing metadata.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        pattern: { type: "string", description: "Case-insensitive substring to match against resource URLs." },
+        timeoutMs: { type: "integer", description: "Maximum wait time in milliseconds." },
+      },
+      required: ["pattern"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "browser_list_overlays",
+    description: "List currently visible dialogs, menus, listboxes, portals, and positioned overlays with text, role, z-index, and viewport bounds.",
+    inputSchema: {
+      type: "object",
+      properties: { maxItems: { type: "integer", description: "Maximum overlays to return; default 24." } },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "browser_click_at",
+    description: "Click the element at viewport coordinates returned by an inspector or overlay query. Prefer selector clicks whenever possible.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        x: { type: "number", description: "Viewport X coordinate." },
+        y: { type: "number", description: "Viewport Y coordinate." },
+      },
+      required: ["x", "y"],
       additionalProperties: false,
     },
   },
@@ -2141,6 +2211,37 @@ const TOOL_DEFS = [
     },
   },
   {
+    name: "browser_user_script_list",
+    description: "List traditional website user scripts stored locally in the script assistant. These are separate from Codex browser automation workflows.",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+  },
+  {
+    name: "browser_user_script_save",
+    description: "Save JavaScript generated for a traditional website user script. Saving never executes the code; the user must confirm execution in the script assistant.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "Existing script id to update; omit to create." },
+        name: { type: "string", description: "Script name." },
+        description: { type: "string", description: "Purpose description." },
+        code: { type: "string", description: "Complete JavaScript source; Tampermonkey metadata comments are allowed." },
+        matches: { type: "array", items: { type: "string" }, description: "Optional URL match patterns." },
+      },
+      required: ["name", "code"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "browser_set_script_auto_draft",
+    description: "Enable or disable automatic pending browser-script drafts for this app session. Disabled by default.",
+    inputSchema: {
+      type: "object",
+      properties: { enabled: { type: "boolean", description: "Whether successful recordable actions should create a pending draft." } },
+      required: ["enabled"],
+      additionalProperties: false,
+    },
+  },
+  {
     name: "browser_get_state",
     description:
       "Return the current browser state including title, URL, tabs, active tab id, user-agent mode, loading flag, and the last bridge error.",
@@ -2154,6 +2255,8 @@ const TOOL_DEFS = [
 
 const TOOL_TO_ACTION = {
   browser_self_test: "self_test",
+  browser_health_check: "health_check",
+  browser_reset_tab: "reset_tab",
   browser_open: "open",
   browser_back: "back",
   browser_forward: "forward",
@@ -2165,6 +2268,10 @@ const TOOL_TO_ACTION = {
   browser_set_ua: "set_ua",
   browser_click: "click",
   browser_type: "type",
+  browser_paste: "paste",
+  browser_wait_for_resource: "wait_for_resource",
+  browser_list_overlays: "list_overlays",
+  browser_click_at: "click_at",
   browser_wait_for_text: "wait_for_text",
   browser_wait_for_selector: "wait_for_selector",
   browser_scroll: "scroll",
@@ -2183,6 +2290,9 @@ const TOOL_TO_ACTION = {
   browser_script_rename: "script_rename",
   browser_script_delete: "script_delete",
   browser_script_clear_pending: "script_clear_pending",
+  browser_user_script_list: "user_script_list",
+  browser_user_script_save: "user_script_save",
+  browser_set_script_auto_draft: "script_set_auto_draft",
   browser_get_state: "get_state",
 };
 
@@ -2692,6 +2802,8 @@ const [baseUrl, token, action, payloadText] = process.argv.slice(2);
 const ACTION_ALIASES = {
   browser_control: "browser_control",
   browser_self_test: "self_test",
+  browser_health_check: "health_check",
+  browser_reset_tab: "reset_tab",
   browser_open: "open",
   browser_back: "back",
   browser_forward: "forward",
@@ -2703,6 +2815,10 @@ const ACTION_ALIASES = {
   browser_set_ua: "set_ua",
   browser_click: "click",
   browser_type: "type",
+  browser_paste: "paste",
+  browser_wait_for_resource: "wait_for_resource",
+  browser_list_overlays: "list_overlays",
+  browser_click_at: "click_at",
   browser_wait_for_text: "wait_for_text",
   browser_wait_for_selector: "wait_for_selector",
   browser_scroll: "scroll",
@@ -2721,6 +2837,8 @@ const ACTION_ALIASES = {
   browser_script_rename: "script_rename",
   browser_script_delete: "script_delete",
   browser_script_clear_pending: "script_clear_pending",
+  browser_user_script_list: "user_script_list",
+  browser_user_script_save: "user_script_save",
   browser_get_state: "get_state",
 };
 
@@ -2818,27 +2936,29 @@ Use this skill when the user asks you to inspect a webpage, click through a flow
 
 Rules:
 1. Start with `browser_get_state` so you know whether the browser panel is attached.
-2. Use `browser_self_test` when checking whether the browser bridge is working or after an attachment/navigation failure.
+2. Use `browser_self_test` for the local bridge page, then use `browser_health_check` after external navigation or a form submit; it verifies JavaScript, DOM, hydration quiet time, and recent resource activity.
 3. If the tool reports that the browser panel is unavailable, stop and tell the user to open the browser panel from the terminal screen.
 4. If fine-grained MCP tools are not exposed reliably, use `browser_control` with an `action` plus `payload`, for example `{ "action": "type", "payload": { "selector": "#email", "text": "user@example.com" } }`.
 5. If MCP tools are unavailable, use the shell fallback: `browser-script call <action-or-browser_tool> '<json-payload>'`, or shortcuts such as `browser-script interactables`, `browser-script snapshot`, `browser-script type`, and `browser-script click`.
-6. Prefer `browser_open`, `browser_wait_for_text`, `browser_wait_for_selector`, `browser_scroll`, `browser_list_interactables`, `browser_highlight`, `browser_click`, `browser_type`, `browser_select_option`, `browser_press_key`, and `browser_extract` over `browser_eval`.
+6. The default user agent is mobile. Use `browser_set_ua` with `desktop` only when the task requires a desktop layout; it reloads the active page.
+7. Prefer `browser_open`, `browser_health_check`, `browser_wait_for_text`, `browser_wait_for_selector`, `browser_wait_for_resource`, `browser_scroll`, `browser_list_interactables`, `browser_list_overlays`, `browser_highlight`, `browser_click`, `browser_paste`, `browser_type`, `browser_select_option`, `browser_press_key`, and `browser_extract` over `browser_eval`.
 7. Use stable CSS selectors. Avoid fragile positional selectors unless there is no better choice.
 8. Before any action that could submit a form, log in, send a message, spend money, or change user data, ask for confirmation.
-9. After a navigation or form submit, wait with `browser_wait_for_text` or `browser_wait_for_selector` before assuming the page is ready.
+10. After navigation or form submission, call `browser_health_check` and then wait for a specific selector, text, or resource. Use `browser_reset_tab` if a page stays stuck.
 10. When extracting content, keep the result focused. Use `selector` whenever possible instead of dumping the whole page.
 11. If the next selector is unclear, call `browser_list_interactables` or `browser_list_links` first and choose from the returned candidates.
 12. If a selector is risky, call `browser_highlight` before clicking so the user can visually confirm the target.
 13. Use `browser_scroll` for below-the-fold content before falling back to broad extraction.
 14. Use `browser_press_key` for keyboard-driven UI and `browser_select_option` for native dropdowns.
 15. Before repeating a known workflow, call `browser_script_list` and prefer `browser_script_run` when a matching script exists.
-16. After completing any complete repeatable browser workflow, update the script assistant pending-save draft with `browser_script_stage`; automatically fill `fileName` and `description` from the completed task.
+17. Automatic script drafts are disabled by default to avoid noisy output. Call `browser_script_stage` only when the user asks to preserve a reusable workflow; `browser_set_script_auto_draft` can opt in for the session.
 17. Prefer explicit reusable steps in `browser_script_stage`. If the exact steps are already in the recent action log, staging without steps is acceptable, but still provide the filename and purpose description.
 18. Saved scripts replay deterministic browser actions. Do not save secrets in descriptions, filenames, or variable names; use `{{name}}` placeholders for values that should change per run.
 19. For login, API-key creation, payment, posting, deletion, or other sensitive flows, stage reusable navigation and form structure only; replace passwords, tokens, one-time codes, and user-specific values with placeholders.
 20. Use `browser_tab_list` before switching if you need to preserve several open pages during a long workflow.
 21. Use `browser_tab_new` for starting an unrelated page, `browser_tab_switch` for returning to a saved context, and `browser_tab_close` only after the page state is no longer needed.
-22. Switch to `browser_set_ua` with `desktop` when a site falls back to a mobile layout despite the browser being in desktop mode; reload the current tab after switching.
+23. For portal menus, inspect `browser_list_overlays`, then use a stable selector or the returned bounds with `browser_click_at` as a last resort.
+24. Traditional website scripts (for example Tampermonkey-style JavaScript) are separate from Codex replay workflows. Generate source only when the user asks, then save it with `browser_user_script_save`; never execute generated user-script code automatically.
 
 Typical flow:
 1. `browser_open`

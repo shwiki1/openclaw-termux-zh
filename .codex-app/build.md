@@ -1,5 +1,9 @@
 # Build And Verification
 
+## Pending Cloud Build
+- 2026-07-16 browser automation and dual-script-assistant release candidate: source anchor remains `2.5.0+143`; GitHub Actions will derive logical build `157`, semantic `3.8.0`, and install-visible version `3.8` from the latest recorded release build `156`.
+- Target: GitHub `shwiki/main`, workflow `.github/workflows/flutter-build.yml`, artifact ABI `arm64-v8a` only. Local checks before submission: `npm run lint`, `npm test`, and `git diff --check`; Flutter/Dart checks remain unavailable in Termux.
+
 ## Local Checks Only
 - 2026-07-15 Codex terminal IME lag follow-up: `git diff --check` passed; `npm test` passed with 28 checks; `npm run lint -- --no-warn-ignored` passed; local `flutter`, `dart`, and `kotlinc` remain unavailable, so Flutter analyze/test and native compile checks were not run locally.
 - Formatting: not run in this session; Flutter/Dart SDK unavailable locally.
@@ -38,14 +42,15 @@
 
 ## Version Management
 - Canonical version file: `flutter_app/pubspec.yaml` for Flutter app version/build, plus root `package.json` for npm package version. Keep them aligned for releases.
-- Current user-facing version: latest published display `3.2`; the repo still keeps the source anchor at `2.5.0+143` and derives display versions from the target build number.
-- Current build number: latest published build `151`; the repo anchor remains `143` in `flutter_app/pubspec.yaml`.
+- Current user-facing version: latest published display `3.7`; the repo still keeps the source anchor at `2.5.0+143` and derives display versions from the target build number.
+- Current build number: latest published logical build `156`; the repo anchor remains `143` in `flutter_app/pubspec.yaml`.
 - Current source semantic anchor: `2.5.0` in `flutter_app/pubspec.yaml` and `package.json`.
 - Latest successful display-version cloud build: GitHub Actions run `29373389340` used remote commit `db7ce2e9e992be903fa80df9146362aee6c291c2`, published release `v3.0.0`, and produced `CiYuanXia-v3.0-149-arm64-v8a.apk`.
 - Latest successful display-version cloud build: GitHub Actions run `29375096798` used remote commit `92b8b59d29a298a05dcb01f290f32df34beb1254`, published release `v3.1.0`, and produced `CiYuanXia-v3.1-150-arm64-v8a.apk`.
 - Latest successful display-version cloud build: GitHub Actions run `29377510459` used remote commit `f250722d5dd2709b388ee42030c10559977aba74`, published release `v3.2.0`, and produced `CiYuanXia-v3.2-151-arm64-v8a.apk`.
+- Latest successful display-version cloud build: GitHub Actions run `29452076550` used remote commit `23976fc39aaa353b77f83179efb5e4685a12a1ac`, published release `v3.7.0`, and produced `CiYuanXia-v3.7-156-arm64-v8a.apk` from the verified 3.4 feature baseline.
 - User device feedback on the previous `146 / 2.7` release led to the terminal shortcut-bar double-lift compensation follow-up; that follow-up is now packaged in `147 / 2.8` and still requires Android device smoke.
-- Next expected published cloud build from the current source anchor: the next fresh artifact should publish build `152`, semantic/app version `3.3.0`, installer/app display `3.3`.
+- Next expected published cloud build from the current source anchor must use a new logical build greater than `156`; never recreate the withdrawn `154 / 3.5` or `155 / 3.6` artifacts.
 - Last cloud build version before submitting the browser tabs/UA build: source metadata `2.0.50+140`; GitHub Actions run `29293286907` generated CI version `2.0.50+141` for the arm64 split APK.
 - Last cloud build artifact before submitting the browser tabs/UA build: `ciyuanxia-apks` artifact ID `8295917288`, containing `CiYuanXia-v2.0.50-141-arm64-v8a.apk`, artifact ZIP digest `sha256:153c4b895a1bf1838985266fd6dfcd4fb32e021d7704e70e16ed53ccaf7dbfe8`.
 - Version bump policy: Increment the numeric build number for every new cloud build. Keep the repo semantic anchor at `2.5.0+143`, then derive artifact versions automatically from the target build number in fixed one-tenth steps: `144 -> 2.5.0 / 2.5`, `145 -> 2.6.0 / 2.6`, `146 -> 2.7.0 / 2.7`, `147 -> 2.8.0 / 2.8`, `148 -> 2.9.0 / 2.9`, `149 -> 3.0.0 / 3.0`.
@@ -111,6 +116,7 @@
 
 ## Notes
 - 2026-07-15 release recovery policy: after deleting withdrawn `3.5 / 154` and `3.6 / 155` cloud resources, `.github/workflows/flutter-build.yml` enforces `MINIMUM_RELEASE_BUILD=156`. This intentionally builds the verified `3.4` source tree as `3.7 / 156` so Android update versionCodes are never reused.
+- 2026-07-15 release verification: `v3.7.0` asset downloaded to `dist/github-release-v3.7.0/`; SHA-256 is `769f7a961bdb5410b9c91329dfd0211f068d837e649c7f441aa1a936482218ce`, ZIP integrity and `zipalign` passed, and APK signer matches the established release certificate.
 - Do not commit secret values.
 - Use GitHub Actions for native packaging and release artifacts.
 - Project instruction: build/release only Android `arm64-v8a` APK unless the user explicitly asks for another ABI/AAB.

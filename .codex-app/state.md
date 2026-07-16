@@ -1,10 +1,14 @@
 # Current App State
 
-Last updated: 2026-07-15 21:28 UTC
+Last updated: 2026-07-15 21:40 UTC
 
 ## Current Truth
-- Rollback baseline: local `f206113` and remote `e698148` share the exact verified `3.4` source tree. GitHub `v3.5.0`/`v3.6.0`, their tags, APK assets, and associated Actions runs were removed; `v3.4.0` is the latest release.
-- Active release task: publish the unchanged `3.4` feature tree as `3.7 / 156`. The workflow now enforces build `156` as the minimum because builds `154` and `155` were withdrawn; this prevents versionCode reuse while preserving the `2.5.0+143` source anchor and derives `3.7.0` / display `3.7`.
+- Active release task: submit browser automation hardening and the dual script assistant to GitHub Actions. The next cloud artifact must derive as `3.8 / 157` from source anchor `2.5.0+143`; do not reuse `156`.
+- Release baseline: local `f206113` and remote `e698148` share the exact verified `3.4` source tree. GitHub `v3.5.0`/`v3.6.0`, their tags, APK assets, and associated Actions runs were removed; `basic-resource` remains the valid 3.4 baseline resource.
+- Current published release: unchanged `3.4` feature tree is released as `v3.7.0 / 3.7 / 156`. The workflow enforces build `156` as the minimum, preventing reuse of withdrawn builds `154` and `155` while retaining the `2.5.0+143` source anchor.
+- Cloud result: Actions run `29452076550` succeeded at remote commit `23976fc39aaa353b77f83179efb5e4685a12a1ac` and published `CiYuanXia-v3.7-156-arm64-v8a.apk` in GitHub Release `v3.7.0`.
+- Local artifact: `dist/github-release-v3.7.0/CiYuanXia-v3.7-156-arm64-v8a.apk`, SHA-256 `769f7a961bdb5410b9c91329dfd0211f068d837e649c7f441aa1a936482218ce`; ZIP integrity and `zipalign` passed. Manifest shows versionName `3.7`, ABI `arm64-v8a`, and split-adjusted Android versionCode `2156` from logical build `156`.
+- Signing: APK verifies with the existing release signer SHA-256 `0618eafd1855855749abb7c04d6f44edf9a4b7cb09e26fd882e856d5c994dde6`, so normal in-place update compatibility is retained.
 - App: `次元虾`, a Chinese Android integration for OpenClaw Gateway without a Termux app dependency.
 - Repository root: `/storage/emulated/0/ZeroTermux/开发/openclaw-termux-zh-5.5`.
 - Stack: Flutter/Dart Android app shell, Kotlin native Android services, PRoot Ubuntu RootFS runtime, and a legacy Node.js CLI package.

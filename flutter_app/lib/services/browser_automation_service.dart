@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
 import 'browser_script_library_service.dart';
+import 'browser_user_script_library_service.dart';
 import 'native_bridge.dart';
 
 abstract class BrowserAutomationDelegate {
@@ -15,6 +16,11 @@ abstract class BrowserAutomationDelegate {
   Future<Map<String, dynamic>> getState();
 
   Future<Map<String, dynamic>> selfTest();
+
+  Future<Map<String, dynamic>> healthCheck({
+    int quietWindowMs = 500,
+    int timeoutMs = 10000,
+  });
 
   Future<Map<String, dynamic>> open(String url);
 
@@ -50,6 +56,30 @@ abstract class BrowserAutomationDelegate {
     required String selector,
     required String text,
     bool submit,
+  });
+
+  Future<Map<String, dynamic>> paste({
+    required String selector,
+    required String text,
+    bool submit,
+  });
+
+  Future<Map<String, dynamic>> waitForResource({
+    required String pattern,
+    int timeoutMs = 10000,
+  });
+
+  Future<Map<String, dynamic>> listOverlays({
+    int maxItems = 24,
+  });
+
+  Future<Map<String, dynamic>> clickAt({
+    required double x,
+    required double y,
+  });
+
+  Future<Map<String, dynamic>> resetTab({
+    String? url,
   });
 
   Future<Map<String, dynamic>> waitForText({
@@ -152,6 +182,10 @@ class BrowserAutomationService extends ChangeNotifier {
     'script_rename',
     'script_delete',
     'script_clear_pending',
+    'script_set_auto_draft',
+    'user_script_list',
+    'user_script_save',
+    'user_script_delete',
   };
   static const _recordableScriptActions = {
     'open',
@@ -160,6 +194,7 @@ class BrowserAutomationService extends ChangeNotifier {
     'reload',
     'click',
     'type',
+    'paste',
     'wait_for_text',
     'wait_for_selector',
     'scroll',
@@ -176,6 +211,7 @@ class BrowserAutomationService extends ChangeNotifier {
   };
   static const _toolActionAliases = {
     'browser_self_test': 'self_test',
+    'browser_health_check': 'health_check',
     'browser_open': 'open',
     'browser_back': 'back',
     'browser_forward': 'forward',
@@ -187,6 +223,11 @@ class BrowserAutomationService extends ChangeNotifier {
     'browser_set_ua': 'set_ua',
     'browser_click': 'click',
     'browser_type': 'type',
+    'browser_paste': 'paste',
+    'browser_wait_for_resource': 'wait_for_resource',
+    'browser_list_overlays': 'list_overlays',
+    'browser_click_at': 'click_at',
+    'browser_reset_tab': 'reset_tab',
     'browser_wait_for_text': 'wait_for_text',
     'browser_wait_for_selector': 'wait_for_selector',
     'browser_scroll': 'scroll',
@@ -205,6 +246,10 @@ class BrowserAutomationService extends ChangeNotifier {
     'browser_script_rename': 'script_rename',
     'browser_script_delete': 'script_delete',
     'browser_script_clear_pending': 'script_clear_pending',
+    'browser_set_script_auto_draft': 'script_set_auto_draft',
+    'browser_user_script_list': 'user_script_list',
+    'browser_user_script_save': 'user_script_save',
+    'browser_user_script_delete': 'user_script_delete',
     'browser_get_state': 'get_state',
   };
 
@@ -223,8 +268,9 @@ class BrowserAutomationService extends ChangeNotifier {
   int _panelRequestNonce = 0;
   String _pendingOpenUrl = '';
   int _activeTabId = 0;
-  String _userAgentMode = 'desktop';
-  String _userAgentLabel = '电脑';
+  String _userAgentMode = 'mobile';
+  String _userAgentLabel = '手机';
+  bool _autoScriptDraftEnabled = false;
   List<Map<String, dynamic>> _tabs = const <Map<String, dynamic>>[];
   Completer<void>? _delegateReadyCompleter;
   final List<BrowserActionLogEntry> _recentActions = [];
@@ -390,6 +436,10 @@ class BrowserAutomationService extends ChangeNotifier {
 
   Future<Map<String, dynamic>> clearPendingScriptDraft() {
     return _invokeAction('script_clear_pending', const <String, dynamic>{});
+  }
+
+  Future<Map<String, dynamic>> runPageScript(String script) {
+    return _invokeAction('eval', {'script': script});
   }
 
   Future<Map<String, dynamic>> runScript(String id) {
@@ -656,6 +706,11 @@ class BrowserAutomationService extends ChangeNotifier {
         return delegate.getState();
       case 'self_test':
         return delegate.selfTest();
+      case 'health_check':
+        return delegate.healthCheck(
+          quietWindowMs: _int(payload['quietWindowMs'], fallback: 500),
+          timeoutMs: _int(payload['timeoutMs'], fallback: 10000),
+        );
       case 'open':
         return delegate.open(_string(payload['url']));
       case 'back':
@@ -694,6 +749,28 @@ class BrowserAutomationService extends ChangeNotifier {
           text: _string(payload['text']),
           submit: payload['submit'] == true,
         );
+      case 'paste':
+        return delegate.paste(
+          selector: _string(payload['selector']),
+          text: _string(payload['text']),
+          submit: payload['submit'] == true,
+        );
+      case 'wait_for_resource':
+        return delegate.waitForResource(
+          pattern: _string(payload['pattern']),
+          timeoutMs: _int(payload['timeoutMs'], fallback: 10000),
+        );
+      case 'list_overlays':
+        return delegate.listOverlays(
+          maxItems: _int(payload['maxItems'], fallback: 24),
+        );
+      case 'click_at':
+        return delegate.clickAt(
+          x: (payload['x'] as num?)?.toDouble() ?? double.nan,
+          y: (payload['y'] as num?)?.toDouble() ?? double.nan,
+        );
+      case 'reset_tab':
+        return delegate.resetTab(url: _nullableString(payload['url']));
       case 'wait_for_text':
         return delegate.waitForText(
           text: _string(payload['text']),
@@ -791,6 +868,43 @@ class BrowserAutomationService extends ChangeNotifier {
         return _deleteScript(payload);
       case 'script_clear_pending':
         return _clearPendingScriptDraft();
+      case 'script_set_auto_draft':
+        _autoScriptDraftEnabled = payload['enabled'] == true;
+        if (!_autoScriptDraftEnabled) {
+          _pendingScriptDraft = null;
+        }
+        notifyListeners();
+        return {
+          'ok': true,
+          'message': _autoScriptDraftEnabled
+              ? 'Automatic browser script drafts are enabled.'
+              : 'Automatic browser script drafts are disabled.',
+          'autoScriptDraftEnabled': _autoScriptDraftEnabled,
+        };
+      case 'user_script_list':
+        final scripts = await BrowserUserScriptLibraryService.loadScripts();
+        return {
+          'ok': true,
+          'message': 'Traditional website scripts loaded.',
+          'scripts': [for (final script in scripts) script.toJson()],
+        };
+      case 'user_script_save':
+        final matches = _stringList(payload['matches']);
+        final script = await BrowserUserScriptLibraryService.saveScript(
+          id: _nullableString(payload['id']),
+          name: _string(payload['name']),
+          description: _string(payload['description']),
+          code: _string(payload['code']),
+          matches: matches,
+        );
+        return {
+          'ok': true,
+          'message': 'Traditional website script saved. It will not run until the user confirms it in the script assistant.',
+          'script': script.toJson(),
+        };
+      case 'user_script_delete':
+        await BrowserUserScriptLibraryService.deleteScript(_string(payload['id']));
+        return {'ok': true, 'message': 'Traditional website script deleted.'};
       default:
         return {
           'ok': false,
@@ -1346,7 +1460,9 @@ class BrowserAutomationService extends ChangeNotifier {
     if (_recentActions.length > 20) {
       _recentActions.removeRange(20, _recentActions.length);
     }
-    if (ok && _recordableScriptActions.contains(action)) {
+    if (ok &&
+        _autoScriptDraftEnabled &&
+        _recordableScriptActions.contains(action)) {
       _refreshAutoPendingScriptDraft();
     }
   }

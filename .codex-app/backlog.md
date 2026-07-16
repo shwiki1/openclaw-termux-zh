@@ -1,15 +1,16 @@
 # Backlog
 
 ## Priority Now
-- Device-smoke the published `CiYuanXia-v3.2-151-arm64-v8a.apk` on Android, prioritizing terminal prompt visibility above the IME, native shortcut-bar co-movement, shortcut-key haptic/press feedback, browser address-bar stability, WebView input-field lift behavior, compact-sidecar hide/show recovery, and installer/app version text.
-- Re-smoke terminal IME reopen on Android with the latest local source behavior: first open, repeated dismiss/reopen inside one session, and leave/re-enter terminal screen. Old Flutter terminal overlay logic is no longer the main suspect; if lag remains, focus the next investigation on native platform-view/session reattach timing and the compact browser sidecar lifecycle.
-- Device-smoke the published `CiYuanXia-v3.0-149-arm64-v8a.apk` on Android, prioritizing terminal input visibility above the IME, native shortcut-bar co-movement, browser address-bar/readability checks, installer/app version text, first-run bootstrap, browser multi-tab, UA switching, script assistant, browser fallbacks, and compact sidecar reconnect behavior.
-- Device-smoke the published `CiYuanXia-v2.8-147-arm64-v8a.apk` on Android, prioritizing terminal input visibility above the IME, the compensated bottom shortcut bar, browser address-bar/readability checks, first-run bootstrap, browser multi-tab, UA switching, script assistant, browser fallbacks, and compact sidecar reconnect behavior.
+- Device-smoke the latest published `CiYuanXia-v3.7-156-arm64-v8a.apk` on Android: first-run bootstrap, installer/app version `3.7`, update compatibility, terminal IME prompt visibility, native shortcut-bar co-movement/feedback, browser address-bar/input lift, compact-sidecar reconnect, browser tabs/UA, and browser-script workflow.
+- Re-smoke terminal IME reopen on the current `3.7 / 156` build: first open, repeated dismiss/reopen in one session, and leave/re-enter terminal. If lag remains, focus on native `TerminalView`/`adjustPan` and platform-view/session reattach timing rather than Flutter `TextField` behavior.
 - Add `flutter test` to the GitHub Actions gate or run it in a dedicated Flutter SDK environment before the next release candidate; the repo already has Flutter tests, but the current green APK workflow does not execute them.
-- If device smoke still shows the terminal prompt hidden behind the keyboard or the shortcut bar still over-lifts, keep investigation focused on native Android `TerminalView`/`adjustPan` interactions and `NativeTerminalView.kt` global-layout overlap compensation rather than Flutter `TextField` behavior.
 - Decide the release promotion path for the next build: which branch is authoritative, which remote is used for cloud builds, who bumps the build number, and where changelog/release notes are cut from.
+- Reconcile broad Android permissions and actual logs/config storage with privacy/data-safety documentation before the next public release.
 
 ## Ready
+- Device-smoke the dual script assistant on a narrow Android screen and a wide/landscape screen: verify column stacking, long source editing, paste import, Codex save, confirmation before execution, and persistence after app restart.
+- Design and review a native Android WebView file-selector bridge before adding `browser_upload_file`; it must not expose arbitrary shared-storage paths or bypass user consent.
+- Design a native bitmap capture path before promising screenshot/OCR automation; the existing `browser_capture_snapshot` is DOM/text only.
 - Prepare a release-readiness checklist covering broad permissions/privacy review, rootfs asset restore/fallback expectations, version bump discipline, artifact verification, and install/update smoke before the next public release.
 - Replace `softprops/action-gh-release@v2` or otherwise update the release step before GitHub fully enforces the Node.js 20 deprecation warning now shown on run `29355437073`.
 - Device-smoke Codex browser multi-tab and UA behavior on Android: open multiple pages, switch tabs, close a tab, use back/forward/reload, switch desktop/mobile UA, and verify desktop pages no longer fall back to the mobile layout on representative sites.
@@ -31,16 +32,8 @@
 
 ## Do Not Forget
 - Keep app version/build number updated before every new cloud build.
-- Current source metadata anchor is `2.5.0+143`; latest successful GitHub Release asset is `CiYuanXia-v3.0-149-arm64-v8a.apk`, which includes the native terminal IME compensation follow-up and still needs Android device smoke.
-- Current source metadata anchor is `2.5.0+143`; latest successful GitHub Release asset is `CiYuanXia-v3.1-150-arm64-v8a.apk`, which includes the browser/terminal IME focus handoff follow-up and still needs Android device smoke.
-- Current source metadata anchor is `2.5.0+143`; latest successful GitHub Release asset is `CiYuanXia-v3.2-151-arm64-v8a.apk`, which includes the terminal shortcut-key feedback follow-up and still needs Android device smoke.
-- Remote `main` is now at `c5be0df884a6e066fdedb07d6d245af03802a0fc`, and GitHub Actions run `29370762550` completed successfully for the native-toolbar follow-up targeting `2.9 / 148`.
-- Remote `main` is now at `db7ce2e9e992be903fa80df9146362aee6c291c2`, and GitHub Actions run `29373389340` completed successfully for the native terminal IME compensation follow-up targeting `3.0 / 149`.
-- Remote `main` is now at `92b8b59d29a298a05dcb01f290f32df34beb1254`, and GitHub Actions run `29375096798` completed successfully for the browser/terminal IME focus handoff follow-up targeting `3.1 / 150`.
-- Remote `main` is now at `f250722d5dd2709b388ee42030c10559977aba74`, and GitHub Actions run `29377510459` completed successfully for the terminal shortcut-key feedback follow-up targeting `3.2 / 151`.
-- Future user-facing builds now derive automatically from the target build number: `148 -> 2.9`, `149 -> 3.0`, `150 -> 3.1`, `151 -> 3.2`, `152 -> 3.3`, `153 -> 3.4`.
-- The next fresh build should be `152 -> 3.3` if another new artifact is required after device smoke or workflow/test changes.
-- Current browser automation work is being submitted to GitHub Actions; after the APK is available, the next browser smoke target is Android device verification of tab/UA/mobile-desktop behavior.
+- Source metadata remains `2.5.0+143`; the latest recorded successful GitHub Release asset is `CiYuanXia-v3.7-156-arm64-v8a.apk` (Actions `29452076550`). It needs Android device smoke before promotion confidence is established.
+- The next fresh cloud build must use a new logical build greater than `156`; do not reuse withdrawn builds `154` or `155`.
 - The current APK workflow is green without running `flutter test`; keep that gap visible until CI or a dedicated SDK environment closes it.
 - Keep Node.js `24.15.0` for arm64/x86_64 and `22.22.3` for armv7 aligned across constants, RootFS scripts, setup l10n copy, docs, bootstrap resource names, license/source notices, legacy installer URLs, and `lib/test.js` unless a future task upgrades the runtime asset set.
 - `inspect_app_project.py` only auto-detects the root Node shell here; manually verify Flutter/Kotlin facts from `flutter_app/` before editing or reporting architecture.

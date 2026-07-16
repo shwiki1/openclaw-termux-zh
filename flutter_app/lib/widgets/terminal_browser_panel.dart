@@ -9,6 +9,7 @@ import 'package:webview_flutter_android/webview_flutter_android.dart';
 import '../app.dart';
 import '../services/browser_automation_service.dart';
 import '../services/browser_script_library_service.dart';
+import '../services/browser_user_script_library_service.dart';
 import '../services/native_bridge.dart';
 
 class TerminalBrowserPanel extends StatefulWidget {
@@ -92,7 +93,7 @@ class _BrowserTab {
 
   _BrowserTab({
     required this.id,
-    this.userAgentMode = _BrowserUserAgentMode.desktop,
+    this.userAgentMode = _BrowserUserAgentMode.mobile,
     this.title = 'Browser',
     this.currentUrl = '',
     this.error = '',
@@ -231,8 +232,8 @@ class _TerminalBrowserPanelState extends State<TerminalBrowserPanel>
           <li>在终端里告诉 Codex 目标网址和要完成的任务。</li>
           <li>需要登录、搜索、填写表单或读取页面内容时，让 Codex 使用 <code>browser-operator</code>。</li>
           <li>你也可以在上方地址栏手动输入网址，当前页面会被 Codex 接管。</li>
-          <li>浏览器默认请求电脑端页面，并支持页面缩放。</li>
-          <li>Codex 完成可复用流程后，会把脚本草稿放入右上角脚本助手的待保存区。</li>
+          <li>浏览器默认请求手机页面；需要桌面页面时，让 Codex 使用 <code>browser_set_ua</code> 切换。</li>
+          <li>只有明确开启自动草稿或要求保存脚本时，操作流程才会进入脚本助手的待保存区。</li>
         </ul>
 
         <h2>提示示例</h2>
@@ -374,7 +375,7 @@ class _TerminalBrowserPanelState extends State<TerminalBrowserPanel>
 
   _BrowserTab _createTab({
     String? initialUrl,
-    _BrowserUserAgentMode userAgentMode = _BrowserUserAgentMode.desktop,
+    _BrowserUserAgentMode userAgentMode = _BrowserUserAgentMode.mobile,
   }) {
     final tab = _BrowserTab(
       id: _nextTabId++,
@@ -1031,6 +1032,90 @@ class _TerminalBrowserPanelState extends State<TerminalBrowserPanel>
   }
 
   @override
+  Future<Map<String, dynamic>> healthCheck({
+    int quietWindowMs = 500,
+    int timeoutMs = 10000,
+  }) async {
+    final safeQuietWindowMs = quietWindowMs.clamp(100, 5000);
+    final safeTimeoutMs = timeoutMs.clamp(safeQuietWindowMs, 30000);
+    final deadline = DateTime.now().millisecondsSinceEpoch + safeTimeoutMs;
+    while (DateTime.now().millisecondsSinceEpoch < deadline) {
+      final raw = await _runStringJs('''
+(() => {
+  const quietWindowMs = $safeQuietWindowMs;
+  const now = Date.now();
+  const state = document.readyState || 'unknown';
+  const body = document.body;
+  const root = document.documentElement;
+  const lastMutation = window.__openclawLastDomMutationAt || 0;
+  if (!window.__openclawHealthObserver && document.documentElement) {
+    window.__openclawLastDomMutationAt = now;
+    window.__openclawHealthObserver = new MutationObserver(() => {
+      window.__openclawLastDomMutationAt = Date.now();
+    });
+    window.__openclawHealthObserver.observe(document.documentElement, {
+      childList: true, subtree: true, attributes: true, characterData: true
+    });
+  }
+  const resources = performance.getEntriesByType('resource');
+  const recentResources = resources.filter((entry) => now - entry.responseEnd < quietWindowMs);
+  const domQuiet = now - lastMutation >= quietWindowMs;
+  const ready = state === 'complete' && Boolean(body) && Boolean(root) && domQuiet && recentResources.length === 0;
+  return JSON.stringify({
+    ok: ready,
+    javascript: true,
+    dom: Boolean(body) && Boolean(root),
+    readyState: state,
+    domQuiet,
+    recentResourceCount: recentResources.length,
+    url: location.href || '',
+    title: document.title || ''
+  });
+})();
+''');
+      if (raw != null) {
+        try {
+          final decoded = jsonDecode(raw) as Map<String, dynamic>;
+          if (decoded['ok'] == true) {
+            return _pageSnapshot(
+              message: 'Browser health check passed: DOM, JavaScript, and network idle are ready.',
+              extra: {'actionResult': decoded},
+            );
+          }
+        } catch (_) {}
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+    }
+    return _pageSnapshot(
+      ok: false,
+      message: 'Timed out waiting for DOM and network idle; the page may still be hydrating.',
+    );
+  }
+
+  @override
+  Future<Map<String, dynamic>> resetTab({String? url}) async {
+    final previous = _activeTab;
+    final replacement = _createTab(userAgentMode: previous.userAgentMode);
+    final index = _activeTabIndex;
+    if (!mounted) {
+      return _pageSnapshot(ok: false, message: 'Browser panel is no longer mounted.');
+    }
+    setState(() {
+      _tabs[index] = replacement;
+      _syncStateFromTab(replacement, updateAddress: true);
+      _clearInspectorItems();
+    });
+    _publishStateToService();
+    final target = url?.trim().isNotEmpty == true ? url!.trim() : previous.currentUrl;
+    if (target.isEmpty || target == 'about:blank') {
+      await _loadWelcomePage(tab: replacement);
+    } else {
+      await _loadUrl(target, tab: replacement);
+    }
+    return _pageSnapshot(message: 'Browser tab was reset with a fresh WebView session.');
+  }
+
+  @override
   Future<Map<String, dynamic>> open(String url) async {
     if (url.trim().isEmpty) {
       return _pageSnapshot(
@@ -1251,6 +1336,78 @@ class _TerminalBrowserPanelState extends State<TerminalBrowserPanel>
   const element = document.querySelector(selector);
   if (!element) {
     return JSON.stringify({ ok: false, message: `Selector not found: \${selector}` });
+  }
+
+  @override
+  Future<Map<String, dynamic>> paste({
+    required String selector,
+    required String text,
+    bool submit = false,
+  }) async {
+    if (selector.trim().isEmpty) {
+      return _pageSnapshot(ok: false, message: 'The selector argument cannot be empty.');
+    }
+    final script = '''
+(() => {
+  const selector = ${jsonEncode(selector)};
+  const value = ${jsonEncode(text)};
+  const shouldSubmit = ${submit ? 'true' : 'false'};
+  const element = document.querySelector(selector);
+  if (!element) return JSON.stringify({ ok: false, message: `Selector not found: \${selector}` });
+  const tag = (element.tagName || '').toLowerCase();
+  const editable = tag === 'input' || tag === 'textarea' || element.isContentEditable;
+  if (!editable) return JSON.stringify({ ok: false, message: 'Target element is not editable.' });
+  element.scrollIntoView({ behavior: 'instant', block: 'center', inline: 'center' });
+  element.focus();
+  element.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true, data: '' }));
+  element.dispatchEvent(new InputEvent('beforeinput', { bubbles: true, cancelable: true, inputType: 'insertFromPaste', data: value }));
+  if (tag === 'input' || tag === 'textarea') {
+    const prototype = tag === 'textarea' ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+    const setter = Object.getOwnPropertyDescriptor(prototype, 'value')?.set;
+    if (setter) setter.call(element, value); else element.value = value;
+  } else {
+    element.textContent = value;
+  }
+  element.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertFromPaste', data: value }));
+  element.dispatchEvent(new Event('change', { bubbles: true }));
+  element.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true, data: value }));
+  if (shouldSubmit) {
+    const form = element.form || element.closest?.('form');
+    if (form?.requestSubmit) form.requestSubmit();
+    else element.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', bubbles: true }));
+  }
+  return JSON.stringify({ ok: true, message: 'Text pasted with input and composition events.', tag: element.tagName || '' });
+})();
+''';
+    final raw = await _runStringJs(script);
+    if (raw == null) return _pageSnapshot(ok: false, message: 'Failed to run the paste action in WebView.');
+    final decoded = jsonDecode(raw) as Map<String, dynamic>;
+    return _pageSnapshot(ok: decoded['ok'] != false, message: decoded['message']?.toString() ?? 'Text pasted.', extra: {'actionResult': decoded});
+  }
+
+  @override
+  Future<Map<String, dynamic>> waitForResource({
+    required String pattern,
+    int timeoutMs = 10000,
+  }) async {
+    if (pattern.trim().isEmpty) return _pageSnapshot(ok: false, message: 'The resource pattern cannot be empty.');
+    final deadline = DateTime.now().millisecondsSinceEpoch + timeoutMs.clamp(100, 30000);
+    while (DateTime.now().millisecondsSinceEpoch < deadline) {
+      final raw = await _runStringJs('''
+(() => {
+  const pattern = ${jsonEncode(pattern)}.toLowerCase();
+  const resources = performance.getEntriesByType('resource').filter((entry) => entry.name.toLowerCase().includes(pattern));
+  const item = resources[resources.length - 1];
+  return JSON.stringify({ ok: Boolean(item), resource: item ? { url: item.name, initiatorType: item.initiatorType, duration: Math.round(item.duration), transferSize: item.transferSize || 0 } : null });
+})();
+''');
+      if (raw != null) {
+        final decoded = jsonDecode(raw) as Map<String, dynamic>;
+        if (decoded['ok'] == true) return _pageSnapshot(message: 'Matched a loaded page resource.', extra: {'actionResult': decoded});
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+    }
+    return _pageSnapshot(ok: false, message: 'Timed out waiting for a matching page resource.');
   }
 
   element.scrollIntoView({ behavior: 'instant', block: 'center', inline: 'center' });
@@ -1831,6 +1988,62 @@ class _TerminalBrowserPanelState extends State<TerminalBrowserPanel>
       message: 'Interactable elements extracted.',
       extra: {'actionResult': decoded},
     );
+  }
+
+  @override
+  Future<Map<String, dynamic>> listOverlays({int maxItems = 24}) async {
+    final safeMaxItems = maxItems.clamp(1, 80);
+    final raw = await _runStringJs('''
+(() => {
+  const visible = (element) => {
+    const rect = element.getBoundingClientRect();
+    const style = getComputedStyle(element);
+    return rect.width > 0 && rect.height > 0 && style.display !== 'none' && style.visibility !== 'hidden' && Number(style.opacity || 1) > 0;
+  };
+  const candidates = Array.from(document.querySelectorAll('[role="dialog"], [role="menu"], [role="listbox"], [aria-modal="true"], [data-radix-popper-content-wrapper], [data-radix-portal], body *'))
+    .filter((element) => visible(element))
+    .filter((element) => {
+      const style = getComputedStyle(element);
+      return ['fixed', 'absolute'].includes(style.position) || ['dialog', 'menu', 'listbox'].includes(element.getAttribute('role') || '') || element.getAttribute('aria-modal') === 'true';
+    })
+    .map((element) => {
+      const rect = element.getBoundingClientRect();
+      const style = getComputedStyle(element);
+      return { tag: element.tagName || '', role: element.getAttribute('role') || '', ariaLabel: element.getAttribute('aria-label') || '', text: (element.innerText || element.textContent || '').trim().slice(0, 240), zIndex: style.zIndex || 'auto', rect: { x: Math.round(rect.x), y: Math.round(rect.y), width: Math.round(rect.width), height: Math.round(rect.height) } };
+    })
+    .sort((a, b) => (Number.parseInt(b.zIndex, 10) || 0) - (Number.parseInt(a.zIndex, 10) || 0))
+    .slice(0, $safeMaxItems);
+  return JSON.stringify({ ok: true, overlays: candidates });
+})();
+''');
+    if (raw == null) return _pageSnapshot(ok: false, message: 'Failed to inspect visible overlays.');
+    final decoded = jsonDecode(raw) as Map<String, dynamic>;
+    return _pageSnapshot(message: 'Visible overlays listed.', extra: {'actionResult': decoded});
+  }
+
+  @override
+  Future<Map<String, dynamic>> clickAt({required double x, required double y}) async {
+    if (!x.isFinite || !y.isFinite || x < 0 || y < 0) {
+      return _pageSnapshot(ok: false, message: 'Coordinates must be finite non-negative viewport values.');
+    }
+    final raw = await _runStringJs('''
+(() => {
+  const x = ${x.toStringAsFixed(2)};
+  const y = ${y.toStringAsFixed(2)};
+  const element = document.elementFromPoint(x, y);
+  if (!element) return JSON.stringify({ ok: false, message: 'No element exists at the requested viewport coordinates.' });
+  element.scrollIntoView({ behavior: 'instant', block: 'center', inline: 'center' });
+  if (typeof element.focus === 'function') element.focus();
+  for (const type of ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click']) {
+    element.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, clientX: x, clientY: y, view: window }));
+  }
+  const rect = element.getBoundingClientRect();
+  return JSON.stringify({ ok: true, message: 'Clicked element at viewport coordinates.', tag: element.tagName || '', text: (element.innerText || element.textContent || element.getAttribute('aria-label') || '').trim().slice(0, 160), rect: { x: Math.round(rect.x), y: Math.round(rect.y), width: Math.round(rect.width), height: Math.round(rect.height) } });
+})();
+''');
+    if (raw == null) return _pageSnapshot(ok: false, message: 'Failed to run the coordinate click action in WebView.');
+    final decoded = jsonDecode(raw) as Map<String, dynamic>;
+    return _pageSnapshot(ok: decoded['ok'] != false, message: decoded['message']?.toString() ?? 'Coordinate click completed.', extra: {'actionResult': decoded});
   }
 
   @override
@@ -3046,6 +3259,7 @@ class _BrowserScriptLibrarySheetState
   String _runningId = '';
   String _deletingId = '';
   List<BrowserAutomationScript> _scripts = const <BrowserAutomationScript>[];
+  List<BrowserUserScript> _userScripts = const <BrowserUserScript>[];
   BrowserAutomationScriptDraft? _pendingDraft;
 
   @override
@@ -3078,11 +3292,13 @@ class _BrowserScriptLibrarySheetState
     });
     try {
       final scripts = await widget.service.loadScripts();
+      final userScripts = await BrowserUserScriptLibraryService.loadScripts();
       if (!mounted) {
         return;
       }
       setState(() {
         _scripts = scripts;
+        _userScripts = userScripts;
         _pendingDraft = widget.service.pendingScriptDraft;
       });
     } catch (error) {
@@ -3432,7 +3648,7 @@ class _BrowserScriptLibrarySheetState
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        '保存、复用和快速启动 Codex 浏览器操作流程',
+                        '左侧为 Codex 自动化流程，右侧为传统网站用户脚本',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: theme.textTheme.bodySmall?.copyWith(
@@ -3473,6 +3689,18 @@ class _BrowserScriptLibrarySheetState
                     label: const Text('保存最近流程'),
                   ),
                 ),
+                const SizedBox(width: 8),
+                OutlinedButton.icon(
+                  onPressed: () => unawaited(_editUserScript()),
+                  icon: const Icon(Icons.add, size: 18),
+                  label: const Text('新增传统脚本'),
+                ),
+                const SizedBox(width: 8),
+                OutlinedButton.icon(
+                  onPressed: () => unawaited(_importUserScript()),
+                  icon: const Icon(Icons.content_paste_go, size: 18),
+                  label: const Text('导入'),
+                ),
               ],
             ),
           ),
@@ -3484,6 +3712,32 @@ class _BrowserScriptLibrarySheetState
   }
 
   Widget _buildBody(ThemeData theme) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final narrow = constraints.maxWidth < 680;
+        final automation = _buildAutomationBody(theme);
+        final traditional = _buildUserScriptsColumn(theme);
+        if (narrow) {
+          return Column(
+            children: [
+              Expanded(child: automation),
+              const Divider(height: 1),
+              Expanded(child: traditional),
+            ],
+          );
+        }
+        return Row(
+          children: [
+            Expanded(child: automation),
+            VerticalDivider(width: 1, color: Colors.white.withAlpha(20)),
+            Expanded(child: traditional),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildAutomationBody(ThemeData theme) {
     if (_loading) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -3528,6 +3782,244 @@ class _BrowserScriptLibrarySheetState
       padding: const EdgeInsets.all(12),
       children: children,
     );
+  }
+
+  Widget _buildUserScriptsColumn(ThemeData theme) {
+    if (_loading) return const Center(child: CircularProgressIndicator());
+    return Container(
+      color: Colors.white.withAlpha(3),
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+            child: Row(
+              children: [
+                const Icon(Icons.code, size: 18, color: Color(0xFFFBBF24)),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    '传统网站脚本',
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+                Text(
+                  '${_userScripts.length}',
+                  style: theme.textTheme.labelMedium?.copyWith(color: Colors.white60),
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Text(
+              '油猴风格 JavaScript。可新增、粘贴导入、由 Codex 生成后保存；运行前请审阅源码。',
+              style: theme.textTheme.bodySmall?.copyWith(color: Colors.white60),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Expanded(
+            child: _userScripts.isEmpty
+                ? Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(22),
+                      child: Text(
+                        '还没有传统脚本。使用“新增传统脚本”编写，或用“导入”粘贴现有油猴脚本。',
+                        textAlign: TextAlign.center,
+                        style: theme.textTheme.bodySmall?.copyWith(color: Colors.white60),
+                      ),
+                    ),
+                  )
+                : ListView.separated(
+                    padding: const EdgeInsets.all(12),
+                    itemCount: _userScripts.length,
+                    separatorBuilder: (_, _) => const SizedBox(height: 10),
+                    itemBuilder: (context, index) =>
+                        _buildUserScriptCard(theme, _userScripts[index]),
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildUserScriptCard(ThemeData theme, BrowserUserScript script) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white.withAlpha(7),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFFBBF24).withAlpha(55)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(script.name, style: theme.textTheme.bodyMedium?.copyWith(color: Colors.white, fontWeight: FontWeight.w800)),
+          if (script.description.isNotEmpty) ...[
+            const SizedBox(height: 5),
+            Text(script.description, maxLines: 2, overflow: TextOverflow.ellipsis, style: theme.textTheme.bodySmall?.copyWith(color: Colors.white70)),
+          ],
+          const SizedBox(height: 6),
+          Text(
+            script.matches.isEmpty ? '*://*/*' : script.matches.join(', '),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: theme.textTheme.bodySmall?.copyWith(color: const Color(0xFFFBBF24), fontFamily: 'monospace'),
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            children: [
+              FilledButton.icon(
+                onPressed: () => unawaited(_runUserScript(script)),
+                icon: const Icon(Icons.play_arrow, size: 16),
+                label: const Text('运行当前页'),
+              ),
+              OutlinedButton.icon(
+                onPressed: () => unawaited(_editUserScript(script: script)),
+                icon: const Icon(Icons.edit, size: 16),
+                label: const Text('编辑'),
+              ),
+              OutlinedButton.icon(
+                onPressed: () => unawaited(_copyText(script.code, '脚本源码')),
+                icon: const Icon(Icons.content_copy, size: 16),
+                label: const Text('复制源码'),
+              ),
+              OutlinedButton.icon(
+                onPressed: () => unawaited(_copyText(script.codexPrompt, 'Codex 生成提示')),
+                icon: const Icon(Icons.auto_awesome, size: 16),
+                label: const Text('让 Codex 生成'),
+              ),
+              TextButton.icon(
+                onPressed: () => unawaited(_deleteUserScript(script)),
+                icon: const Icon(Icons.delete_outline, size: 16),
+                label: const Text('删除'),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _importUserScript() async {
+    final sourceController = TextEditingController();
+    final source = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('导入传统脚本'),
+        content: SizedBox(
+          width: 560,
+          child: TextField(
+            controller: sourceController,
+            minLines: 10,
+            maxLines: 18,
+            decoration: const InputDecoration(
+              labelText: '粘贴 Tampermonkey / JavaScript 源码',
+              alignLabelWithHint: true,
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('取消')),
+          FilledButton(onPressed: () => Navigator.of(context).pop(sourceController.text), child: const Text('继续')),
+        ],
+      ),
+    );
+    sourceController.dispose();
+    if (source == null || source.trim().isEmpty) return;
+    await _editUserScript(initialCode: source.trim());
+  }
+
+  Future<void> _editUserScript({BrowserUserScript? script, String initialCode = ''}) async {
+    final nameController = TextEditingController(text: script?.name ?? '新建传统脚本');
+    final descriptionController = TextEditingController(text: script?.description ?? '');
+    final matchesController = TextEditingController(text: script?.matches.join('\n') ?? '*://*/*');
+    final codeController = TextEditingController(text: script?.code ?? initialCode);
+    final shouldSave = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(script == null ? '新增传统脚本' : '编辑传统脚本'),
+        content: SizedBox(
+          width: 620,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(controller: nameController, decoration: const InputDecoration(labelText: '脚本名称')),
+                const SizedBox(height: 10),
+                TextField(controller: descriptionController, decoration: const InputDecoration(labelText: '用途简介')),
+                const SizedBox(height: 10),
+                TextField(controller: matchesController, minLines: 2, maxLines: 4, decoration: const InputDecoration(labelText: '匹配规则（每行一条）', alignLabelWithHint: true)),
+                const SizedBox(height: 10),
+                TextField(controller: codeController, minLines: 10, maxLines: 18, decoration: const InputDecoration(labelText: 'JavaScript 源码', alignLabelWithHint: true)),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('取消')),
+          FilledButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('保存')),
+        ],
+      ),
+    );
+    if (shouldSave == true) {
+      try {
+        await BrowserUserScriptLibraryService.saveScript(
+          id: script?.id,
+          name: nameController.text,
+          description: descriptionController.text,
+          code: codeController.text,
+          matches: matchesController.text.split(RegExp(r'\r?\n')),
+        );
+        if (mounted) _showSnack(script == null ? '传统脚本已保存' : '传统脚本已更新');
+        await _loadScripts();
+      } catch (error) {
+        if (mounted) _showSnack('保存传统脚本失败：$error');
+      }
+    }
+    nameController.dispose();
+    descriptionController.dispose();
+    matchesController.dispose();
+    codeController.dispose();
+  }
+
+  Future<void> _runUserScript(BrowserUserScript script) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('运行传统脚本'),
+        content: Text('将在当前页面执行“${script.name}”。请仅运行已审阅、可信的源码。'),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('取消')),
+          FilledButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('运行')),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    final response = await widget.service.runPageScript(script.code);
+    if (mounted) _showSnack(response['ok'] == false ? response['message']?.toString() ?? '脚本运行失败' : '传统脚本已在当前页运行');
+  }
+
+  Future<void> _deleteUserScript(BrowserUserScript script) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('删除传统脚本'),
+        content: Text('确定删除 ${script.name}？'),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('取消')),
+          FilledButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('删除')),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    await BrowserUserScriptLibraryService.deleteScript(script.id);
+    if (mounted) _showSnack('传统脚本已删除');
+    await _loadScripts();
   }
 
   Widget _buildEmptyScriptsState(ThemeData theme) {

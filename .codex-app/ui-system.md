@@ -1,5 +1,9 @@
 # UI System
 
+## Browser Script Assistant
+- The script assistant uses two adjacent workspaces on wide layouts: the Codex automation-flow library on the left and the traditional website-script library on the right. Narrow layouts stack the same two workspaces to preserve readable editing controls.
+- Traditional scripts use an amber code icon/border to distinguish them from the accent-colored Codex automation cards. Both surfaces retain explicit labels, empty states, and destructive-action confirmations.
+
 ## Design Direction
 Operational Android utility app for managing an OpenClaw runtime. Existing screens are dashboard/control-panel oriented, not landing-page oriented. Preserve dense, scannable controls, clear status, explicit loading/error states, and mobile-first ergonomics.
 

@@ -74,3 +74,14 @@
 - Build and release only `arm64-v8a` APK unless the user explicitly asks otherwise.
 - Install Codex/Claude CLI tooling inside the Ubuntu RootFS under `/opt/openclaw-cli/<tool>` with wrappers in `/usr/local/bin`; do not revert to fragile global npm installs.
 - Treat permissions, signing, app ID/package, JNI/PRoot binaries, RootFS assets, and dependency changes as release-critical.
+
+## Browser Automation Contract
+- `BrowserAutomationService` exposes the authenticated loopback bridge and owns tool aliases, recent action history, script staging, and browser-panel attachment. `TerminalBrowserPanel` is its Flutter WebView delegate and owns DOM execution, navigation, tabs, and the per-tab user-agent mode.
+- Browser tabs default to the mobile Android UA. Desktop mode is an explicit `browser_set_ua` override that reloads the active page; it must not become a hidden global default.
+- After external navigation or a form submit, callers should use `browser_health_check` (DOM, JavaScript, DOM-quiet, and recent-resource checks) followed by a task-specific selector/text/resource wait. `browser_reset_tab` replaces a stuck tab with a fresh WebView session while retaining its UA mode.
+- `browser_paste` uses native value setters plus `beforeinput`, `input`, `change`, and composition events for controlled inputs. `browser_wait_for_resource`, `browser_list_overlays`, and `browser_click_at` are WebView DOM/performance fallbacks; selector-based actions remain preferred.
+- Current WebView plugin integration does not expose a safe automated local-file chooser or bitmap screenshot API. Do not claim that `browser_capture_snapshot` is an image capture: it is a DOM/text snapshot. Native Android file-selector and WebView bitmap-capture work require a separately reviewed bridge/permission design.
+
+## Script Library Boundary
+- The browser script assistant keeps two independent local stores: `BrowserAutomationScriptLibraryService` for deterministic Codex browser-action workflows, and `BrowserUserScriptLibraryService` for traditional JavaScript website scripts. Never serialize user-script source into a browser-action workflow or replay workflow JSON as JavaScript.
+- AI may create or update a traditional script through `browser_user_script_save`, but saving does not execute it. Running a traditional script occurs only from the visible script assistant after the user confirms the source is trusted.
