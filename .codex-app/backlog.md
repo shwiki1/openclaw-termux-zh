@@ -1,7 +1,7 @@
 # Backlog
 
 ## Priority Now
-- Push the Codex terminal redesign and tool-call proxy fix to GitHub `main`, watch the next arm64 release build, and record the resulting `4.5 / 164` provenance before any further code work.
+- Push the Codex terminal redesign retry to GitHub `main`, watch the next arm64 release build, and record the resulting `4.7 / 166` provenance before any further code work.
 - Device-smoke the latest published `CiYuanXia-v4.4-163-arm64-v8a.apk` on Android: first-run bootstrap, installer/app version `4.4`, update compatibility, terminal IME prompt visibility, native shortcut-bar co-movement/feedback, browser address-bar/input lift, compact-sidecar reconnect, browser tabs/UA, and browser-script workflow.
 - Device-smoke the redesigned Codex terminal shortcut path on Android: native shortcut bar inside the terminal platform view, repeated IME dismiss/reopen, immediate shortcut-key taps after IME close, and leave/re-enter terminal. If lag remains, focus on native `TerminalView`/`adjustPan` and platform-view/session reattach timing rather than reviving compensation layers.
 - Device-smoke Codex tool calling through the OpenAI-compatible proxy path: verify `responses`-based tool calls, MCP browser tools, and follow-up `function_call_output` turns all survive the local proxy without flattening into plain text.
@@ -36,7 +36,7 @@
 ## Do Not Forget
 - Keep app version/build number updated before every new cloud build.
 - Source metadata remains `2.5.0+143`; the latest recorded successful GitHub Release asset is `CiYuanXia-v4.4-163-arm64-v8a.apk` (Actions `29479840309`). It still needs Android device smoke plus local artifact verification before promotion confidence is established.
-- The next fresh cloud build must use a new logical build greater than `163`; do not reuse withdrawn builds `154` or `155`, and do not reuse failed builds `157`, `158`, `160`, or `161`.
+- The next fresh cloud build must use a new logical build greater than `165`; do not reuse withdrawn builds `154` or `155`, and do not reuse failed builds `157`, `158`, `160`, `161`, or `165`.
 - The current APK workflow is green without running `flutter test`; keep that gap visible until CI or a dedicated SDK environment closes it.
 - Keep Node.js `24.15.0` for arm64/x86_64 and `22.22.3` for armv7 aligned across constants, RootFS scripts, setup l10n copy, docs, bootstrap resource names, license/source notices, legacy installer URLs, and `lib/test.js` unless a future task upgrades the runtime asset set.
 - `inspect_app_project.py` only auto-detects the root Node shell here; manually verify Flutter/Kotlin facts from `flutter_app/` before editing or reporting architecture.
