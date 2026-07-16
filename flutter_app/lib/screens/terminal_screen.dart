@@ -4,12 +4,10 @@ import 'package:flutter/material.dart';
 
 import '../services/browser_automation_service.dart';
 import '../services/native_bridge.dart';
-import '../services/terminal_input_controller.dart';
 import '../services/terminal_service.dart';
 import '../widgets/native_terminal_view.dart';
 import '../widgets/responsive_layout.dart';
 import '../widgets/terminal_browser_panel.dart';
-import '../widgets/terminal_toolbar.dart';
 
 class TerminalScreen extends StatefulWidget {
   final String sessionId;
@@ -37,7 +35,6 @@ class _TerminalScreenState extends State<TerminalScreen> {
 
   var _terminalKey = GlobalKey<NativeTerminalViewState>();
   final _browserService = BrowserAutomationService.instance;
-  late final TerminalInputController _terminalInput;
   late Future<_NativeTerminalConfig> _configFuture;
   late final List<_TerminalSessionTab> _sessions;
   var _activeIndex = 0;
@@ -58,12 +55,6 @@ class _TerminalScreenState extends State<TerminalScreen> {
   @override
   void initState() {
     super.initState();
-    _terminalInput = TerminalInputController(
-      onWrite: (bytes) {
-        _terminalKey.currentState?.writeBytes(bytes);
-        _terminalKey.currentState?.showKeyboard();
-      },
-    );
     NativeBridge.startTerminalService().catchError((_) => false);
     NativeBridge.acquireTerminalSoftInputMode().catchError((_) => false);
     if (_isCodexSession) {
@@ -103,7 +94,6 @@ class _TerminalScreenState extends State<TerminalScreen> {
     if (!_closedAllSessions) {
       _persistSessionTabs();
     }
-    _terminalInput.dispose();
     unawaited(NativeBridge.releaseTerminalSoftInputMode().catchError((_) => false));
     if (_isCodexSession) {
       _browserService.removeListener(_handleBrowserAutomationUpdate);
@@ -457,12 +447,6 @@ class _TerminalScreenState extends State<TerminalScreen> {
     final terminal = Column(
       children: [
         if (_isCodexSession) _buildBrowserStatusBanner(screenWidth),
-        if (_isCodexSession)
-          TerminalToolbar(
-            onWrite: _terminalInput.writeBytes,
-            ctrlNotifier: _terminalInput.ctrlNotifier,
-            altNotifier: _terminalInput.altNotifier,
-          ),
         Expanded(
           child: NativeTerminalView(
             key: _terminalKey,
@@ -473,7 +457,7 @@ class _TerminalScreenState extends State<TerminalScreen> {
             restart: _restartOnCreate,
             keepAlive: true,
             renderingPaused: pauseTerminalRendering,
-            useNativeToolbar: !_isCodexSession,
+            useNativeToolbar: true,
             transcriptRows: _isCodexSession
                 ? _codexTerminalTranscriptRows
                 : _defaultTerminalTranscriptRows,

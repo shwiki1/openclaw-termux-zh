@@ -3,7 +3,7 @@
 Last updated: 2026-07-16 UTC
 
 ## Current Truth
-- Active fix task: stop relying on Codex-specific bottom IME compensation. Codex terminal shortcuts now move back to a Flutter-layer toolbar above the terminal, and the OpenAI-compatible Codex proxy now preserves `responses` tool-call structures instead of flattening them into plain text. The fixes are prepared for the next cloud build, but Android device smoke is still required after release.
+- Active fix task: keep Codex and non-Codex terminal sessions on the same native shortcut-bar structure. `TerminalScreen` now keeps the shortcut bar inside `NativeTerminalView` for Codex too, the old native IME overlap compensation chain is removed, and the OpenAI-compatible Codex proxy preserves `responses` tool-call structures instead of flattening them into plain text. The fixes are prepared for the next cloud build, but Android device smoke is still required after release.
 - Release baseline: local `f206113` and remote `e698148` share the exact verified `3.4` source tree. GitHub `v3.5.0`/`v3.6.0`, their tags, APK assets, and associated Actions runs were removed; `basic-resource` remains the valid 3.4 baseline resource.
 - Current published release: `v4.4.0 / 4.4 / 163`, derived from source anchor `2.5.0+143`. Workflow `.github/workflows/flutter-build.yml` enforces logical build `163` as its release floor and only packages `arm64-v8a`.
 - Cloud result: Actions run `29479840309` succeeded at remote commit `c44deeb4da325d44d0e171fcf3d06ae6490a2f53` and published `CiYuanXia-v4.4-163-arm64-v8a.apk` in GitHub Release `v4.4.0`. The build and release jobs both completed successfully.
@@ -45,8 +45,9 @@ Last updated: 2026-07-16 UTC
 - Submit the Codex terminal redesign and tool-call proxy fix for the next GitHub Actions arm64 release build, then record the resulting run/artifact provenance and keep Android device smoke as the immediate post-build validation step.
 
 ## Recently Changed
-- Reworked `TerminalScreen` so Codex sessions no longer use the native bottom shortcut bar. Codex now renders `TerminalToolbar` in Flutter above the terminal, while non-Codex sessions keep the native platform-view toolbar.
-- Reworked `NativeTerminalView.kt` so sessions without the native toolbar no longer apply the global-layout bottom-padding compensation path; they rely on `adjustPan` plus the bottom input-strip visibility helper instead of more bottom-lift logic.
+- Reworked `TerminalScreen` so Codex sessions use the same native platform-view shortcut bar as other terminal sessions. The terminal route no longer mounts a separate Flutter `TerminalToolbar`.
+- Reworked `NativeTerminalView.kt` to follow the simpler ZeroTermux-style structure: terminal surface plus native shortcut strip in one Android container, `adjustPan` plus the bottom input-strip visibility helper for IME motion, and no native global-layout overlap compensation chain.
+- Confirmed the ZeroTermux upstream reference is GPLv3-only, so this repo keeps only the layout/interaction idea and uses an original rewrite instead of copying upstream source.
 - Reworked the generated Codex proxy in `CliApiConfigService` so `responses` requests preserve `function_call`, `function_call_output`, and returned `tool_calls` when bridging through `/v1/chat/completions`. This fixes the previous structure loss that broke Codex tool calling against OpenAI-compatible upstreams.
 - Extended `lib/test.js` with source guards for the Codex Flutter toolbar split and the `responses` tool-call bridge; `npm test` now passes with 31 checks, `npm run lint -- --no-warn-ignored` passed, and `git diff --check` passed.
 - Reduced Codex terminal keyboard-close jank in `NativeTerminalView.kt`: IME bottom compensation now ignores small per-frame changes, avoids repeated input-strip scroll requests, and marks the terminal renderer deferred until the IME layout settles. Pending output redraws resume once after the transition instead of redrawing the full transcript during every keyboard animation frame.

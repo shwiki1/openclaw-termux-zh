@@ -1,7 +1,7 @@
 # Build And Verification
 
 ## Pending Cloud Build
-- Planned Codex IME redesign and tool-call proxy release: the next cloud build should consume logical build `164`, derive semantic version `v4.5.0`, display installer/app version `4.5`, and publish `CiYuanXia-v4.5-164-arm64-v8a.apk`.
+- Planned Codex native-terminal redesign and tool-call proxy release: the next cloud build should consume logical build `164`, derive semantic version `v4.5.0`, display installer/app version `4.5`, and publish `CiYuanXia-v4.5-164-arm64-v8a.apk`.
 - Source anchor remains `2.5.0+143`; the workflow must continue deriving the release build from the existing floor and latest published release. Failed builds `157`, `158`, `160`, and `161` remain reserved and must not be reused.
 
 ## Latest Cloud Build
@@ -11,7 +11,7 @@
 - Verification: GitHub build and release jobs passed; `npm run lint`, `npm test` (30 passed), project-memory validation, and `git diff --check` passed before submission. Flutter/Dart checks remain unavailable in Termux; Actions completed Flutter analysis and APK packaging.
 
 ## Local Checks Only
-- 2026-07-16 Codex terminal redesign and tool-call proxy fix: `npm test` passed with 31 checks; `npm run lint -- --no-warn-ignored` passed; `git diff --check` passed. Local `flutter`, `dart`, and `kotlinc` remain unavailable, so Flutter analyze/test and native compile checks were not run locally.
+- 2026-07-16 Codex native-terminal redesign and tool-call proxy fix: `npm test` passed with 31 checks; `npm run lint -- --no-warn-ignored` passed; `git diff --check` passed. Local `flutter`, `dart`, and `kotlinc` remain unavailable, so Flutter analyze/test and native compile checks were not run locally.
 - 2026-07-15 Codex terminal IME lag follow-up: `git diff --check` passed; `npm test` passed with 28 checks; `npm run lint -- --no-warn-ignored` passed; local `flutter`, `dart`, and `kotlinc` remain unavailable, so Flutter analyze/test and native compile checks were not run locally.
 - Formatting: not run in this session; Flutter/Dart SDK unavailable locally.
 - 2026-07-15 terminal shortcut feedback build: `git diff --check` passed; `npm test` passed with 28 checks; `npm run lint -- --no-warn-ignored` passed; `gh auth status` confirmed the authenticated `shwiki1` GitHub session; GitHub Actions run `29377510459` succeeded and published release `v3.2.0`. Local `flutter`, `dart`, and `kotlinc` remain unavailable, so Flutter analyze/test and native compile checks were not run locally.
@@ -105,7 +105,7 @@
 - Unit tests: `npm test` passed locally with 28 checks after the browser/terminal IME focus handoff follow-up and now covers the browser soft-input arbitration guard, the reduced native terminal IME retry guard, the native-toolbar path guard, the native IME compensation guard, and the workflow version-source guard; Flutter tests were not run locally and are not currently part of the workflow, which runs analyze and the APK build.
 - Current release-management gap: `.github/workflows/flutter-build.yml` can produce a green APK artifact without executing `flutter test`, even though focused Flutter unit tests exist under `flutter_app/test/`.
 - Current browser automation test coverage includes generated MCP/browser-script string assertions for tab list/new/switch/close and UA switching in `flutter_app/test/cli_api_config_service_test.dart`, but those Flutter tests could not be executed locally without the Flutter SDK.
-- Current Node self-test includes the runtime-version drift guard, browser header/menu guards, route-scoped terminal IME guards, the native terminal input-strip guard, the native-toolbar path guard, and the native global-layout IME compensation guard; it now passes with 26 checks.
+- Current Node self-test includes the runtime-version drift guard, browser header/menu guards, route-scoped terminal IME guards, the native terminal input-strip guard, the native-toolbar path guard, and the no-compensation native-terminal guard; it now passes with 31 checks.
 - Auto-inspection caveat: `inspect_app_project.py` currently detects only the root Node shell for this repo; future agents must verify the Flutter/Kotlin app manually from `flutter_app/pubspec.yaml`, `flutter_app/android/app/build.gradle`, and source entry points.
 - Integration/E2E tests: no Flutter `integration_test`, Maestro, Appium, or emulator test workflow found.
 - Device/emulator/browser smoke target: none run in this session. Use Android 10+ arm64 device/emulator for install/setup/gateway smoke.
