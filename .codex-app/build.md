@@ -1,10 +1,11 @@
 # Build And Verification
 
-## Pending Cloud Build
-- 2026-07-16 browser automation and dual-script-assistant release candidate: run `29469493745` derived `3.8.0 / 3.8 / 157` but failed during Flutter compilation before producing an APK. Its Dart interpolation and duplicate-placeholder errors are fixed in the retry commit; build `157` remains reserved and must not be reused.
-- Retry `29469858076` derived `3.9.0 / 3.9 / 158` but failed before artifact generation because the `paste` and resource-wait methods had been inserted inside `type`. The methods are now rebuilt as separate delegates; build `158` remains reserved.
-- Retry target: source anchor remains `2.5.0+143`; GitHub Actions will derive logical build `159`, semantic `4.0.0`, and install-visible version `4.0`.
-- Target: GitHub `shwiki/main`, workflow `.github/workflows/flutter-build.yml`, artifact ABI `arm64-v8a` only. Local checks before submission: `npm run lint`, `npm test`, and `git diff --check`; Flutter/Dart checks remain unavailable in Termux.
+## Latest Cloud Build
+- Browser automation hardening and dual-script-assistant release: GitHub Actions run `29470132394` passed at remote commit `b8db7a3` and published GitHub Release `v4.0.0`.
+- Versioning: source anchor remains `2.5.0+143`; workflow derived logical build `159`, semantic version `4.0.0`, and install-visible version `4.0`. `.github/workflows/flutter-build.yml` now enforces `MINIMUM_RELEASE_BUILD=159`; failed builds `157` and `158` remain reserved.
+- Artifact: `CiYuanXia-v4.0-159-arm64-v8a.apk` (316,433,783 bytes), downloaded locally at `dist/github-release-v4.0.0/CiYuanXia-v4.0-159-arm64-v8a.apk`; SHA-256 `33553448397646aa7e0f5405c19aebe449e2f883baa247456c5586630385fd24`.
+- Verification: GitHub build/release jobs passed; local `unzip -t`, `zipalign -c -v 4`, and `apksigner verify --verbose --print-certs` passed. The APK contains `lib/arm64-v8a` native libraries and retains signer SHA-256 `0618eafd1855855749abb7c04d6f44edf9a4b7cb09e26fd882e856d5c994dde6`.
+- Local checks before submission: `npm run lint`, `npm test` (30 passed), and `git diff --check` passed. Flutter/Dart checks remain unavailable in Termux but Actions completed Flutter analysis and APK packaging.
 
 ## Local Checks Only
 - 2026-07-15 Codex terminal IME lag follow-up: `git diff --check` passed; `npm test` passed with 28 checks; `npm run lint -- --no-warn-ignored` passed; local `flutter`, `dart`, and `kotlinc` remain unavailable, so Flutter analyze/test and native compile checks were not run locally.
