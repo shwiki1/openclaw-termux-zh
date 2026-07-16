@@ -19,7 +19,7 @@ Last updated: 2026-07-16 UTC
 - GitHub Actions currently runs checkout, rootfs restore/build, `flutter analyze --no-fatal-infos`, APK packaging, and GitHub Release publication, but does not run `flutter test`.
 - Current source version: root `package.json` `2.5.0`; Flutter `pubspec.yaml` `2.5.0+143`.
 - App version: latest published installer/app display `4.4`; the repo keeps the semantic/source anchor at `2.5.0+143` and derives user-facing versions from the build number in fixed one-tenth steps.
-- Build number: latest published logical build `163`; failed builds `157`, `158`, `160`, and `161` remain reserved. The source anchor remains `143` in `flutter_app/pubspec.yaml` for CI derivation.
+- Build number: latest published logical build `163`; failed builds `157`, `158`, `160`, `161`, and `165` remain reserved. The source anchor remains `143` in `flutter_app/pubspec.yaml` for CI derivation.
 - Flutter unit tests exist under `flutter_app/test/` (12 files), but the current Termux session has no local `flutter` or `dart` SDK to execute them.
 - Version metadata is aligned to semantic source anchor `2.5.0+143` in Flutter defaults, Node compatibility CLI/package metadata, README files, STRUCTURE, and CHANGELOG.
 - Runtime Node defaults are aligned to Node.js `24.15.0` for arm64/x86_64 and `22.22.3` for armv7 across Flutter constants, prebuilt RootFS scripts, setup l10n copy, primary docs, basic-resource docs, fallback asset naming, license/source notices, and the legacy root Node CLI.
@@ -38,7 +38,7 @@ Last updated: 2026-07-16 UTC
 - Management status: source anchor `2.5.0+143`, workflow release floor `163`, and the published `v4.4.0 / 4.4 / 163` release are aligned; the remaining governance gaps are Android device smoke for the latest IME fix, reconciliation of the ahead/behind branch topology, and the missing `flutter test` CI gate.
 - Project phase: feature work for Codex browser automation is ahead of validation; the immediate management focus is release-stabilization, not another feature branch.
 - Release topology note: `codex-terminal-ime-lag-fix` is currently `ahead 8, behind 9` versus `shwiki/main`, and `main` also diverges from `origin/main`. Future build provenance should continue naming both the remote and exact SHA instead of assuming the checked-out branch is authoritative.
-- Next artifact expectation: the queued Codex IME redesign/tool-proxy release should use logical build `164`, display installer/app version `4.5`, and publish `CiYuanXia-v4.5-164-arm64-v8a.apk`.
+- Next artifact expectation: the queued Codex native-terminal redesign/tool-proxy retry should use logical build `166`, display installer/app version `4.7`, and publish `CiYuanXia-v4.7-166-arm64-v8a.apk`.
 - Compact Codex browser sidecar now disposes when closed on narrow screens, so the terminal route no longer carries a hidden WebView tree through IME reopen checks; the native terminal also skips redundant `requestFocus()` calls when keyboard reopen is already focused.
 
 ## Active Task

@@ -1,8 +1,8 @@
 # Build And Verification
 
 ## Pending Cloud Build
-- Planned Codex native-terminal redesign and tool-call proxy release: the next cloud build should consume logical build `164`, derive semantic version `v4.5.0`, display installer/app version `4.5`, and publish `CiYuanXia-v4.5-164-arm64-v8a.apk`.
-- Source anchor remains `2.5.0+143`; the workflow must continue deriving the release build from the existing floor and latest published release. Failed builds `157`, `158`, `160`, and `161` remain reserved and must not be reused.
+- Planned Codex native-terminal redesign and tool-call proxy release retry: the next cloud build should consume logical build `166`, derive semantic version `v4.7.0`, display installer/app version `4.7`, and publish `CiYuanXia-v4.7-166-arm64-v8a.apk`.
+- Source anchor remains `2.5.0+143`; the workflow must continue deriving the release build from the existing floor and latest published release. Failed builds `157`, `158`, `160`, `161`, and `165` remain reserved and must not be reused.
 
 ## Latest Cloud Build
 - Codex terminal IME settled-compensation release: GitHub Actions run `29479840309` passed at remote commit `c44deeb4da325d44d0e171fcf3d06ae6490a2f53` and published GitHub Release `v4.4.0`.
@@ -11,6 +11,7 @@
 - Verification: GitHub build and release jobs passed; `npm run lint`, `npm test` (30 passed), project-memory validation, and `git diff --check` passed before submission. Flutter/Dart checks remain unavailable in Termux; Actions completed Flutter analysis and APK packaging.
 
 ## Local Checks Only
+- 2026-07-16 Codex native-terminal redesign retry prep: GitHub Actions run `29520706261` failed during `Build arm64-v8a APK` because `flutter_app/android/app/src/main/kotlin/com/nxg/openclawproot/NativeTerminalView.kt` still called `abs(...)` after the import had been removed. The retry restores `kotlin.math.abs`, raises workflow `MINIMUM_RELEASE_BUILD` to `166`, and must produce `4.7 / 166` instead of reusing the failed `165`.
 - 2026-07-16 Codex native-terminal redesign and tool-call proxy fix: `npm test` passed with 31 checks; `npm run lint -- --no-warn-ignored` passed; `git diff --check` passed. Local `flutter`, `dart`, and `kotlinc` remain unavailable, so Flutter analyze/test and native compile checks were not run locally.
 - 2026-07-15 Codex terminal IME lag follow-up: `git diff --check` passed; `npm test` passed with 28 checks; `npm run lint -- --no-warn-ignored` passed; local `flutter`, `dart`, and `kotlinc` remain unavailable, so Flutter analyze/test and native compile checks were not run locally.
 - Formatting: not run in this session; Flutter/Dart SDK unavailable locally.
@@ -123,7 +124,7 @@
 - Signing secrets: `KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD` for GitHub Actions release signing.
 
 ## Notes
-- 2026-07-16 release-floor policy: `.github/workflows/flutter-build.yml` now enforces `MINIMUM_RELEASE_BUILD=163`. This preserves Android update monotonicity after the withdrawn `154 / 3.5` and `155 / 3.6` artifacts and the later failed `157`, `158`, `160`, and `161` attempts.
+- 2026-07-16 release-floor policy: `.github/workflows/flutter-build.yml` now enforces `MINIMUM_RELEASE_BUILD=166`. This preserves Android update monotonicity after the withdrawn `154 / 3.5` and `155 / 3.6` artifacts, the earlier failed `157`, `158`, `160`, and `161` attempts, and the new failed `165 / 4.6` compile run.
 - 2026-07-16 release verification gap: `v4.4.0` is published, but local checksum, ZIP integrity, `zipalign`, and signer verification for the `dist/github-release-v4.4.0/` download still need to be recorded.
 - Do not commit secret values.
 - Use GitHub Actions for native packaging and release artifacts.

@@ -32,6 +32,7 @@ import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.common.StandardMessageCodec
 import io.flutter.plugin.platform.PlatformView
 import io.flutter.plugin.platform.PlatformViewFactory
+import kotlin.math.abs
 import kotlin.math.roundToInt
 
 class NativeTerminalViewFactory(
