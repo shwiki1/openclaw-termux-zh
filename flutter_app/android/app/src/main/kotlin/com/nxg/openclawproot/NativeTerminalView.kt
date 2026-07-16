@@ -93,6 +93,9 @@ class NativeTerminalPlatformView(
     private val keyboardRetryRunnable = Runnable {
         retryShowKeyboardIfNeeded()
     }
+    private val imeTransitionSettleRunnable = Runnable {
+        client.setImeTransitionActive(false)
+    }
     private val globalLayoutListener = ViewTreeObserver.OnGlobalLayoutListener {
         updateImeCompensation()
     }
@@ -158,6 +161,7 @@ class NativeTerminalPlatformView(
     override fun dispose() {
         disposed = true
         terminalView.removeCallbacks(keyboardRetryRunnable)
+        container.removeCallbacks(imeTransitionSettleRunnable)
         hideKeyboard()
         if (container.viewTreeObserver.isAlive) {
             container.viewTreeObserver.removeOnGlobalLayoutListener(globalLayoutListener)
@@ -603,19 +607,36 @@ class NativeTerminalPlatformView(
             0
         }
 
-        if (hiddenBottomPx == imeCompensationBottomPx) {
+        val previousCompensation = imeCompensationBottomPx
+        if (hiddenBottomPx == previousCompensation) {
+            return
+        }
+
+        val minimumCompensationDelta = dpToPx(IME_COMPENSATION_STEP_DP)
+        if (
+            hiddenBottomPx > 0 &&
+            previousCompensation > 0 &&
+            abs(hiddenBottomPx - previousCompensation) < minimumCompensationDelta
+        ) {
             return
         }
 
         imeCompensationBottomPx = hiddenBottomPx
+        client.setImeTransitionActive(true)
+        container.removeCallbacks(imeTransitionSettleRunnable)
+        container.postDelayed(imeTransitionSettleRunnable, IME_TRANSITION_SETTLE_DELAY_MS)
         contentContainer.setPadding(
             contentContainer.paddingLeft,
             contentContainer.paddingTop,
             contentContainer.paddingRight,
             hiddenBottomPx,
         )
-        if (hiddenBottomPx > 0) {
-            requestInputStripVisible()
+        if (previousCompensation == 0 && hiddenBottomPx > 0) {
+            terminalView.post {
+                if (!disposed && imeCompensationBottomPx > 0) {
+                    requestInputStripVisible()
+                }
+            }
         }
     }
 
@@ -626,6 +647,8 @@ class NativeTerminalPlatformView(
         private const val MAX_TRANSCRIPT_ROWS = 3000
         private const val DEFAULT_TRANSCRIPT_ROWS = 3000
         private const val KEYBOARD_VISIBLE_THRESHOLD_DP = 96
+        private const val IME_COMPENSATION_STEP_DP = 24
+        private const val IME_TRANSITION_SETTLE_DELAY_MS = 90L
         private const val TOOLBAR_BUTTON_COLOR = 0xFF161616.toInt()
         private const val TOOLBAR_BUTTON_PRESSED_COLOR = 0xFF2B2B2B.toInt()
         private const val TOOLBAR_ACTIVE_COLOR = 0xFF00C853.toInt()
@@ -690,6 +713,7 @@ private class NativeTerminalClient(
     private var refreshScheduled = false
     private var refreshPending = false
     private var lastRefreshMs = 0L
+    private var imeTransitionActive = false
     private var controlDown = false
     private var altDown = false
     private var lastTranscript = ""
@@ -783,8 +807,19 @@ private class NativeTerminalClient(
         }
     }
 
+    fun setImeTransitionActive(active: Boolean) {
+        if (imeTransitionActive == active) return
+        imeTransitionActive = active
+        if (!active && refreshPending) {
+            refreshPending = false
+            terminalView.post {
+                requestScreenUpdate(immediate = true)
+            }
+        }
+    }
+
     private fun requestScreenUpdate(immediate: Boolean = false) {
-        if (renderingPaused) {
+        if (renderingPaused || imeTransitionActive) {
             refreshPending = true
             return
         }
@@ -806,6 +841,9 @@ private class NativeTerminalClient(
             refreshScheduled = false
             if (renderingPaused) {
                 refreshPending = true
+                return@postDelayed
+            }
+            if (imeTransitionActive || !refreshPending) {
                 return@postDelayed
             }
             refreshPending = false

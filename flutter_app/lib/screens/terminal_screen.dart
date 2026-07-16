@@ -528,8 +528,7 @@ class _TerminalScreenState extends State<TerminalScreen> {
     required double screenWidth,
   }) {
     final panelWidth = _browserPanelWidth(screenWidth);
-    final shouldKeepBrowserMounted =
-        _browserPanelOpen || _browserService.isToolCallActive;
+    const shouldKeepBrowserMounted = true;
 
     return Stack(
       children: [

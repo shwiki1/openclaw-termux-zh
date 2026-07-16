@@ -33,6 +33,36 @@ enum _BrowserUserAgentMode {
   mobile,
 }
 
+ThemeData _browserButtonTheme(ThemeData baseTheme) {
+  return baseTheme.copyWith(
+    filledButtonTheme: FilledButtonThemeData(
+      style: FilledButton.styleFrom(
+        foregroundColor: Colors.white,
+        disabledForegroundColor: Colors.white38,
+      ),
+    ),
+    outlinedButtonTheme: OutlinedButtonThemeData(
+      style: OutlinedButton.styleFrom(
+        foregroundColor: Colors.white,
+        disabledForegroundColor: Colors.white38,
+        side: const BorderSide(color: Color(0x66FFFFFF)),
+      ),
+    ),
+    textButtonTheme: TextButtonThemeData(
+      style: TextButton.styleFrom(
+        foregroundColor: const Color(0xFFFFD0CC),
+        disabledForegroundColor: Colors.white38,
+      ),
+    ),
+    iconButtonTheme: IconButtonThemeData(
+      style: IconButton.styleFrom(
+        foregroundColor: Colors.white,
+        disabledForegroundColor: Colors.white38,
+      ),
+    ),
+  );
+}
+
 extension _BrowserUserAgentModeInfo on _BrowserUserAgentMode {
   String get label {
     switch (this) {
@@ -2150,67 +2180,71 @@ class _TerminalBrowserPanelState extends State<TerminalBrowserPanel>
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return AnimatedBuilder(
-      animation: _service,
-      builder: (context, _) {
-        return DecoratedBox(
-          decoration: BoxDecoration(
-            color: Colors.black,
-            border: Border(
-              left: BorderSide(
-                color: Colors.white.withAlpha(18),
-              ),
-            ),
-          ),
-          child: Column(
-            children: [
-              _buildHeader(theme),
-              if (_showRecentActions) _buildRecentActionsStrip(theme),
-              if (_showInspector || _inspectorLoading || _inspectorItems.isNotEmpty)
-                _buildInspectorStrip(theme),
-              Expanded(
-                child: Stack(
-                  children: [
-                    Positioned.fill(child: _buildWebView()),
-                    if (_loading)
-                      const Positioned(
-                        top: 16,
-                        right: 16,
-                        child: SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        ),
-                      ),
-                    if (_service.isToolCallActive)
-                      Positioned(
-                        left: 12,
-                        right: 12,
-                        bottom: 12,
-                        child: _buildStatusChip(
-                          icon: Icons.auto_awesome,
-                          text: 'Codex 正在操作浏览器: ${_service.lastToolName}',
-                          color: AppColors.accent,
-                        ),
-                      ),
-                    if (_error.isNotEmpty)
-                      Positioned(
-                        left: 12,
-                        right: 12,
-                        bottom: _service.isToolCallActive ? 60 : 12,
-                        child: _buildStatusChip(
-                          icon: Icons.error_outline,
-                          text: _error,
-                          color: AppColors.statusRed,
-                        ),
-                      ),
-                  ],
+    return Theme(
+      data: _browserButtonTheme(theme),
+      child: AnimatedBuilder(
+        animation: _service,
+        builder: (context, _) {
+          return DecoratedBox(
+            decoration: BoxDecoration(
+              color: Colors.black,
+              border: Border(
+                left: BorderSide(
+                  color: Colors.white.withAlpha(18),
                 ),
               ),
-            ],
+            ),
+            child: Column(
+              children: [
+                _buildHeader(theme),
+                if (_showRecentActions) _buildRecentActionsStrip(theme),
+                if (_showInspector || _inspectorLoading || _inspectorItems.isNotEmpty)
+                  _buildInspectorStrip(theme),
+                Expanded(
+                  child: Stack(
+                    children: [
+                      Positioned.fill(child: _buildWebView()),
+                      if (_loading)
+                        const Positioned(
+                          top: 16,
+                          right: 16,
+                          child: SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                        ),
+                      if (_service.isToolCallActive)
+                        Positioned(
+                          left: 12,
+                          right: 12,
+                          bottom: 12,
+                          child: _buildStatusChip(
+                            icon: Icons.auto_awesome,
+                            text: 'Codex 正在操作浏览器: ${_service.lastToolName}',
+                            color: AppColors.accent,
+                          ),
+                        ),
+                      if (_error.isNotEmpty)
+                        Positioned(
+                          left: 12,
+                          right: 12,
+                          bottom: _service.isToolCallActive ? 60 : 12,
+                          child: _buildStatusChip(
+                            icon: Icons.error_outline,
+                            text: _error,
+                            color: AppColors.statusRed,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
-        );
-      },
+          );
+        },
+      ),
     );
   }
 
@@ -2283,7 +2317,10 @@ class _TerminalBrowserPanelState extends State<TerminalBrowserPanel>
         borderRadius: BorderRadius.vertical(top: Radius.circular(8)),
       ),
       builder: (context) {
-        return _BrowserScriptLibrarySheet(service: _service);
+        return Theme(
+          data: _browserButtonTheme(Theme.of(context)),
+          child: _BrowserScriptLibrarySheet(service: _service),
+        );
       },
     );
   }
@@ -3124,6 +3161,7 @@ class _TerminalBrowserPanelState extends State<TerminalBrowserPanel>
           vertical: 12,
         ),
         backgroundColor: AppColors.accent,
+        foregroundColor: Colors.white,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(8),
         ),
@@ -3227,16 +3265,20 @@ class _BrowserScriptLibrarySheetState
   List<BrowserAutomationScript> _scripts = const <BrowserAutomationScript>[];
   List<BrowserUserScript> _userScripts = const <BrowserUserScript>[];
   BrowserAutomationScriptDraft? _pendingDraft;
+  late final PageController _workspacePageController;
+  var _workspaceIndex = 0;
 
   @override
   void initState() {
     super.initState();
+    _workspacePageController = PageController();
     widget.service.addListener(_handleServiceChanged);
     unawaited(_loadScripts());
   }
 
   @override
   void dispose() {
+    _workspacePageController.dispose();
     widget.service.removeListener(_handleServiceChanged);
     super.dispose();
   }
@@ -3614,7 +3656,7 @@ class _BrowserScriptLibrarySheetState
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        '左侧为 Codex 自动化流程，右侧为传统网站用户脚本',
+                        '左右滑动切换 Codex 自动化流程与传统网站脚本',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: theme.textTheme.bodySmall?.copyWith(
@@ -3670,6 +3712,28 @@ class _BrowserScriptLibrarySheetState
               ],
             ),
           ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+            child: Row(
+              children: [
+                Expanded(
+                  child: _buildWorkspaceTab(
+                    icon: Icons.playlist_play,
+                    label: 'Codex 自动化',
+                    index: 0,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _buildWorkspaceTab(
+                    icon: Icons.code,
+                    label: '传统脚本',
+                    index: 1,
+                  ),
+                ),
+              ],
+            ),
+          ),
           Divider(height: 1, color: Colors.white.withAlpha(14)),
           Expanded(child: _buildBody(theme)),
         ],
@@ -3678,28 +3742,43 @@ class _BrowserScriptLibrarySheetState
   }
 
   Widget _buildBody(ThemeData theme) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final narrow = constraints.maxWidth < 680;
-        final automation = _buildAutomationBody(theme);
-        final traditional = _buildUserScriptsColumn(theme);
-        if (narrow) {
-          return Column(
-            children: [
-              Expanded(child: automation),
-              const Divider(height: 1),
-              Expanded(child: traditional),
-            ],
-          );
-        }
-        return Row(
-          children: [
-            Expanded(child: automation),
-            VerticalDivider(width: 1, color: Colors.white.withAlpha(20)),
-            Expanded(child: traditional),
-          ],
+    return PageView(
+      controller: _workspacePageController,
+      onPageChanged: (index) {
+        setState(() {
+          _workspaceIndex = index;
+        });
+      },
+      children: [
+        _buildAutomationBody(theme),
+        _buildUserScriptsColumn(theme),
+      ],
+    );
+  }
+
+  Widget _buildWorkspaceTab({
+    required IconData icon,
+    required String label,
+    required int index,
+  }) {
+    final selected = _workspaceIndex == index;
+    final color = index == 0 ? AppColors.accent : const Color(0xFFFBBF24);
+    return OutlinedButton.icon(
+      onPressed: () {
+        _workspacePageController.animateToPage(
+          index,
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeOutCubic,
         );
       },
+      style: OutlinedButton.styleFrom(
+        foregroundColor: selected ? color : Colors.white70,
+        backgroundColor: selected ? color.withAlpha(24) : Colors.transparent,
+        side: BorderSide(color: selected ? color.withAlpha(150) : Colors.white24),
+        padding: const EdgeInsets.symmetric(vertical: 10),
+      ),
+      icon: Icon(icon, size: 17),
+      label: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
     );
   }
 
