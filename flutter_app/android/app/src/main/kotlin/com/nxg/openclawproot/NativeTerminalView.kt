@@ -324,15 +324,6 @@ class NativeTerminalPlatformView(
             setPadding(dpToPx(4), dpToPx(4), dpToPx(4), dpToPx(4))
             gravity = Gravity.CENTER_VERTICAL
         }
-        scrollView.setOnApplyWindowInsetsListener { _, insets ->
-            row.setPadding(
-                dpToPx(4),
-                dpToPx(4),
-                dpToPx(4),
-                dpToPx(4) + insets.systemWindowInsetBottom,
-            )
-            insets
-        }
         scrollView.addView(
             row,
             ViewGroup.LayoutParams(
@@ -340,7 +331,6 @@ class NativeTerminalPlatformView(
                 ViewGroup.LayoutParams.WRAP_CONTENT,
             ),
         )
-        scrollView.requestApplyInsets()
 
         addToolbarButton(row, "ESC") {
             sendToolbarInput("\u001b")
@@ -541,6 +531,9 @@ class NativeTerminalPlatformView(
         (dp * container.resources.displayMetrics.density).roundToInt()
 
     private fun requestInputStripVisible() {
+        if (useNativeToolbar) {
+            return
+        }
         if (terminalView.width <= 0 || terminalView.height <= 0) {
             return
         }
@@ -554,9 +547,7 @@ class NativeTerminalPlatformView(
         terminalView.requestRectangleOnScreen(inputStripRect, true)
         parentInputStripRect.set(inputStripRect)
         contentContainer.offsetDescendantRectToMyCoords(terminalView, parentInputStripRect)
-        if (!useNativeToolbar) {
-            container.requestRectangleOnScreen(parentInputStripRect, true)
-        }
+        container.requestRectangleOnScreen(parentInputStripRect, true)
     }
 
     companion object {
