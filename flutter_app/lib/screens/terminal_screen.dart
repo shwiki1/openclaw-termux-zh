@@ -211,10 +211,9 @@ class _TerminalScreenState extends State<TerminalScreen> {
       },
       child: Scaffold(
         backgroundColor: Colors.black,
-        // The native terminal and embedded browser both use platform views.
-        // Letting the scaffold resize for the IME causes both surfaces to relayout,
-        // which makes keyboard open/close noticeably janky on Android.
-        resizeToAvoidBottomInset: false,
+        // Let the terminal route consume the real IME inset so the platform view
+        // actually shrinks with the keyboard and keeps the native shortcut bar above it.
+        resizeToAvoidBottomInset: true,
         appBar: AppBar(
           backgroundColor: Colors.black,
           foregroundColor: Colors.white,
