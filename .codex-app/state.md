@@ -3,7 +3,7 @@
 Last updated: 2026-07-16 04:40 UTC
 
 ## Current Truth
-- Active release task: submit the browser automation, dual script assistant, button contrast, and Codex IME-close performance fixes as the next arm64-only cloud build. GitHub Actions must derive `v4.1.0 / 4.1 / 160`; failed builds `157` and `158` remain permanently reserved.
+- Active release task: retry the browser automation, dual script assistant, button contrast, and Codex IME-close performance fixes after Actions run `29473924386` failed before artifact creation on a browser-panel Dart syntax error. The corrected retry must derive `v4.2.0 / 4.2 / 161`; failed builds `157`, `158`, and `160` remain permanently reserved.
 - Release baseline: local `f206113` and remote `e698148` share the exact verified `3.4` source tree. GitHub `v3.5.0`/`v3.6.0`, their tags, APK assets, and associated Actions runs were removed; `basic-resource` remains the valid 3.4 baseline resource.
 - Current published release: `v4.0.0 / 4.0 / 159`, derived from source anchor `2.5.0+143`. Workflow `.github/workflows/flutter-build.yml` enforces logical build `159` as its release floor and only packages `arm64-v8a`.
 - Cloud result: Actions run `29470132394` succeeded at remote commit `b8db7a3` and published `CiYuanXia-v4.0-159-arm64-v8a.apk` in GitHub Release `v4.0.0`.
