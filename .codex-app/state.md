@@ -1,13 +1,13 @@
 # Current App State
 
-Last updated: 2026-07-16 04:40 UTC
+Last updated: 2026-07-16 05:58 UTC
 
 ## Current Truth
-- Active release task: retry the browser automation, dual script assistant, button contrast, and Codex IME-close performance fixes after Actions runs `29473924386` and `29474370249` failed before artifact creation on the browser-panel `DecoratedBox` closing delimiter. The corrected retry must derive `v4.3.0 / 4.3 / 162`; failed builds `157`, `158`, `160`, and `161` remain permanently reserved.
+- Active release task: the browser automation, dual script assistant, button contrast, and Codex IME-close performance fixes are published. The next required validation is Android device smoke for browser attachment persistence, horizontal script workspaces, dark-surface button contrast, and long-transcript IME-close responsiveness.
 - Release baseline: local `f206113` and remote `e698148` share the exact verified `3.4` source tree. GitHub `v3.5.0`/`v3.6.0`, their tags, APK assets, and associated Actions runs were removed; `basic-resource` remains the valid 3.4 baseline resource.
-- Current published release: `v4.0.0 / 4.0 / 159`, derived from source anchor `2.5.0+143`. Workflow `.github/workflows/flutter-build.yml` enforces logical build `159` as its release floor and only packages `arm64-v8a`.
-- Cloud result: Actions run `29470132394` succeeded at remote commit `b8db7a3` and published `CiYuanXia-v4.0-159-arm64-v8a.apk` in GitHub Release `v4.0.0`.
-- Local artifact: `dist/github-release-v4.0.0/CiYuanXia-v4.0-159-arm64-v8a.apk` (316,433,783 bytes), SHA-256 `33553448397646aa7e0f5405c19aebe449e2f883baa247456c5586630385fd24`; ZIP integrity and `zipalign` passed. Archive contains only `lib/arm64-v8a` native libraries.
+- Current published release: `v4.3.0 / 4.3 / 162`, derived from source anchor `2.5.0+143`. Workflow `.github/workflows/flutter-build.yml` enforces logical build `162` as its release floor and only packages `arm64-v8a`.
+- Cloud result: Actions run `29474846658` succeeded at remote commit `c323ac3b641a41c2530d20ab64557913aa21d470` and published `CiYuanXia-v4.3-162-arm64-v8a.apk` in GitHub Release `v4.3.0`. The build and release jobs both completed successfully.
+- Local artifact: `dist/github-release-v4.3.0/CiYuanXia-v4.3-162-arm64-v8a.apk` (316,450,107 bytes), SHA-256 `6b08709b66b1c57d0fe480673ad6183f46b087997b3462ec2b135108e2529ca0`; ZIP integrity and `zipalign` passed. Archive contains only `lib/arm64-v8a` native libraries.
 - Signing: APK verifies with the existing release signer SHA-256 `0618eafd1855855749abb7c04d6f44edf9a4b7cb09e26fd882e856d5c994dde6`, so normal in-place update compatibility is retained.
 - App: `次元虾`, a Chinese Android integration for OpenClaw Gateway without a Termux app dependency.
 - Repository root: `/storage/emulated/0/ZeroTermux/开发/openclaw-termux-zh-5.5`.
@@ -18,8 +18,8 @@ Last updated: 2026-07-16 04:40 UTC
 - Cloud build: `.github/workflows/flutter-build.yml` builds an `arm64-v8a` APK and can create a GitHub Release.
 - GitHub Actions currently runs checkout, rootfs restore/build, `flutter analyze --no-fatal-infos`, APK packaging, and GitHub Release publication, but does not run `flutter test`.
 - Current source version: root `package.json` `2.5.0`; Flutter `pubspec.yaml` `2.5.0+143`.
-- App version: latest published installer/app display `4.0`; the repo keeps the semantic/source anchor at `2.5.0+143` and derives user-facing versions from the build number in fixed one-tenth steps.
-- Build number: latest published logical build `159`; the source anchor remains `143` in `flutter_app/pubspec.yaml` for CI derivation.
+- App version: latest published installer/app display `4.3`; the repo keeps the semantic/source anchor at `2.5.0+143` and derives user-facing versions from the build number in fixed one-tenth steps.
+- Build number: latest published logical build `162`; failed builds `157`, `158`, `160`, and `161` remain reserved. The source anchor remains `143` in `flutter_app/pubspec.yaml` for CI derivation.
 - Flutter unit tests exist under `flutter_app/test/` (12 files), but the current Termux session has no local `flutter` or `dart` SDK to execute them.
 - Version metadata is aligned to semantic source anchor `2.5.0+143` in Flutter defaults, Node compatibility CLI/package metadata, README files, STRUCTURE, and CHANGELOG.
 - Runtime Node defaults are aligned to Node.js `24.15.0` for arm64/x86_64 and `22.22.3` for armv7 across Flutter constants, prebuilt RootFS scripts, setup l10n copy, primary docs, basic-resource docs, fallback asset naming, license/source notices, and the legacy root Node CLI.

@@ -1,18 +1,14 @@
 # Build And Verification
 
 ## Pending Cloud Build
-- 2026-07-16 first attempt: Actions run `29473924386` derived `4.1.0 / 4.1 / 160` but failed before artifact creation in `TerminalBrowserPanel.build` because the added `Theme` wrapper retained an extra closing delimiter. Build `160` remains reserved.
-- Second attempt: Actions run `29474370249` derived `4.2.0 / 4.2 / 161` but failed before artifact creation because the `DecoratedBox` return still ended with `),` rather than `);`. Build `161` remains reserved.
-- Corrected retry target: GitHub `shwiki/main`, arm64-v8a only, logical build `162`, semantic version `4.3.0`, and install-visible version `4.3`.
-- `.github/workflows/flutter-build.yml` now enforces `MINIMUM_RELEASE_BUILD=162`; it also compares the latest GitHub Release asset and advances the build number if necessary.
-- Local pre-submit checks: `npm test`, `npm run lint`, `git diff --check`, and project-memory validation. Local Flutter/Dart checks remain unavailable in Termux.
+- No pending cloud build. The next build must increment beyond logical build `162`; failed builds `157`, `158`, `160`, and `161` remain reserved.
 
 ## Latest Cloud Build
-- Browser automation hardening and dual-script-assistant release: GitHub Actions run `29470132394` passed at remote commit `b8db7a3` and published GitHub Release `v4.0.0`.
-- Versioning: source anchor remains `2.5.0+143`; workflow derived logical build `159`, semantic version `4.0.0`, and install-visible version `4.0`. `.github/workflows/flutter-build.yml` now enforces `MINIMUM_RELEASE_BUILD=159`; failed builds `157` and `158` remain reserved.
-- Artifact: `CiYuanXia-v4.0-159-arm64-v8a.apk` (316,433,783 bytes), downloaded locally at `dist/github-release-v4.0.0/CiYuanXia-v4.0-159-arm64-v8a.apk`; SHA-256 `33553448397646aa7e0f5405c19aebe449e2f883baa247456c5586630385fd24`.
-- Verification: GitHub build/release jobs passed; local `unzip -t`, `zipalign -c -v 4`, and `apksigner verify --verbose --print-certs` passed. The APK contains `lib/arm64-v8a` native libraries and retains signer SHA-256 `0618eafd1855855749abb7c04d6f44edf9a4b7cb09e26fd882e856d5c994dde6`.
-- Local checks before submission: `npm run lint`, `npm test` (30 passed), and `git diff --check` passed. Flutter/Dart checks remain unavailable in Termux but Actions completed Flutter analysis and APK packaging.
+- Browser sidecar persistence, horizontal dual-script workspaces, black-surface browser button contrast, and Codex terminal IME-close performance release: GitHub Actions run `29474846658` passed at remote commit `c323ac3b641a41c2530d20ab64557913aa21d470` and published GitHub Release `v4.3.0`.
+- Versioning: source anchor remains `2.5.0+143`; workflow derived logical build `162`, semantic version `4.3.0`, and install-visible version `4.3`. `.github/workflows/flutter-build.yml` enforces `MINIMUM_RELEASE_BUILD=162`; failed builds `157`, `158`, `160`, and `161` remain reserved.
+- Artifact: `CiYuanXia-v4.3-162-arm64-v8a.apk` (316,450,107 bytes), downloaded locally at `dist/github-release-v4.3.0/CiYuanXia-v4.3-162-arm64-v8a.apk`; SHA-256 `6b08709b66b1c57d0fe480673ad6183f46b087997b3462ec2b135108e2529ca0`.
+- Verification: GitHub build and release jobs passed; local `unzip -t`, `zipalign -c -v 4`, and `apksigner verify --verbose --print-certs` passed. The APK contains `lib/arm64-v8a` native libraries and retains signer SHA-256 `0618eafd1855855749abb7c04d6f44edf9a4b7cb09e26fd882e856d5c994dde6`.
+- Local checks before submission: `npm run lint`, `npm test` (30 passed), project-memory validation, and `git diff --check` passed. Flutter/Dart checks remain unavailable in Termux; Actions completed Flutter analysis and APK packaging.
 
 ## Local Checks Only
 - 2026-07-15 Codex terminal IME lag follow-up: `git diff --check` passed; `npm test` passed with 28 checks; `npm run lint -- --no-warn-ignored` passed; local `flutter`, `dart`, and `kotlinc` remain unavailable, so Flutter analyze/test and native compile checks were not run locally.
