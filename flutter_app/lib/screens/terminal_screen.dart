@@ -27,9 +27,11 @@ class TerminalScreen extends StatefulWidget {
   State<TerminalScreen> createState() => _TerminalScreenState();
 }
 
-class _TerminalScreenState extends State<TerminalScreen> {
+class _TerminalScreenState extends State<TerminalScreen>
+    with WidgetsBindingObserver {
   static const _defaultTerminalTranscriptRows = 3000;
   static const _codexTerminalTranscriptRows = 1200;
+  static const _imeResizeSettleDuration = Duration(milliseconds: 180);
   static final Map<String, List<_TerminalSessionTab>> _savedSessions = {};
   static final Map<String, int> _savedActiveIndexes = {};
 
@@ -42,6 +44,9 @@ class _TerminalScreenState extends State<TerminalScreen> {
   var _closedAllSessions = false;
   var _browserPanelOpen = false;
   var _lastBrowserPanelRequestNonce = 0;
+  var _imeResizePauseActive = false;
+  double? _lastViewInsetBottom;
+  Timer? _imeResizePauseTimer;
 
   _TerminalSessionTab get _activeSession => _sessions[_activeIndex];
 
@@ -55,6 +60,7 @@ class _TerminalScreenState extends State<TerminalScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     NativeBridge.startTerminalService().catchError((_) => false);
     NativeBridge.acquireTerminalSoftInputMode().catchError((_) => false);
     if (_isCodexSession) {
@@ -90,7 +96,34 @@ class _TerminalScreenState extends State<TerminalScreen> {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _lastViewInsetBottom = MediaQuery.viewInsetsOf(context).bottom;
+  }
+
+  @override
+  void didChangeMetrics() {
+    if (!mounted) {
+      return;
+    }
+    final view = View.maybeOf(context);
+    if (view == null) {
+      return;
+    }
+    final nextBottomInset = view.viewInsets.bottom / view.devicePixelRatio;
+    final previousBottomInset = _lastViewInsetBottom;
+    if (previousBottomInset != null &&
+        (nextBottomInset - previousBottomInset).abs() < 1.0) {
+      return;
+    }
+    _lastViewInsetBottom = nextBottomInset;
+    _pauseTerminalDuringImeResize();
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _imeResizePauseTimer?.cancel();
     if (!_closedAllSessions) {
       _persistSessionTabs();
     }
@@ -99,6 +132,23 @@ class _TerminalScreenState extends State<TerminalScreen> {
       _browserService.removeListener(_handleBrowserAutomationUpdate);
     }
     super.dispose();
+  }
+
+  void _pauseTerminalDuringImeResize() {
+    _imeResizePauseTimer?.cancel();
+    if (!_imeResizePauseActive) {
+      setState(() {
+        _imeResizePauseActive = true;
+      });
+    }
+    _imeResizePauseTimer = Timer(_imeResizeSettleDuration, () {
+      if (!mounted || !_imeResizePauseActive) {
+        return;
+      }
+      setState(() {
+        _imeResizePauseActive = false;
+      });
+    });
   }
 
   void _handleBrowserAutomationUpdate() {
@@ -441,7 +491,8 @@ class _TerminalScreenState extends State<TerminalScreen> {
   Widget _buildTerminal(_NativeTerminalConfig config) {
     final screenWidth = MediaQuery.of(context).size.width;
     final compactCodexBrowser = _isCodexSession && screenWidth < 960;
-    final pauseTerminalRendering = compactCodexBrowser && _browserPanelOpen;
+    final pauseTerminalRendering =
+        (compactCodexBrowser && _browserPanelOpen) || _imeResizePauseActive;
 
     final terminal = Column(
       children: [
