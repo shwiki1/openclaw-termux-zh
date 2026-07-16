@@ -1,9 +1,10 @@
 # Backlog
 
 ## Priority Now
-- Push the Codex terminal redesign retry to GitHub `main`, watch the next arm64 release build, and record the resulting `4.7 / 166` provenance before any further code work.
+- Push the native terminal activity follow-up to GitHub `main`, watch the next arm64 release build, and record the resulting post-`172` provenance before any further terminal IME work.
+- Device-smoke the new native terminal activity on Android: full-screen terminal scrollback, repeated IME open/close, bottom shortcut bar position, session reopen persistence, and close-vs-back behavior. Confirm it is materially smoother than the old Flutter `TerminalScreen` path.
 - Device-smoke the latest published `CiYuanXia-v4.4-163-arm64-v8a.apk` on Android: first-run bootstrap, installer/app version `4.4`, update compatibility, terminal IME prompt visibility, native shortcut-bar co-movement/feedback, browser address-bar/input lift, compact-sidecar reconnect, browser tabs/UA, and browser-script workflow.
-- Device-smoke the redesigned Codex terminal shortcut path on Android: native shortcut bar inside the terminal platform view, repeated IME dismiss/reopen, immediate shortcut-key taps after IME close, and leave/re-enter terminal. If lag remains, focus on native `TerminalView`/`adjustPan` and platform-view/session reattach timing rather than reviving compensation layers.
+- If lag somehow remains on the new native activity path, inspect the shared `NativeTerminalSessionView` render/update path first. Do not revert to more Flutter/platform-view IME compensation work unless the native path is disproven by device smoke.
 - Device-smoke Codex tool calling through the OpenAI-compatible proxy path: verify `responses`-based tool calls, MCP browser tools, and follow-up `function_call_output` turns all survive the local proxy without flattening into plain text.
 - Add `flutter test` to the GitHub Actions gate or run it in a dedicated Flutter SDK environment before the next release candidate; the repo already has Flutter tests, but the current green APK workflow does not execute them.
 - Decide the release promotion path for the next build: which branch is authoritative, which remote is used for cloud builds, who bumps the build number, and where changelog/release notes are cut from.
@@ -35,8 +36,9 @@
 
 ## Do Not Forget
 - Keep app version/build number updated before every new cloud build.
+- The latest local terminal redesign is not another `TerminalScreen` compensation tweak; it changes the active CLI launch path to `NativeTerminalActivity`. Future agents should not assume the old Flutter terminal route is still the production path for CLI tools.
 - Source metadata remains `2.5.0+143`; the latest recorded successful GitHub Release asset is `CiYuanXia-v4.4-163-arm64-v8a.apk` (Actions `29479840309`). It still needs Android device smoke plus local artifact verification before promotion confidence is established.
-- The next fresh cloud build must use a new logical build greater than `165`; do not reuse withdrawn builds `154` or `155`, and do not reuse failed builds `157`, `158`, `160`, `161`, or `165`.
+- The next fresh cloud build must use a new logical build greater than `172`; do not reuse withdrawn builds `154` or `155`, and do not reuse failed builds `157`, `158`, `160`, `161`, or `165`.
 - The current APK workflow is green without running `flutter test`; keep that gap visible until CI or a dedicated SDK environment closes it.
 - Keep Node.js `24.15.0` for arm64/x86_64 and `22.22.3` for armv7 aligned across constants, RootFS scripts, setup l10n copy, docs, bootstrap resource names, license/source notices, legacy installer URLs, and `lib/test.js` unless a future task upgrades the runtime asset set.
 - `inspect_app_project.py` only auto-detects the root Node shell here; manually verify Flutter/Kotlin facts from `flutter_app/` before editing or reporting architecture.

@@ -60,6 +60,7 @@ class MainActivity : FlutterActivity() {
     private var pendingApkInstallResult: MethodChannel.Result? = null
     private var pendingApkInstallPath: String? = null
     private var pendingStoragePermissionResult: MethodChannel.Result? = null
+    private var pendingNativeTerminalResult: MethodChannel.Result? = null
     private var setupDone = false
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -212,6 +213,46 @@ class MainActivity : FlutterActivity() {
                         result.success(true)
                     } catch (e: Exception) {
                         result.error("SERVICE_ERROR", e.message, null)
+                    }
+                }
+                "openNativeTerminalActivity" -> {
+                    if (pendingNativeTerminalResult != null) {
+                        result.error(
+                            "TERMINAL_ACTIVITY_BUSY",
+                            "A native terminal activity is already open.",
+                            null
+                        )
+                        return@setMethodCallHandler
+                    }
+                    try {
+                        val executable = call.argument<String>("executable")
+                        if (executable.isNullOrBlank()) {
+                            result.error("INVALID_ARGS", "executable required", null)
+                            return@setMethodCallHandler
+                        }
+                        val config = NativeTerminalSessionConfig(
+                            sessionId = call.argument<String>("sessionId") ?: "native-shell",
+                            title = call.argument<String>("title") ?: "Terminal",
+                            executable = executable,
+                            cwd = call.argument<String>("cwd") ?: "/",
+                            arguments = call.argument<List<String>>("arguments") ?: emptyList(),
+                            environment = call.argument<Map<String, String>>("environment") ?: emptyMap(),
+                            restart = call.argument<Boolean>("restart") ?: false,
+                            keepAlive = call.argument<Boolean>("keepAlive") ?: true,
+                            emitOutput = call.argument<Boolean>("emitOutput") ?: false,
+                            renderingPaused = call.argument<Boolean>("renderingPaused") ?: false,
+                            useNativeToolbar = call.argument<Boolean>("useNativeToolbar") ?: true,
+                            transcriptRows = call.argument<Int>("transcriptRows") ?: 3000,
+                            fontSize = call.argument<Int>("fontSize") ?: 18,
+                        )
+                        pendingNativeTerminalResult = result
+                        startActivityForResult(
+                            NativeTerminalActivity.createIntent(this, config),
+                            NATIVE_TERMINAL_ACTIVITY_REQUEST,
+                        )
+                    } catch (e: Exception) {
+                        pendingNativeTerminalResult = null
+                        result.error("TERMINAL_ACTIVITY_ERROR", e.message, null)
                     }
                 }
                 "stopTerminalService" -> {
@@ -1183,6 +1224,12 @@ class MainActivity : FlutterActivity() {
             return
         }
 
+        if (requestCode == NATIVE_TERMINAL_ACTIVITY_REQUEST) {
+            pendingNativeTerminalResult?.success(resultCode == Activity.RESULT_OK)
+            pendingNativeTerminalResult = null
+            return
+        }
+
         if (requestCode == INSTALL_UNKNOWN_APP_SOURCES_REQUEST) {
             val pendingResult = pendingApkInstallResult
             val pendingPath = pendingApkInstallPath
@@ -1524,5 +1571,6 @@ class MainActivity : FlutterActivity() {
         const val BACKUP_PICK_REQUEST = 1007
         const val WORKSPACE_BACKUP_SAVE_REQUEST = 1008
         const val BOOTSTRAP_ARCHIVE_PICK_REQUEST = 1009
+        const val NATIVE_TERMINAL_ACTIVITY_REQUEST = 1010
     }
 }
