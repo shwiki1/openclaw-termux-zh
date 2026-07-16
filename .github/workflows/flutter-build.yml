@@ -192,10 +192,9 @@ jobs:
             PUBSPEC_VERSION_CODE="1"
           fi
           VERSION_CODE="$((PUBSPEC_VERSION_CODE + 1))"
-          # Builds 154 and 155 were withdrawn. Keep the 3.4 source anchor,
-          # but skip their Android versionCodes so the replacement can update
-          # devices that installed either withdrawn build.
-          MINIMUM_RELEASE_BUILD=156
+          # Builds 154, 155, and failed build 157 must never be reused. Keep
+          # the 3.4 source anchor while assigning a fresh Android versionCode.
+          MINIMUM_RELEASE_BUILD=158
           if [ "$VERSION_CODE" -lt "$MINIMUM_RELEASE_BUILD" ]; then
             VERSION_CODE="$MINIMUM_RELEASE_BUILD"
           fi
