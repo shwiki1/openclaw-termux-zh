@@ -1,5 +1,10 @@
 # Build And Verification
 
+## Pending Cloud Build
+- 2026-07-16 browser persistence, horizontally swipable script workspaces, browser button contrast, and Codex terminal IME-close performance release candidate: target GitHub `shwiki/main`, arm64-v8a only, logical build `160`, semantic version `4.1.0`, and install-visible version `4.1`.
+- `.github/workflows/flutter-build.yml` now enforces `MINIMUM_RELEASE_BUILD=160`; it also compares the latest GitHub Release asset and advances the build number if necessary.
+- Local pre-submit checks: `npm test`, `npm run lint`, `git diff --check`, and project-memory validation. Local Flutter/Dart checks remain unavailable in Termux.
+
 ## Latest Cloud Build
 - Browser automation hardening and dual-script-assistant release: GitHub Actions run `29470132394` passed at remote commit `b8db7a3` and published GitHub Release `v4.0.0`.
 - Versioning: source anchor remains `2.5.0+143`; workflow derived logical build `159`, semantic version `4.0.0`, and install-visible version `4.0`. `.github/workflows/flutter-build.yml` now enforces `MINIMUM_RELEASE_BUILD=159`; failed builds `157` and `158` remain reserved.

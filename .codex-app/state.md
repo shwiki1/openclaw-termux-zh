@@ -3,7 +3,7 @@
 Last updated: 2026-07-16 04:40 UTC
 
 ## Current Truth
-- Active release task: completed browser automation hardening and dual script assistant release. GitHub Actions run `29470132394` passed at remote GitHub commit `b8db7a3` and published `v4.0.0 / 4.0 / 159`; failed builds `157` and `158` remain permanently reserved.
+- Active release task: submit the browser automation, dual script assistant, button contrast, and Codex IME-close performance fixes as the next arm64-only cloud build. GitHub Actions must derive `v4.1.0 / 4.1 / 160`; failed builds `157` and `158` remain permanently reserved.
 - Release baseline: local `f206113` and remote `e698148` share the exact verified `3.4` source tree. GitHub `v3.5.0`/`v3.6.0`, their tags, APK assets, and associated Actions runs were removed; `basic-resource` remains the valid 3.4 baseline resource.
 - Current published release: `v4.0.0 / 4.0 / 159`, derived from source anchor `2.5.0+143`. Workflow `.github/workflows/flutter-build.yml` enforces logical build `159` as its release floor and only packages `arm64-v8a`.
 - Cloud result: Actions run `29470132394` succeeded at remote commit `b8db7a3` and published `CiYuanXia-v4.0-159-arm64-v8a.apk` in GitHub Release `v4.0.0`.
@@ -42,9 +42,16 @@ Last updated: 2026-07-16 04:40 UTC
 - Compact Codex browser sidecar now disposes when closed on narrow screens, so the terminal route no longer carries a hidden WebView tree through IME reopen checks; the native terminal also skips redundant `requestFocus()` calls when keyboard reopen is already focused.
 
 ## Active Task
-- Device-smoke the published `159 / 4.0` arm64 APK on Android, with priority on browser health recovery, mobile-UA layout, real paste, resource waiting, script-assistant separation, and WebView input behavior.
+- Fix complete locally: Codex terminal IME compensation now coalesces layout updates and defers screen redraws while the keyboard is moving. The next task is Android device smoke with a full-page Codex transcript while closing the keyboard.
 
 ## Recently Changed
+- Reduced Codex terminal keyboard-close jank in `NativeTerminalView.kt`: IME bottom compensation now ignores small per-frame changes, avoids repeated input-strip scroll requests, and marks the terminal renderer deferred until the IME layout settles. Pending output redraws resume once after the transition instead of redrawing the full transcript during every keyboard animation frame.
+- Extended `lib/test.js` with source guards for IME transition settling and refresh deferral; `npm test` passed with 30 checks, `npm run lint` passed, and `git diff --check` passed.
+- Added a browser-panel-local high-contrast button theme: filled, outlined, text, and icon buttons now use explicit light foreground colors on the black browser surface; the address-bar `打开` button also explicitly uses white text/icons.
+- Extended the browser source guard in `lib/test.js`; `npm test` passed with 30 checks, `npm run lint` passed, and `git diff --check` passed after the contrast fix.
+- Kept the compact Codex browser sidecar mounted while hidden so `_closeBrowserPanel()` no longer disposes the `TerminalBrowserPanel`, WebView, or browser automation bridge; terminal rendering still resumes whenever the sidecar is closed.
+- Replaced the script assistant's narrow-screen stacked workflow/user-script columns with a `PageView` and explicit workspace selectors: `Codex 自动化` and `传统脚本` can be tapped or reached with a horizontal swipe.
+- Extended `lib/test.js` source guards for the persistent browser mount and horizontal script workspaces; `npm test` passed with 30 checks, `npm run lint` passed, and `git diff --check` passed.
 - Completed GitHub Actions run `29470132394` from remote commit `b8db7a3`; Flutter analysis, arm64 APK packaging, PRoot verification, artifact upload, and GitHub Release creation all passed.
 - Downloaded GitHub Release `v4.0.0` locally to `dist/github-release-v4.0.0/`; `unzip -t`, `zipalign -c -v 4`, and `apksigner verify --verbose --print-certs` passed. The signer certificate SHA-256 remains `0618eafd1855855749abb7c04d6f44edf9a4b7cb09e26fd882e856d5c994dde6`.
 - Raised the release-floor guard to logical build `159`; builds `157` and `158` failed before artifact creation and must never be reused.
