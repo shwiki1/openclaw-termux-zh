@@ -1,7 +1,8 @@
 # Build And Verification
 
 ## Pending Cloud Build
-- No pending cloud build. The next build must increment beyond logical build `162`; failed builds `157`, `158`, `160`, and `161` remain reserved.
+- 2026-07-16 Codex terminal IME settled-compensation follow-up: pending GitHub `shwiki/main` build, arm64-v8a only, logical build `163`, semantic version `4.4.0`, and install-visible version `4.4`.
+- `.github/workflows/flutter-build.yml` now enforces `MINIMUM_RELEASE_BUILD=163`; failed builds `157`, `158`, `160`, and `161` remain reserved.
 
 ## Latest Cloud Build
 - Browser sidecar persistence, horizontal dual-script workspaces, black-surface browser button contrast, and Codex terminal IME-close performance release: GitHub Actions run `29474846658` passed at remote commit `c323ac3b641a41c2530d20ab64557913aa21d470` and published GitHub Release `v4.3.0`.

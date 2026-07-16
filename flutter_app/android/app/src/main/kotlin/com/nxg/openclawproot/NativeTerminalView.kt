@@ -88,12 +88,14 @@ class NativeTerminalPlatformView(
     private val toolbarStrip = if (useNativeToolbar) createToolbarStrip(context) else null
     private var holder: NativeTerminalSessionHolder? = null
     private var imeCompensationBottomPx = 0
+    private var pendingImeCompensationBottomPx = 0
     private var lastKeyboardShowRequestElapsedMs = 0L
     private var disposed = false
     private val keyboardRetryRunnable = Runnable {
         retryShowKeyboardIfNeeded()
     }
     private val imeTransitionSettleRunnable = Runnable {
+        applyPendingImeCompensation()
         client.setImeTransitionActive(false)
     }
     private val globalLayoutListener = ViewTreeObserver.OnGlobalLayoutListener {
@@ -607,31 +609,34 @@ class NativeTerminalPlatformView(
             0
         }
 
-        val previousCompensation = imeCompensationBottomPx
-        if (hiddenBottomPx == previousCompensation) {
-            return
-        }
-
-        val minimumCompensationDelta = dpToPx(IME_COMPENSATION_STEP_DP)
         if (
-            hiddenBottomPx > 0 &&
-            previousCompensation > 0 &&
-            abs(hiddenBottomPx - previousCompensation) < minimumCompensationDelta
+            hiddenBottomPx == pendingImeCompensationBottomPx &&
+            hiddenBottomPx == imeCompensationBottomPx
         ) {
             return
         }
 
-        imeCompensationBottomPx = hiddenBottomPx
+        pendingImeCompensationBottomPx = hiddenBottomPx
         client.setImeTransitionActive(true)
         container.removeCallbacks(imeTransitionSettleRunnable)
         container.postDelayed(imeTransitionSettleRunnable, IME_TRANSITION_SETTLE_DELAY_MS)
+    }
+
+    private fun applyPendingImeCompensation() {
+        val nextCompensation = pendingImeCompensationBottomPx
+        val previousCompensation = imeCompensationBottomPx
+        if (nextCompensation == previousCompensation) {
+            return
+        }
+
+        imeCompensationBottomPx = nextCompensation
         contentContainer.setPadding(
             contentContainer.paddingLeft,
             contentContainer.paddingTop,
             contentContainer.paddingRight,
-            hiddenBottomPx,
+            nextCompensation,
         )
-        if (previousCompensation == 0 && hiddenBottomPx > 0) {
+        if (previousCompensation == 0 && nextCompensation > 0) {
             terminalView.post {
                 if (!disposed && imeCompensationBottomPx > 0) {
                     requestInputStripVisible()
@@ -647,8 +652,7 @@ class NativeTerminalPlatformView(
         private const val MAX_TRANSCRIPT_ROWS = 3000
         private const val DEFAULT_TRANSCRIPT_ROWS = 3000
         private const val KEYBOARD_VISIBLE_THRESHOLD_DP = 96
-        private const val IME_COMPENSATION_STEP_DP = 24
-        private const val IME_TRANSITION_SETTLE_DELAY_MS = 90L
+        private const val IME_TRANSITION_SETTLE_DELAY_MS = 140L
         private const val TOOLBAR_BUTTON_COLOR = 0xFF161616.toInt()
         private const val TOOLBAR_BUTTON_PRESSED_COLOR = 0xFF2B2B2B.toInt()
         private const val TOOLBAR_ACTIVE_COLOR = 0xFF00C853.toInt()

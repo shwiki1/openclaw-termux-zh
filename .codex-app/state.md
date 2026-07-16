@@ -1,9 +1,9 @@
 # Current App State
 
-Last updated: 2026-07-16 05:58 UTC
+Last updated: 2026-07-16 06:20 UTC
 
 ## Current Truth
-- Active release task: the browser automation, dual script assistant, button contrast, and Codex IME-close performance fixes are published. The next required validation is Android device smoke for browser attachment persistence, horizontal script workspaces, dark-surface button contrast, and long-transcript IME-close responsiveness.
+- Active release task: submit the Codex terminal IME-close jank follow-up to the arm64-only GitHub workflow. The target is `v4.4.0 / 4.4 / 163`; device smoke remains required before promotion beyond the generated release.
 - Release baseline: local `f206113` and remote `e698148` share the exact verified `3.4` source tree. GitHub `v3.5.0`/`v3.6.0`, their tags, APK assets, and associated Actions runs were removed; `basic-resource` remains the valid 3.4 baseline resource.
 - Current published release: `v4.3.0 / 4.3 / 162`, derived from source anchor `2.5.0+143`. Workflow `.github/workflows/flutter-build.yml` enforces logical build `162` as its release floor and only packages `arm64-v8a`.
 - Cloud result: Actions run `29474846658` succeeded at remote commit `c323ac3b641a41c2530d20ab64557913aa21d470` and published `CiYuanXia-v4.3-162-arm64-v8a.apk` in GitHub Release `v4.3.0`. The build and release jobs both completed successfully.
