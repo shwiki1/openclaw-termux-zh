@@ -45,6 +45,7 @@ Last updated: 2026-07-16 UTC
 - Submit the Codex terminal redesign and tool-call proxy fix for the next GitHub Actions arm64 release build, then record the resulting run/artifact provenance and keep Android device smoke as the immediate post-build validation step.
 
 ## Recently Changed
+- Reworked the terminal IME path again after device feedback confirmed the shortcut bar still was not being lifted: `TerminalScreen` now allows real keyboard insets (`resizeToAvoidBottomInset: true`) so the embedded Android terminal platform view actually shrinks with the IME, and `NativeTerminalView.kt` drops the post-layout global-layout refresh chain that had started re-pushing the command area after the resize.
 - Reworked terminal IME ownership again after on-device feedback showed the native shortcut bar still was not being lifted. `NativeBridge` now gives the terminal route `adjustResize` instead of `adjustPan`, and `NativeTerminalView.kt` no longer issues the extra native-toolbar parent visibility request that had been over-panning the command area without moving the shortcut lane.
 - Split the native terminal IME visibility targets in `NativeTerminalView.kt`: native-toolbar sessions no longer ask Android to reveal one large rectangle spanning the terminal prompt and shortcut bar. The prompt strip now keeps its own bottom input band visible, while the native shortcut lane requests only its own toolbar rectangle. This is intended to keep the shortcut bar above the IME without pushing the command area too high.
 - Added a native IME post-layout refresh path in `NativeTerminalView.kt`: when the keyboard actually changes the window-visible frame and the native shortcut lane would still be overlapped, the platform view now re-runs `requestInputStripVisible()` once after layout so the terminal plus shortcut bar are re-requested above the IME without reviving the older bottom-padding compensation chain.
@@ -282,11 +283,12 @@ Last updated: 2026-07-16 UTC
 - Project policy in `AGENTS.md`: build/release only Android `arm64-v8a` APK unless explicitly requested.
 
 ## Next Actions
+- Push the terminal IME window-resize handoff follow-up to GitHub `main`, watch the next arm64 release build, and download the resulting APK for Android device smoke.
 - Device-smoke the published `151 / 3.2` APK, specifically: confirm shortcut-key haptic feedback and pressed background states on the terminal key strip, then open terminal, dismiss IME, reopen IME several times in the same terminal session, and leave/reopen the terminal screen to confirm the lightweight native show/retry path removed the sticky reopen feel.
 - Verify the published APK installer, settings page, and in-app version text all show `3.2` while numeric build code remains separate.
 - Device-smoke the published `CiYuanXia-v3.0-149-arm64-v8a.apk` on Android, focusing on terminal prompt visibility, shortcut-bar co-movement, browser input visibility, and installer/app version text.
 - Verify the published APK installer, settings page, and in-app version text all show `3.0` while numeric build code remains separate.
-- If the terminal prompt or native shortcut bar still over-lifts or under-lifts on-device, keep investigation focused on `NativeTerminalView.kt` global-layout overlap compensation and measured `adjustPan` movement rather than re-enabling full Flutter keyboard resizing on the terminal route.
+- If the terminal prompt or native shortcut bar still over-lifts or under-lifts on-device after this handoff, keep investigation focused on how Flutter forwards IME insets into the terminal route and how `TerminalView.requestRectangleOnScreen(...)` behaves inside the resized platform view rather than restoring the removed global-layout compensation chain.
 - Device-smoke the Codex browser sidecar header on Android: verify the address bar keeps a full row, long URLs remain editable, and nav/menu text/icons stay readable against the black surface.
 - After the published artifact is verified, keep the shared helper policy intact so later builds continue deriving automatically as `146 -> 2.7`, `147 -> 2.8`, `148 -> 2.9`, `149 -> 3.0`, `150 -> 3.1`.
 - In a Flutter SDK or GitHub Actions environment, run `cd flutter_app && flutter analyze && flutter test`, then decide whether `flutter test` should become a required workflow gate before the next release candidate.

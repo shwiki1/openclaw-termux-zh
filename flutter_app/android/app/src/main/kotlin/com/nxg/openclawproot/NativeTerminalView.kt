@@ -16,7 +16,6 @@ import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
-import android.view.ViewTreeObserver
 import android.view.inputmethod.InputMethodManager
 import android.widget.FrameLayout
 import android.widget.HorizontalScrollView
@@ -61,7 +60,6 @@ class NativeTerminalPlatformView(
     private val container = FrameLayout(context)
     private val contentContainer = LinearLayout(context)
     private val terminalView = TerminalView(context, null)
-    private val bottomSpaceView = View(context)
     private val inputStripRect = Rect()
     private val parentInputStripRect = Rect()
     private val channel = MethodChannel(messenger, "com.agent.cyx/native_terminal_$viewId")
@@ -86,19 +84,9 @@ class NativeTerminalPlatformView(
     private val toolbarStrip = if (useNativeToolbar) createToolbarStrip(context) else null
     private var holder: NativeTerminalSessionHolder? = null
     private var lastKeyboardShowRequestElapsedMs = 0L
-    private var lastImeVisible = false
-    private var lastImeOverlapBottomPx = -1
     private var disposed = false
     private val keyboardRetryRunnable = Runnable {
         retryShowKeyboardIfNeeded()
-    }
-    private val imePostLayoutRefreshRunnable = Runnable {
-        if (!disposed) {
-            requestInputStripVisible()
-        }
-    }
-    private val globalLayoutListener = ViewTreeObserver.OnGlobalLayoutListener {
-        handleGlobalLayoutChange()
     }
 
     init {
@@ -132,14 +120,6 @@ class NativeTerminalPlatformView(
                 ),
             )
         }
-        bottomSpaceView.setBackgroundColor(Color.TRANSPARENT)
-        contentContainer.addView(
-            bottomSpaceView,
-            LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                dpToPx(1),
-            ),
-        )
         container.addView(
             contentContainer,
             FrameLayout.LayoutParams(
@@ -147,7 +127,6 @@ class NativeTerminalPlatformView(
                 FrameLayout.LayoutParams.MATCH_PARENT,
             ),
         )
-        container.viewTreeObserver.addOnGlobalLayoutListener(globalLayoutListener)
         channel.setMethodCallHandler(this)
         val reusedSession = attachOrCreateSession(restart = params.booleanValue("restart", false))
         terminalView.post {
@@ -162,11 +141,7 @@ class NativeTerminalPlatformView(
     override fun dispose() {
         disposed = true
         terminalView.removeCallbacks(keyboardRetryRunnable)
-        container.removeCallbacks(imePostLayoutRefreshRunnable)
         hideKeyboard()
-        if (container.viewTreeObserver.isAlive) {
-            container.viewTreeObserver.removeOnGlobalLayoutListener(globalLayoutListener)
-        }
         channel.setMethodCallHandler(null)
         val current = holder
         if (current != null) {
@@ -326,40 +301,6 @@ class NativeTerminalPlatformView(
         }
         if (!imm.isActive(terminalView)) {
             requestKeyboardShow(force = true)
-        }
-    }
-
-    private fun handleGlobalLayoutChange() {
-        if (disposed || !useNativeToolbar || container.height <= 0) {
-            return
-        }
-
-        val visibleFrame = Rect()
-        container.getWindowVisibleDisplayFrame(visibleFrame)
-        val rootHeight = container.rootView?.height ?: 0
-        if (rootHeight <= 0) {
-            return
-        }
-
-        val obscuredHeight = (rootHeight - visibleFrame.height()).coerceAtLeast(0)
-        val imeVisible = obscuredHeight > dpToPx(KEYBOARD_VISIBLE_THRESHOLD_DP)
-        val overlapBottomPx = if (imeVisible) {
-            val location = IntArray(2)
-            container.getLocationOnScreen(location)
-            (location[1] + container.height - visibleFrame.bottom).coerceAtLeast(0)
-        } else {
-            0
-        }
-
-        if (imeVisible == lastImeVisible && overlapBottomPx == lastImeOverlapBottomPx) {
-            return
-        }
-
-        lastImeVisible = imeVisible
-        lastImeOverlapBottomPx = overlapBottomPx
-        container.removeCallbacks(imePostLayoutRefreshRunnable)
-        if (imeVisible && overlapBottomPx > 0) {
-            container.post(imePostLayoutRefreshRunnable)
         }
     }
 
@@ -624,7 +565,6 @@ class NativeTerminalPlatformView(
         private const val MIN_TRANSCRIPT_ROWS = 400
         private const val MAX_TRANSCRIPT_ROWS = 3000
         private const val DEFAULT_TRANSCRIPT_ROWS = 3000
-        private const val KEYBOARD_VISIBLE_THRESHOLD_DP = 96
         private const val TOOLBAR_BUTTON_COLOR = 0xFF161616.toInt()
         private const val TOOLBAR_BUTTON_PRESSED_COLOR = 0xFF2B2B2B.toInt()
         private const val TOOLBAR_ACTIVE_COLOR = 0xFF00C853.toInt()
