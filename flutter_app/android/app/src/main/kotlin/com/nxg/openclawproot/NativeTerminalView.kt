@@ -59,7 +59,7 @@ class NativeTerminalPlatformView(
 ) : PlatformView, MethodChannel.MethodCallHandler {
     private val container = FrameLayout(context)
     private val contentContainer = LinearLayout(context)
-    private val terminalView = TerminalView(context, null)
+    private val terminalView = DeferredResizeTerminalView(context)
     private val inputStripRect = Rect()
     private val parentInputStripRect = Rect()
     private val channel = MethodChannel(messenger, "com.agent.cyx/native_terminal_$viewId")
@@ -604,6 +604,56 @@ private object DetachedTerminalClient : TerminalSessionClient {
     }
     override fun logStackTrace(tag: String, e: Exception) {
         android.util.Log.e(tag, "Detached native terminal error", e)
+    }
+}
+
+private class DeferredResizeTerminalView(
+    context: Context,
+) : TerminalView(context, null) {
+    private var resizeBurstDeadlineMs = 0L
+    private var resizeUpdatePending = false
+    private val flushResizeRunnable = Runnable {
+        if (!resizeUpdatePending) {
+            return@Runnable
+        }
+        resizeUpdatePending = false
+        resizeBurstDeadlineMs = 0L
+        super.updateSize()
+    }
+
+    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
+        if (oldw > 0 && oldh > 0 && w == oldw && h != oldh) {
+            resizeBurstDeadlineMs = SystemClock.uptimeMillis() + IME_RESIZE_SETTLE_MS
+        }
+        super.onSizeChanged(w, h, oldw, oldh)
+    }
+
+    override fun updateSize() {
+        val now = SystemClock.uptimeMillis()
+        if (resizeBurstDeadlineMs > now) {
+            resizeUpdatePending = true
+            removeCallbacks(flushResizeRunnable)
+            postDelayed(
+                flushResizeRunnable,
+                (resizeBurstDeadlineMs - now).coerceAtLeast(1L),
+            )
+            return
+        }
+        resizeUpdatePending = false
+        resizeBurstDeadlineMs = 0L
+        removeCallbacks(flushResizeRunnable)
+        super.updateSize()
+    }
+
+    override fun onDetachedFromWindow() {
+        removeCallbacks(flushResizeRunnable)
+        resizeUpdatePending = false
+        resizeBurstDeadlineMs = 0L
+        super.onDetachedFromWindow()
+    }
+
+    companion object {
+        private const val IME_RESIZE_SETTLE_MS = 120L
     }
 }
 
