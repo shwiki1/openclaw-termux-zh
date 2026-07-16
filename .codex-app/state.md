@@ -3,7 +3,7 @@
 Last updated: 2026-07-15 21:40 UTC
 
 ## Current Truth
-- Active release task: retry browser automation hardening and the dual script assistant after Actions run `29469493745` failed before artifact generation. The corrected retry must derive as `3.9 / 158` from source anchor `2.5.0+143`; do not reuse `156` or failed build `157`.
+- Active release task: retry browser automation hardening and the dual script assistant after Actions runs `29469493745` and `29469858076` failed before artifact generation. The corrected retry must derive as `4.0 / 159` from source anchor `2.5.0+143`; do not reuse `156`, `157`, or `158`.
 - Release baseline: local `f206113` and remote `e698148` share the exact verified `3.4` source tree. GitHub `v3.5.0`/`v3.6.0`, their tags, APK assets, and associated Actions runs were removed; `basic-resource` remains the valid 3.4 baseline resource.
 - Current published release: unchanged `3.4` feature tree is released as `v3.7.0 / 3.7 / 156`. The workflow enforces build `156` as the minimum, preventing reuse of withdrawn builds `154` and `155` while retaining the `2.5.0+143` source anchor.
 - Cloud result: Actions run `29452076550` succeeded at remote commit `23976fc39aaa353b77f83179efb5e4685a12a1ac` and published `CiYuanXia-v3.7-156-arm64-v8a.apk` in GitHub Release `v3.7.0`.

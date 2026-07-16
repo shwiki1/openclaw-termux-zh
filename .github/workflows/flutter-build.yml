@@ -192,9 +192,9 @@ jobs:
             PUBSPEC_VERSION_CODE="1"
           fi
           VERSION_CODE="$((PUBSPEC_VERSION_CODE + 1))"
-          # Builds 154, 155, and failed build 157 must never be reused. Keep
+          # Builds 154, 155, and failed builds 157/158 must never be reused. Keep
           # the 3.4 source anchor while assigning a fresh Android versionCode.
-          MINIMUM_RELEASE_BUILD=158
+          MINIMUM_RELEASE_BUILD=159
           if [ "$VERSION_CODE" -lt "$MINIMUM_RELEASE_BUILD" ]; then
             VERSION_CODE="$MINIMUM_RELEASE_BUILD"
           fi
