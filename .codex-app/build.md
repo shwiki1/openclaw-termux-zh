@@ -2,7 +2,8 @@
 
 ## Pending Cloud Build
 - 2026-07-16 browser automation and dual-script-assistant release candidate: run `29469493745` derived `3.8.0 / 3.8 / 157` but failed during Flutter compilation before producing an APK. Its Dart interpolation and duplicate-placeholder errors are fixed in the retry commit; build `157` remains reserved and must not be reused.
-- Retry target: source anchor remains `2.5.0+143`; GitHub Actions will derive logical build `158`, semantic `3.9.0`, and install-visible version `3.9`.
+- Retry `29469858076` derived `3.9.0 / 3.9 / 158` but failed before artifact generation because the `paste` and resource-wait methods had been inserted inside `type`. The methods are now rebuilt as separate delegates; build `158` remains reserved.
+- Retry target: source anchor remains `2.5.0+143`; GitHub Actions will derive logical build `159`, semantic `4.0.0`, and install-visible version `4.0`.
 - Target: GitHub `shwiki/main`, workflow `.github/workflows/flutter-build.yml`, artifact ABI `arm64-v8a` only. Local checks before submission: `npm run lint`, `npm test`, and `git diff --check`; Flutter/Dart checks remain unavailable in Termux.
 
 ## Local Checks Only

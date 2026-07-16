@@ -1328,14 +1328,41 @@ class _TerminalBrowserPanelState extends State<TerminalBrowserPanel>
         message: 'The selector argument cannot be empty.',
       );
     }
-    final script = '''
+    final script = """
 (() => {
   const selector = ${jsonEncode(selector)};
   const value = ${jsonEncode(text)};
   const shouldSubmit = ${submit ? 'true' : 'false'};
   const element = document.querySelector(selector);
-  if (!element) {
-    return JSON.stringify({ ok: false, message: `Selector not found: \${selector}` });
+  if (!element) return JSON.stringify({ ok: false, message: `Selector not found: \${selector}` });
+  element.scrollIntoView({ behavior: 'instant', block: 'center', inline: 'center' });
+  if (typeof element.focus === 'function') element.focus();
+  if ('value' in element) element.value = value;
+  else if (element.isContentEditable) element.textContent = value;
+  else return JSON.stringify({ ok: false, message: 'Target element is not editable.' });
+  element.dispatchEvent(new Event('input', { bubbles: true }));
+  element.dispatchEvent(new Event('change', { bubbles: true }));
+  if (shouldSubmit) {
+    const form = element.form || element.closest('form');
+    if (form?.requestSubmit) form.requestSubmit();
+    else element.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', bubbles: true }));
+  }
+  return JSON.stringify({ ok: true, message: shouldSubmit ? 'Text entered and submitted.' : 'Text entered.', tag: element.tagName || '' });
+})();
+""";
+    final raw = await _runStringJs(script);
+    if (raw == null) {
+      return _pageSnapshot(
+        ok: false,
+        message: 'Failed to run the type action in WebView.',
+      );
+    }
+    final decoded = jsonDecode(raw) as Map<String, dynamic>;
+    return _pageSnapshot(
+      ok: decoded['ok'] != false,
+      message: decoded['message']?.toString() ?? 'Text entered.',
+      extra: {'actionResult': decoded},
+    );
   }
 
   @override
@@ -1344,10 +1371,8 @@ class _TerminalBrowserPanelState extends State<TerminalBrowserPanel>
     required String text,
     bool submit = false,
   }) async {
-    if (selector.trim().isEmpty) {
-      return _pageSnapshot(ok: false, message: 'The selector argument cannot be empty.');
-    }
-    final script = """
+    if (selector.trim().isEmpty) return _pageSnapshot(ok: false, message: 'The selector argument cannot be empty.');
+    final raw = await _runStringJs("""
 (() => {
   const selector = ${jsonEncode(selector)};
   const value = ${jsonEncode(text)};
@@ -1355,31 +1380,20 @@ class _TerminalBrowserPanelState extends State<TerminalBrowserPanel>
   const element = document.querySelector(selector);
   if (!element) return JSON.stringify({ ok: false, message: `Selector not found: \${selector}` });
   const tag = (element.tagName || '').toLowerCase();
-  const editable = tag === 'input' || tag === 'textarea' || element.isContentEditable;
-  if (!editable) return JSON.stringify({ ok: false, message: 'Target element is not editable.' });
-  element.scrollIntoView({ behavior: 'instant', block: 'center', inline: 'center' });
+  if (!(tag === 'input' || tag === 'textarea' || element.isContentEditable)) return JSON.stringify({ ok: false, message: 'Target element is not editable.' });
   element.focus();
-  element.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true, data: '' }));
   element.dispatchEvent(new InputEvent('beforeinput', { bubbles: true, cancelable: true, inputType: 'insertFromPaste', data: value }));
   if (tag === 'input' || tag === 'textarea') {
     const prototype = tag === 'textarea' ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
     const setter = Object.getOwnPropertyDescriptor(prototype, 'value')?.set;
     if (setter) setter.call(element, value); else element.value = value;
-  } else {
-    element.textContent = value;
-  }
+  } else element.textContent = value;
   element.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertFromPaste', data: value }));
   element.dispatchEvent(new Event('change', { bubbles: true }));
-  element.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true, data: value }));
-  if (shouldSubmit) {
-    const form = element.form || element.closest?.('form');
-    if (form?.requestSubmit) form.requestSubmit();
-    else element.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', bubbles: true }));
-  }
-  return JSON.stringify({ ok: true, message: 'Text pasted with input and composition events.', tag: element.tagName || '' });
+  if (shouldSubmit) (element.form || element.closest?.('form'))?.requestSubmit?.();
+  return JSON.stringify({ ok: true, message: 'Text pasted with input events.' });
 })();
-""";
-    final raw = await _runStringJs(script);
+""");
     if (raw == null) return _pageSnapshot(ok: false, message: 'Failed to run the paste action in WebView.');
     final decoded = jsonDecode(raw) as Map<String, dynamic>;
     return _pageSnapshot(ok: decoded['ok'] != false, message: decoded['message']?.toString() ?? 'Text pasted.', extra: {'actionResult': decoded});
@@ -1398,7 +1412,7 @@ class _TerminalBrowserPanelState extends State<TerminalBrowserPanel>
   const pattern = ${jsonEncode(pattern)}.toLowerCase();
   const resources = performance.getEntriesByType('resource').filter((entry) => entry.name.toLowerCase().includes(pattern));
   const item = resources[resources.length - 1];
-  return JSON.stringify({ ok: Boolean(item), resource: item ? { url: item.name, initiatorType: item.initiatorType, duration: Math.round(item.duration), transferSize: item.transferSize || 0 } : null });
+  return JSON.stringify({ ok: Boolean(item), resource: item ? { url: item.name, initiatorType: item.initiatorType } : null });
 })();
 """);
       if (raw != null) {
@@ -1408,54 +1422,6 @@ class _TerminalBrowserPanelState extends State<TerminalBrowserPanel>
       await Future<void>.delayed(const Duration(milliseconds: 300));
     }
     return _pageSnapshot(ok: false, message: 'Timed out waiting for a matching page resource.');
-  }
-
-  element.scrollIntoView({ behavior: 'instant', block: 'center', inline: 'center' });
-  if (typeof element.focus === 'function') {
-    element.focus();
-  }
-
-  if ('value' in element) {
-    element.value = value;
-  } else if (element.isContentEditable) {
-    element.textContent = value;
-  } else {
-    return JSON.stringify({ ok: false, message: 'Target element is not editable.' });
-  }
-
-  element.dispatchEvent(new Event('input', { bubbles: true }));
-  element.dispatchEvent(new Event('change', { bubbles: true }));
-
-  if (shouldSubmit) {
-    const form = element.form || element.closest('form');
-    if (form && typeof form.requestSubmit === 'function') {
-      form.requestSubmit();
-    } else {
-      element.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', bubbles: true }));
-      element.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', code: 'Enter', bubbles: true }));
-    }
-  }
-
-  return JSON.stringify({
-    ok: true,
-    message: shouldSubmit ? 'Text entered and submitted.' : 'Text entered.',
-    tag: element.tagName || ''
-  });
-})();
-''';
-    final raw = await _runStringJs(script);
-    if (raw == null) {
-      return _pageSnapshot(
-        ok: false,
-        message: 'Failed to run the type action in WebView.',
-      );
-    }
-    final decoded = jsonDecode(raw) as Map<String, dynamic>;
-    return _pageSnapshot(
-      ok: decoded['ok'] != false,
-      message: decoded['message']?.toString() ?? 'Text entered.',
-      extra: {'actionResult': decoded},
-    );
   }
 
   @override
