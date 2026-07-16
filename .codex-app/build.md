@@ -1,16 +1,13 @@
 # Build And Verification
 
-## Pending Cloud Build
-- Planned Codex native-terminal redesign and tool-call proxy release retry: the next cloud build should consume logical build `166`, derive semantic version `v4.7.0`, display installer/app version `4.7`, and publish `CiYuanXia-v4.7-166-arm64-v8a.apk`.
-- Source anchor remains `2.5.0+143`; the workflow must continue deriving the release build from the existing floor and latest published release. Failed builds `157`, `158`, `160`, `161`, and `165` remain reserved and must not be reused.
-
 ## Latest Cloud Build
-- Codex terminal IME settled-compensation release: GitHub Actions run `29479840309` passed at remote commit `c44deeb4da325d44d0e171fcf3d06ae6490a2f53` and published GitHub Release `v4.4.0`.
-- Versioning: source anchor remains `2.5.0+143`; workflow derived logical build `163`, semantic version `4.4.0`, and install-visible version `4.4`. `.github/workflows/flutter-build.yml` enforces `MINIMUM_RELEASE_BUILD=163`; failed builds `157`, `158`, `160`, and `161` remain reserved.
-- Artifact: `CiYuanXia-v4.4-163-arm64-v8a.apk` (316,450,167 bytes), release URL verified. The local download to `dist/github-release-v4.4.0/` is in progress and needs checksum, ZIP, alignment, and signing checks when network transfer completes.
-- Verification: GitHub build and release jobs passed; `npm run lint`, `npm test` (30 passed), project-memory validation, and `git diff --check` passed before submission. Flutter/Dart checks remain unavailable in Termux; Actions completed Flutter analysis and APK packaging.
+- Codex native-terminal redesign release: GitHub Actions run `29521331282` passed at remote commit `cdd65c5b96cfb0aefb89b74148cf2e3ccbc4acff` and published GitHub Release `v4.7.0`.
+- Versioning: source anchor remains `2.5.0+143`; workflow derived logical build `166`, semantic version `4.7.0`, and install-visible version `4.7`. `.github/workflows/flutter-build.yml` now enforces `MINIMUM_RELEASE_BUILD=166`; failed builds `157`, `158`, `160`, `161`, and `165` remain reserved.
+- Artifact: `CiYuanXia-v4.7-166-arm64-v8a.apk` (316,449,215 bytes), release URL verified. Local release asset downloaded to `dist/github-release-v4.7.0/CiYuanXia-v4.7-166-arm64-v8a.apk` with SHA-256 `f3d8746cb63394a110103006dc52288913f5de2fffb8a9f6a2badd6368c976cb`.
+- Verification: GitHub build and release jobs passed; `npm run lint`, `npm test` (31 passed), project-memory validation, and `git diff --check` passed before submission. Flutter/Dart checks remain unavailable in Termux; Actions completed Flutter analysis and APK packaging.
 
 ## Local Checks Only
+- 2026-07-16 native toolbar IME post-layout refresh: `npm test` passed with 31 checks; `npm run lint -- --no-warn-ignored` passed; `git diff --check` passed. Local `flutter`, `dart`, and `kotlinc` remain unavailable, so Flutter analyze/test and native compile checks were not run locally.
 - 2026-07-16 Codex native-terminal redesign retry prep: GitHub Actions run `29520706261` failed during `Build arm64-v8a APK` because `flutter_app/android/app/src/main/kotlin/com/nxg/openclawproot/NativeTerminalView.kt` still called `abs(...)` after the import had been removed. The retry restores `kotlin.math.abs`, raises workflow `MINIMUM_RELEASE_BUILD` to `166`, and must produce `4.7 / 166` instead of reusing the failed `165`.
 - 2026-07-16 Codex native-terminal redesign and tool-call proxy fix: `npm test` passed with 31 checks; `npm run lint -- --no-warn-ignored` passed; `git diff --check` passed. Local `flutter`, `dart`, and `kotlinc` remain unavailable, so Flutter analyze/test and native compile checks were not run locally.
 - 2026-07-15 Codex terminal IME lag follow-up: `git diff --check` passed; `npm test` passed with 28 checks; `npm run lint -- --no-warn-ignored` passed; local `flutter`, `dart`, and `kotlinc` remain unavailable, so Flutter analyze/test and native compile checks were not run locally.
@@ -57,7 +54,7 @@
 - Latest successful display-version cloud build: GitHub Actions run `29375096798` used remote commit `92b8b59d29a298a05dcb01f290f32df34beb1254`, published release `v3.1.0`, and produced `CiYuanXia-v3.1-150-arm64-v8a.apk`.
 - Latest successful display-version cloud build: GitHub Actions run `29377510459` used remote commit `f250722d5dd2709b388ee42030c10559977aba74`, published release `v3.2.0`, and produced `CiYuanXia-v3.2-151-arm64-v8a.apk`.
 - Latest successful display-version cloud build: GitHub Actions run `29452076550` used remote commit `23976fc39aaa353b77f83179efb5e4685a12a1ac`, published release `v3.7.0`, and produced `CiYuanXia-v3.7-156-arm64-v8a.apk` from the verified 3.4 feature baseline.
-- Latest successful display-version cloud build: GitHub Actions run `29479840309` used remote commit `c44deeb4da325d44d0e171fcf3d06ae6490a2f53`, published release `v4.4.0`, and produced `CiYuanXia-v4.4-163-arm64-v8a.apk`.
+- Latest successful display-version cloud build: GitHub Actions run `29521331282` used remote commit `cdd65c5b96cfb0aefb89b74148cf2e3ccbc4acff`, published release `v4.7.0`, and produced `CiYuanXia-v4.7-166-arm64-v8a.apk`.
 - User device feedback on the previous `146 / 2.7` release led to the terminal shortcut-bar double-lift compensation follow-up; that follow-up is now packaged in `147 / 2.8` and still requires Android device smoke.
 - Next expected published cloud build from the current source anchor must use a new logical build greater than `163`; never recreate the withdrawn `154 / 3.5` or `155 / 3.6` artifacts, and do not reuse `157`, `158`, `160`, or `161`.
 - Last cloud build version before submitting the browser tabs/UA build: source metadata `2.0.50+140`; GitHub Actions run `29293286907` generated CI version `2.0.50+141` for the arm64 split APK.
@@ -81,10 +78,10 @@
 - Successful cloud build: GitHub Actions run `29373389340` used remote commit `db7ce2e9e992be903fa80df9146362aee6c291c2`, published release `v3.0.0`, logged `APP_VERSION_NAME=3.0.0`, `APP_VERSION_DISPLAY=3.0`, `APP_VERSION_CODE=149`, and produced `CiYuanXia-v3.0-149-arm64-v8a.apk`.
 - Successful cloud build: GitHub Actions run `29375096798` used remote commit `92b8b59d29a298a05dcb01f290f32df34beb1254`, published release `v3.1.0`, logged `APP_VERSION_NAME=3.1.0`, `APP_VERSION_DISPLAY=3.1`, `APP_VERSION_CODE=150`, and produced `CiYuanXia-v3.1-150-arm64-v8a.apk`.
 - Successful cloud build: GitHub Actions run `29377510459` used remote commit `f250722d5dd2709b388ee42030c10559977aba74`, published release `v3.2.0`, logged `APP_VERSION_NAME=3.2.0`, `APP_VERSION_DISPLAY=3.2`, `APP_VERSION_CODE=151`, and produced `CiYuanXia-v3.2-151-arm64-v8a.apk`.
-- Latest GitHub Release asset: `CiYuanXia-v4.4-163-arm64-v8a.apk`.
-- Latest APK SHA256: pending local verification for `v4.4.0`; record it after the release download in `dist/github-release-v4.4.0/` completes.
-- Latest locally verified artifact path: `dist/github-release-v4.3.0/`; the newer `dist/github-release-v4.4.0/` download is still pending checksum/ZIP/alignment/signing verification.
-- Latest artifact ZIP digest/SHA256: pending local verification for `v4.4.0`.
+- Latest GitHub Release asset: `CiYuanXia-v4.7-166-arm64-v8a.apk`.
+- Latest APK SHA256: `f3d8746cb63394a110103006dc52288913f5de2fffb8a9f6a2badd6368c976cb`.
+- Latest locally verified artifact path: `dist/github-release-v4.7.0/CiYuanXia-v4.7-166-arm64-v8a.apk`.
+- Latest artifact ZIP digest/SHA256: `sha256:f3d8746cb63394a110103006dc52288913f5de2fffb8a9f6a2badd6368c976cb`.
 - Latest artifact ID: unknown in current local governance files; recover from GitHub only if full artifact provenance is required.
 - Install-visible APK versionName policy: manifest `versionName` now resolves to the short display version, for example semantic `2.5.0` -> installer/app display `2.5`.
 
