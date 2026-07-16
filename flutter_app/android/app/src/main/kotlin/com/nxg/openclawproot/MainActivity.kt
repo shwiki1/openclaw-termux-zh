@@ -255,6 +255,74 @@ class MainActivity : FlutterActivity() {
                         result.error("TERMINAL_ACTIVITY_ERROR", e.message, null)
                     }
                 }
+                "openNativeTerminalPagerActivity" -> {
+                    if (pendingNativeTerminalResult != null) {
+                        result.error(
+                            "TERMINAL_ACTIVITY_BUSY",
+                            "A native terminal activity is already open.",
+                            null
+                        )
+                        return@setMethodCallHandler
+                    }
+                    try {
+                        val executable = call.argument<String>("executable")
+                        if (executable.isNullOrBlank()) {
+                            result.error("INVALID_ARGS", "executable required", null)
+                            return@setMethodCallHandler
+                        }
+                        val config = NativeTerminalSessionConfig(
+                            sessionId = call.argument<String>("sessionId") ?: "native-shell",
+                            title = call.argument<String>("title") ?: "Terminal",
+                            executable = executable,
+                            cwd = call.argument<String>("cwd") ?: "/",
+                            arguments = call.argument<List<String>>("arguments") ?: emptyList(),
+                            environment = call.argument<Map<String, String>>("environment") ?: emptyMap(),
+                            restart = call.argument<Boolean>("restart") ?: false,
+                            keepAlive = call.argument<Boolean>("keepAlive") ?: true,
+                            emitOutput = call.argument<Boolean>("emitOutput") ?: false,
+                            renderingPaused = call.argument<Boolean>("renderingPaused") ?: false,
+                            useNativeToolbar = call.argument<Boolean>("useNativeToolbar") ?: true,
+                            transcriptRows = call.argument<Int>("transcriptRows") ?: 3000,
+                            fontSize = call.argument<Int>("fontSize") ?: 18,
+                        )
+                        pendingNativeTerminalResult = result
+                        startActivityForResult(
+                            NativeTerminalPagerActivity.createIntent(this, config),
+                            NATIVE_TERMINAL_PAGER_ACTIVITY_REQUEST,
+                        )
+                    } catch (e: Exception) {
+                        pendingNativeTerminalResult = null
+                        result.error("TERMINAL_ACTIVITY_ERROR", e.message, null)
+                    }
+                }
+                "invokeNativeBrowserAction" -> {
+                    val action = call.argument<String>("action")?.trim().orEmpty()
+                    if (action.isEmpty()) {
+                        result.error("INVALID_ARGS", "action required", null)
+                        return@setMethodCallHandler
+                    }
+                    val payload = (call.argument<Map<*, *>>("payload") ?: emptyMap<Any?, Any?>())
+                        .mapNotNull { (key, value) ->
+                            val stringKey = key as? String ?: return@mapNotNull null
+                            stringKey to value
+                        }
+                        .toMap()
+                    val controller = NativeBrowserAutomationRegistry.controller
+                    if (controller == null) {
+                        result.success(
+                            mapOf(
+                                "ok" to false,
+                                "message" to "Native browser is not attached.",
+                            ),
+                        )
+                        return@setMethodCallHandler
+                    }
+                    controller.executeAction(action, payload) { actionResult ->
+                        runOnUiThread {
+                            result.success(actionResult)
+                        }
+                    }
+                }
                 "stopTerminalService" -> {
                     try {
                         TerminalSessionService.stop(applicationContext)
@@ -1224,7 +1292,9 @@ class MainActivity : FlutterActivity() {
             return
         }
 
-        if (requestCode == NATIVE_TERMINAL_ACTIVITY_REQUEST) {
+        if (requestCode == NATIVE_TERMINAL_ACTIVITY_REQUEST ||
+            requestCode == NATIVE_TERMINAL_PAGER_ACTIVITY_REQUEST
+        ) {
             pendingNativeTerminalResult?.success(resultCode == Activity.RESULT_OK)
             pendingNativeTerminalResult = null
             return
@@ -1572,5 +1642,6 @@ class MainActivity : FlutterActivity() {
         const val WORKSPACE_BACKUP_SAVE_REQUEST = 1008
         const val BOOTSTRAP_ARCHIVE_PICK_REQUEST = 1009
         const val NATIVE_TERMINAL_ACTIVITY_REQUEST = 1010
+        const val NATIVE_TERMINAL_PAGER_ACTIVITY_REQUEST = 1011
     }
 }

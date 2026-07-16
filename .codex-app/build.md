@@ -1,12 +1,13 @@
 # Build And Verification
 
 ## Latest Cloud Build
-- Codex native-terminal redesign release: GitHub Actions run `29521331282` passed at remote commit `cdd65c5b96cfb0aefb89b74148cf2e3ccbc4acff` and published GitHub Release `v4.7.0`.
-- Versioning: source anchor remains `2.5.0+143`; workflow derived logical build `166`, semantic version `4.7.0`, and install-visible version `4.7`. `.github/workflows/flutter-build.yml` now enforces `MINIMUM_RELEASE_BUILD=166`; failed builds `157`, `158`, `160`, `161`, and `165` remain reserved.
-- Artifact: `CiYuanXia-v4.7-166-arm64-v8a.apk` (316,449,215 bytes), release URL verified. Local release asset downloaded to `dist/github-release-v4.7.0/CiYuanXia-v4.7-166-arm64-v8a.apk` with SHA-256 `f3d8746cb63394a110103006dc52288913f5de2fffb8a9f6a2badd6368c976cb`.
-- Verification: GitHub build and release jobs passed; `npm run lint`, `npm test` (31 passed), project-memory validation, and `git diff --check` passed before submission. Flutter/Dart checks remain unavailable in Termux; Actions completed Flutter analysis and APK packaging.
+- Native terminal activity release: GitHub Actions run `29538124523` passed at remote commit `02602bb2bed28feae0b9c4af9d3db20c83f329a3` and published GitHub Release `v5.4.0`.
+- Versioning: source anchor remains `2.5.0+143`; workflow derived logical build `173`, semantic version `5.4.0`, and install-visible version `5.4`. `.github/workflows/flutter-build.yml` still enforces `MINIMUM_RELEASE_BUILD=166`.
+- Artifact: `CiYuanXia-v5.4-173-arm64-v8a.apk` (316,324,915 bytes), release URL verified. Local release asset downloaded to `dist/github-release-v5.4.0/CiYuanXia-v5.4-173-arm64-v8a.apk` with SHA-256 `cd632f6fb96c4f4f454c23dd70f44dc804ac86a9800aa5fb7656735e1ae256e7`.
+- Verification: GitHub build and release jobs passed; `npm run lint`, `npm test` (31 passed), project-memory validation, and `git diff --check` passed before submission. Flutter/Dart checks remain unavailable in Termux; Actions completed Flutter analysis and APK packaging. The release job still logs the existing Node 20 deprecation warning for `softprops/action-gh-release@v2`.
 
 ## Local Checks Only
+- 2026-07-16 native Codex pager prototype: `npm test` passed with 31 checks; `npm run lint -- --no-warn-ignored` passed; `git diff --check` passed. Local `flutter`, `dart`, and `kotlinc` remain unavailable, so Flutter analyze/test and native compile checks were not run locally.
 - 2026-07-16 terminal IME window-resize handoff: `npm test` passed with 31 checks; `npm run lint -- --no-warn-ignored` passed; `git diff --check` passed. Local `flutter`, `dart`, and `kotlinc` remain unavailable, so Flutter analyze/test and native compile checks were not run locally.
 - 2026-07-16 native toolbar IME post-layout refresh: `npm test` passed with 31 checks; `npm run lint -- --no-warn-ignored` passed; `git diff --check` passed. Local `flutter`, `dart`, and `kotlinc` remain unavailable, so Flutter analyze/test and native compile checks were not run locally.
 - 2026-07-16 Codex native-terminal redesign retry prep: GitHub Actions run `29520706261` failed during `Build arm64-v8a APK` because `flutter_app/android/app/src/main/kotlin/com/nxg/openclawproot/NativeTerminalView.kt` still called `abs(...)` after the import had been removed. The retry restores `kotlin.math.abs`, raises workflow `MINIMUM_RELEASE_BUILD` to `166`, and must produce `4.7 / 166` instead of reusing the failed `165`.

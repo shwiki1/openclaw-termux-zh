@@ -159,6 +159,55 @@ class NativeBridge {
     });
   }
 
+  static Future<bool> openNativeTerminalPagerActivity({
+    required String sessionId,
+    required String title,
+    required String executable,
+    String cwd = '/',
+    required List<String> arguments,
+    required Map<String, String> environment,
+    bool restart = false,
+    bool keepAlive = true,
+    bool emitOutput = false,
+    bool renderingPaused = false,
+    bool useNativeToolbar = true,
+    int transcriptRows = 3000,
+    int fontSize = 18,
+  }) async {
+    return await _channel.invokeMethod('openNativeTerminalPagerActivity', {
+      'sessionId': sessionId,
+      'title': title,
+      'executable': executable,
+      'cwd': cwd,
+      'arguments': arguments,
+      'environment': environment,
+      'restart': restart,
+      'keepAlive': keepAlive,
+      'emitOutput': emitOutput,
+      'renderingPaused': renderingPaused,
+      'useNativeToolbar': useNativeToolbar,
+      'transcriptRows': transcriptRows,
+      'fontSize': fontSize,
+    });
+  }
+
+  static Future<Map<String, dynamic>> invokeNativeBrowserAction(
+    String action, [
+    Map<String, dynamic> payload = const <String, dynamic>{},
+  ]) async {
+    final result = await _channel.invokeMethod('invokeNativeBrowserAction', {
+      'action': action,
+      'payload': payload,
+    });
+    if (result == null) {
+      return {
+        'ok': false,
+        'message': 'Native browser returned no result.',
+      };
+    }
+    return Map<String, dynamic>.from(result);
+  }
+
   static Future<bool> stopTerminalService() async {
     return await _channel.invokeMethod('stopTerminalService');
   }
