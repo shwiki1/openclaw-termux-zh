@@ -1282,7 +1282,7 @@ class _TerminalBrowserPanelState extends State<TerminalBrowserPanel>
         message: 'The selector argument cannot be empty.',
       );
     }
-    final script = '''
+    final script = """
 (() => {
   const selector = ${jsonEncode(selector)};
   const element = document.querySelector(selector);
@@ -1300,7 +1300,7 @@ class _TerminalBrowserPanelState extends State<TerminalBrowserPanel>
     text: (element.innerText || element.textContent || element.value || '').trim().slice(0, 240)
   });
 })();
-''';
+""";
     final raw = await _runStringJs(script);
     if (raw == null) {
       return _pageSnapshot(
@@ -1347,7 +1347,7 @@ class _TerminalBrowserPanelState extends State<TerminalBrowserPanel>
     if (selector.trim().isEmpty) {
       return _pageSnapshot(ok: false, message: 'The selector argument cannot be empty.');
     }
-    final script = '''
+    final script = """
 (() => {
   const selector = ${jsonEncode(selector)};
   const value = ${jsonEncode(text)};
@@ -1378,7 +1378,7 @@ class _TerminalBrowserPanelState extends State<TerminalBrowserPanel>
   }
   return JSON.stringify({ ok: true, message: 'Text pasted with input and composition events.', tag: element.tagName || '' });
 })();
-''';
+""";
     final raw = await _runStringJs(script);
     if (raw == null) return _pageSnapshot(ok: false, message: 'Failed to run the paste action in WebView.');
     final decoded = jsonDecode(raw) as Map<String, dynamic>;
@@ -1393,14 +1393,14 @@ class _TerminalBrowserPanelState extends State<TerminalBrowserPanel>
     if (pattern.trim().isEmpty) return _pageSnapshot(ok: false, message: 'The resource pattern cannot be empty.');
     final deadline = DateTime.now().millisecondsSinceEpoch + timeoutMs.clamp(100, 30000);
     while (DateTime.now().millisecondsSinceEpoch < deadline) {
-      final raw = await _runStringJs('''
+      final raw = await _runStringJs("""
 (() => {
   const pattern = ${jsonEncode(pattern)}.toLowerCase();
   const resources = performance.getEntriesByType('resource').filter((entry) => entry.name.toLowerCase().includes(pattern));
   const item = resources[resources.length - 1];
   return JSON.stringify({ ok: Boolean(item), resource: item ? { url: item.name, initiatorType: item.initiatorType, duration: Math.round(item.duration), transferSize: item.transferSize || 0 } : null });
 })();
-''');
+""");
       if (raw != null) {
         final decoded = jsonDecode(raw) as Map<String, dynamic>;
         if (decoded['ok'] == true) return _pageSnapshot(message: 'Matched a loaded page resource.', extra: {'actionResult': decoded});
@@ -3835,7 +3835,8 @@ class _BrowserScriptLibrarySheetState
                 : ListView.separated(
                     padding: const EdgeInsets.all(12),
                     itemCount: _userScripts.length,
-                    separatorBuilder: (_, _) => const SizedBox(height: 10),
+                    separatorBuilder: (context, index) =>
+                        const SizedBox(height: 10),
                     itemBuilder: (context, index) =>
                         _buildUserScriptCard(theme, _userScripts[index]),
                   ),
