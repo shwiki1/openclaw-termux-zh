@@ -127,6 +127,38 @@ class NativeBridge {
     return await _channel.invokeMethod('startTerminalService');
   }
 
+  static Future<bool> openNativeTerminalActivity({
+    required String sessionId,
+    required String title,
+    required String executable,
+    String cwd = '/',
+    required List<String> arguments,
+    required Map<String, String> environment,
+    bool restart = false,
+    bool keepAlive = true,
+    bool emitOutput = false,
+    bool renderingPaused = false,
+    bool useNativeToolbar = true,
+    int transcriptRows = 3000,
+    int fontSize = 18,
+  }) async {
+    return await _channel.invokeMethod('openNativeTerminalActivity', {
+      'sessionId': sessionId,
+      'title': title,
+      'executable': executable,
+      'cwd': cwd,
+      'arguments': arguments,
+      'environment': environment,
+      'restart': restart,
+      'keepAlive': keepAlive,
+      'emitOutput': emitOutput,
+      'renderingPaused': renderingPaused,
+      'useNativeToolbar': useNativeToolbar,
+      'transcriptRows': transcriptRows,
+      'fontSize': fontSize,
+    });
+  }
+
   static Future<bool> stopTerminalService() async {
     return await _channel.invokeMethod('stopTerminalService');
   }

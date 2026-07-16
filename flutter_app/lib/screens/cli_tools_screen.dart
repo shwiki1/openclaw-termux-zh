@@ -7,10 +7,11 @@ import '../models/cli_api_config.dart';
 import '../models/cli_tool.dart';
 import '../services/cli_api_config_service.dart';
 import '../services/cli_tool_service.dart';
+import '../services/native_bridge.dart';
+import '../services/terminal_service.dart';
 import '../widgets/cli_api_config_dialog.dart';
 import '../widgets/cli_api_profiles_dialog.dart';
 import 'cli_tool_install_screen.dart';
-import 'terminal_screen.dart';
 
 class CliToolsScreen extends StatefulWidget {
   const CliToolsScreen({super.key});
@@ -20,6 +21,8 @@ class CliToolsScreen extends StatefulWidget {
 }
 
 class _CliToolsScreenState extends State<CliToolsScreen> {
+  static const _defaultTerminalTranscriptRows = 3000;
+  static const _codexTerminalTranscriptRows = 1200;
   List<CliToolStatus> _statuses = const [];
   List<CliApiConfig> _sharedProfiles = const [];
   bool _loading = true;
@@ -76,16 +79,31 @@ class _CliToolsScreenState extends State<CliToolsScreen> {
         // The terminal launch script will surface missing runtime files.
       }
     }
-    await Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => TerminalScreen(
-          sessionId: tool.id,
-          title: tool.name,
-          initialCommand: tool.launchCommand.trim().isEmpty
-              ? null
-              : tool.launchCommand,
-        ),
-      ),
+
+    final config = await TerminalService.getProotShellConfig();
+    var args = TerminalService.buildProotArgs(config);
+    final command = tool.launchCommand.trim();
+    if (command.isNotEmpty) {
+      args = TerminalService.replaceLoginShell(args, command);
+    }
+
+    final lowerCommand = command.toLowerCase();
+    final isCodexTool = tool.id.toLowerCase().contains('codex') ||
+        tool.name.toLowerCase().contains('codex') ||
+        lowerCommand.contains('codex');
+
+    await NativeBridge.openNativeTerminalActivity(
+      sessionId: tool.id,
+      title: tool.name,
+      executable: config['executable']!,
+      arguments: args,
+      environment: TerminalService.buildHostEnv(config),
+      keepAlive: true,
+      useNativeToolbar: true,
+      transcriptRows: isCodexTool
+          ? _codexTerminalTranscriptRows
+          : _defaultTerminalTranscriptRows,
+      fontSize: 18,
     );
     if (mounted) {
       unawaited(

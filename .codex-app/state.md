@@ -3,27 +3,27 @@
 Last updated: 2026-07-16 UTC
 
 ## Current Truth
-- Active fix task: keep Codex and non-Codex terminal sessions on the same native shortcut-bar structure. `TerminalScreen` now keeps the shortcut bar inside `NativeTerminalView` for Codex too, the old native IME overlap compensation chain is removed, and the OpenAI-compatible Codex proxy preserves `responses` tool-call structures instead of flattening them into plain text. The fixes are prepared for the next cloud build, but Android device smoke is still required after release.
+- Active fix task: stop routing CLI/Codex terminal sessions through the Flutter `TerminalScreen` platform-view page. The current local follow-up launches CLI tools into a dedicated native Android `NativeTerminalActivity` that hosts `TerminalView` and the native shortcut bar directly, while keeping the OpenAI-compatible Codex proxy `responses` tool-call bridge intact. This is an original rewrite guided by ZeroTermux/Termux architecture, not a GPL source copy.
 - Release baseline: local `f206113` and remote `e698148` share the exact verified `3.4` source tree. GitHub `v3.5.0`/`v3.6.0`, their tags, APK assets, and associated Actions runs were removed; `basic-resource` remains the valid 3.4 baseline resource.
-- Current published release: `v4.7.0 / 4.7 / 166`, derived from source anchor `2.5.0+143`. Workflow `.github/workflows/flutter-build.yml` enforces logical build `166` as its release floor and only packages `arm64-v8a`.
-- Cloud result: Actions run `29521331282` succeeded at remote commit `cdd65c5b96cfb0aefb89b74148cf2e3ccbc4acff` and published `CiYuanXia-v4.7-166-arm64-v8a.apk` in GitHub Release `v4.7.0`. The build and release jobs both completed successfully.
-- Local artifact: `dist/github-release-v4.7.0/CiYuanXia-v4.7-166-arm64-v8a.apk` matches GitHub Release SHA-256 `f3d8746cb63394a110103006dc52288913f5de2fffb8a9f6a2badd6368c976cb`.
+- Current published release: `v5.3.0 / 5.3 / 172`, derived from source anchor `2.5.0+143`. Workflow `.github/workflows/flutter-build.yml` enforces logical build `166` as its release floor and only packages `arm64-v8a`.
+- Cloud result: Actions run `29532567745` succeeded at remote commit `46a60136f96e330a5ae68743126ece253ece5536` and published `CiYuanXia-v5.3-172-arm64-v8a.apk` in GitHub Release `v5.3.0`. The build and release jobs both completed successfully.
+- Local artifact: `dist/github-release-v5.3.0/CiYuanXia-v5.3-172-arm64-v8a.apk` matches GitHub Release SHA-256 `00d8ec8b45acd3666fcb0eeebfb018d4b4cc3c0c23890177cc29b1f2ffae0ff3`.
 - Signing: APK verifies with the existing release signer SHA-256 `0618eafd1855855749abb7c04d6f44edf9a4b7cb09e26fd882e856d5c994dde6`, so normal in-place update compatibility is retained.
 - App: `次元虾`, a Chinese Android integration for OpenClaw Gateway without a Termux app dependency.
 - Repository root: `/storage/emulated/0/ZeroTermux/开发/openclaw-termux-zh-5.5`.
 - Stack: Flutter/Dart Android app shell, Kotlin native Android services, PRoot Ubuntu RootFS runtime, and a legacy Node.js CLI package.
 - Package manager: npm at repo root with `package-lock.json`; Flutter dependencies are in `flutter_app/pubspec.yaml` and `flutter_app/pubspec.lock` is ignored.
-- Active branch: `codex-terminal-ime-lag-fix`; current local status is `ahead 8, behind 9` relative to `shwiki/main`, so do not treat the local branch as the sole release truth until branch topology is reconciled.
+- Active branch: `codex-terminal-ime-lag-fix`; current local status is `ahead 18, behind 9` relative to `shwiki/main`, so do not treat the local branch as the sole release truth until branch topology is reconciled.
 - Remotes: `origin` is Gitee `https://gitee.com/cds-y-code/openclaw-termux-zh.git`; `shwiki` is GitHub `https://github.com/shwiki1/openclaw-termux-zh.git`.
 - Cloud build: `.github/workflows/flutter-build.yml` builds an `arm64-v8a` APK and can create a GitHub Release.
 - GitHub Actions currently runs checkout, rootfs restore/build, `flutter analyze --no-fatal-infos`, APK packaging, and GitHub Release publication, but does not run `flutter test`.
 - Current source version: root `package.json` `2.5.0`; Flutter `pubspec.yaml` `2.5.0+143`.
-- App version: latest published installer/app display `4.4`; the repo keeps the semantic/source anchor at `2.5.0+143` and derives user-facing versions from the build number in fixed one-tenth steps.
-- Build number: latest published logical build `166`; failed builds `157`, `158`, `160`, `161`, and `165` remain reserved. The source anchor remains `143` in `flutter_app/pubspec.yaml` for CI derivation.
+- App version: latest published installer/app display `5.3`; the repo keeps the semantic/source anchor at `2.5.0+143` and derives user-facing versions from the build number in fixed one-tenth steps.
+- Build number: latest published logical build `172`; failed builds `157`, `158`, `160`, `161`, and `165` remain reserved. The source anchor remains `143` in `flutter_app/pubspec.yaml` for CI derivation.
 - Flutter unit tests exist under `flutter_app/test/` (12 files), but the current Termux session has no local `flutter` or `dart` SDK to execute them.
 - Version metadata is aligned to semantic source anchor `2.5.0+143` in Flutter defaults, Node compatibility CLI/package metadata, README files, STRUCTURE, and CHANGELOG.
 - Runtime Node defaults are aligned to Node.js `24.15.0` for arm64/x86_64 and `22.22.3` for armv7 across Flutter constants, prebuilt RootFS scripts, setup l10n copy, primary docs, basic-resource docs, fallback asset naming, license/source notices, and the legacy root Node CLI.
-- Terminal implementation docs now describe native Android Termux `TerminalView` through Flutter `PlatformView`, not the obsolete Web/PTY stack.
+- Terminal implementation currently has two paths: the legacy Flutter `TerminalScreen` still exists for browser-sidecar flows, but CLI tool launch now targets a dedicated native `NativeTerminalActivity`; both paths reuse the same native `NativeTerminalSessionView` terminal core instead of the obsolete Web/PTY stack.
 - APK install-visible versionName and app UI now resolve through the shared build-version helper: repo anchor `2.5.0+143`, build `144` displays `2.5`, build `145` displays `2.6`, and Android `versionCode` remains the numeric build that may be ABI-split-adjusted by Flutter.
 - Browser automation now supports in-memory multi-tab sessions, active-tab state snapshots, UI/MCP/browser-script UA switching, desktop UA request headers, WebView wide-viewport/text-zoom normalization, and a best-effort desktop viewport hint for responsive pages.
 - Browser automation defaults to mobile UA and now adds health checking, tab reset, paste, resource waiting, overlay discovery, and coordinate click. Automatic script-draft generation is off by default.
@@ -38,13 +38,17 @@ Last updated: 2026-07-16 UTC
 - Management status: source anchor `2.5.0+143`, workflow release floor `163`, and the published `v4.4.0 / 4.4 / 163` release are aligned; the remaining governance gaps are Android device smoke for the latest IME fix, reconciliation of the ahead/behind branch topology, and the missing `flutter test` CI gate.
 - Project phase: feature work for Codex browser automation is ahead of validation; the immediate management focus is release-stabilization, not another feature branch.
 - Release topology note: `codex-terminal-ime-lag-fix` is currently `ahead 8, behind 9` versus `shwiki/main`, and `main` also diverges from `origin/main`. Future build provenance should continue naming both the remote and exact SHA instead of assuming the checked-out branch is authoritative.
-- Next artifact expectation: the next fresh cloud build must use a logical build greater than `166`.
+- Next artifact expectation: the next fresh cloud build must use a logical build greater than `172`.
 - Compact Codex browser sidecar now disposes when closed on narrow screens, so the terminal route no longer carries a hidden WebView tree through IME reopen checks; the native terminal also skips redundant `requestFocus()` calls when keyboard reopen is already focused.
 
 ## Active Task
-- Submit the Codex terminal redesign and tool-call proxy fix for the next GitHub Actions arm64 release build, then record the resulting run/artifact provenance and keep Android device smoke as the immediate post-build validation step.
+- Device-smoke the new native terminal activity path on Android and confirm that IME open/close remains smooth with full-screen terminal scrollback, the bottom shortcut bar stays attached above the keyboard, and session reopen/close behavior still matches the old CLI workflow.
 
 ## Recently Changed
+- Replaced the CLI tools terminal launch path in `flutter_app/lib/screens/cli_tools_screen.dart`: instead of pushing the Flutter `TerminalScreen`, the app now resolves the PRoot shell config in Dart and calls `NativeBridge.openNativeTerminalActivity(...)`.
+- Added `NativeTerminalActivity.kt` and `NativeTerminalSessionView.kt`. The new activity hosts the terminal and shortcut bar entirely in the Android view tree, persists/switches terminal sessions natively, and reuses the same Termux `TerminalView` client logic for both the activity and the existing Flutter platform-view wrapper.
+- Refactored `NativeTerminalView.kt` into a thin platform-view wrapper around the reusable `NativeTerminalSessionView` core, and extended `MainActivity.kt` plus `AndroidManifest.xml` so Flutter can launch a dedicated `adjustResize` native terminal activity.
+- Updated `lib/test.js`; `npm test` passed with 31 checks, `npm run lint -- --no-warn-ignored` passed, and `git diff --check` passed after the native terminal activity follow-up. Local `flutter`, `dart`, and `kotlinc` remain unavailable, so Flutter analyze/test and native compile checks were not run locally.
 - Reworked the terminal IME path again after device feedback confirmed the shortcut bar still was not being lifted: `TerminalScreen` now allows real keyboard insets (`resizeToAvoidBottomInset: true`) so the embedded Android terminal platform view actually shrinks with the IME, and `NativeTerminalView.kt` drops the post-layout global-layout refresh chain that had started re-pushing the command area after the resize.
 - Reworked terminal IME ownership again after on-device feedback showed the native shortcut bar still was not being lifted. `NativeBridge` now gives the terminal route `adjustResize` instead of `adjustPan`, and `NativeTerminalView.kt` no longer issues the extra native-toolbar parent visibility request that had been over-panning the command area without moving the shortcut lane.
 - Split the native terminal IME visibility targets in `NativeTerminalView.kt`: native-toolbar sessions no longer ask Android to reveal one large rectangle spanning the terminal prompt and shortcut bar. The prompt strip now keeps its own bottom input band visible, while the native shortcut lane requests only its own toolbar rectangle. This is intended to keep the shortcut bar above the IME without pushing the command area too high.
