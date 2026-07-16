@@ -2,8 +2,9 @@
 
 ## Pending Cloud Build
 - 2026-07-16 first attempt: Actions run `29473924386` derived `4.1.0 / 4.1 / 160` but failed before artifact creation in `TerminalBrowserPanel.build` because the added `Theme` wrapper retained an extra closing delimiter. Build `160` remains reserved.
-- Corrected retry target: GitHub `shwiki/main`, arm64-v8a only, logical build `161`, semantic version `4.2.0`, and install-visible version `4.2`.
-- `.github/workflows/flutter-build.yml` now enforces `MINIMUM_RELEASE_BUILD=161`; it also compares the latest GitHub Release asset and advances the build number if necessary.
+- Second attempt: Actions run `29474370249` derived `4.2.0 / 4.2 / 161` but failed before artifact creation because the `DecoratedBox` return still ended with `),` rather than `);`. Build `161` remains reserved.
+- Corrected retry target: GitHub `shwiki/main`, arm64-v8a only, logical build `162`, semantic version `4.3.0`, and install-visible version `4.3`.
+- `.github/workflows/flutter-build.yml` now enforces `MINIMUM_RELEASE_BUILD=162`; it also compares the latest GitHub Release asset and advances the build number if necessary.
 - Local pre-submit checks: `npm test`, `npm run lint`, `git diff --check`, and project-memory validation. Local Flutter/Dart checks remain unavailable in Termux.
 
 ## Latest Cloud Build

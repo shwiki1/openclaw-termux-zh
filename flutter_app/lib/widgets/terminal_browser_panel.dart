@@ -2241,7 +2241,7 @@ class _TerminalBrowserPanelState extends State<TerminalBrowserPanel>
                 ),
               ],
             ),
-          ),
+          );
         },
       ),
     );
