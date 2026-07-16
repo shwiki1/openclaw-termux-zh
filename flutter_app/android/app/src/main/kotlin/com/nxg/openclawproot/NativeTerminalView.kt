@@ -64,7 +64,6 @@ class NativeTerminalPlatformView(
     private val bottomSpaceView = View(context)
     private val inputStripRect = Rect()
     private val parentInputStripRect = Rect()
-    private val toolbarVisibilityRect = Rect()
     private val channel = MethodChannel(messenger, "com.agent.cyx/native_terminal_$viewId")
     private val sessionId = params.stringValue("sessionId") ?: "native-shell"
     private val keepAlive = params.booleanValue("keepAlive", false)
@@ -612,26 +611,11 @@ class NativeTerminalPlatformView(
             terminalView.height,
         )
         terminalView.requestRectangleOnScreen(inputStripRect, true)
-        if (useNativeToolbar) {
-            toolbarStrip?.let { requestToolbarStripVisible(it) }
-            return
-        }
-
         parentInputStripRect.set(inputStripRect)
         contentContainer.offsetDescendantRectToMyCoords(terminalView, parentInputStripRect)
-        container.requestRectangleOnScreen(parentInputStripRect, true)
-    }
-
-    private fun requestToolbarStripVisible(toolbar: HorizontalScrollView) {
-        if (toolbar.width <= 0 || toolbar.height <= 0) {
-            return
+        if (!useNativeToolbar) {
+            container.requestRectangleOnScreen(parentInputStripRect, true)
         }
-        toolbarVisibilityRect.set(0, 0, toolbar.width, toolbar.height)
-        container.offsetDescendantRectToMyCoords(toolbar, toolbarVisibilityRect)
-        val contentBottom = (contentContainer.height - contentContainer.paddingBottom)
-            .coerceAtLeast(toolbarVisibilityRect.bottom)
-        toolbarVisibilityRect.bottom = contentBottom
-        container.requestRectangleOnScreen(toolbarVisibilityRect, true)
     }
 
     companion object {

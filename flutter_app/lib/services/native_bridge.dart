@@ -415,7 +415,7 @@ class NativeBridge {
       return 'adjustNothing';
     }
     if (_terminalSoftInputModeOwners > 0) {
-      return 'adjustPan';
+      return 'adjustResize';
     }
     return 'adjustResize';
   }
