@@ -1,25 +1,25 @@
 # Current App State
 
-Last updated: 2026-07-16 06:20 UTC
+Last updated: 2026-07-16 UTC
 
 ## Current Truth
-- Active release task: submit the Codex terminal IME-close jank follow-up to the arm64-only GitHub workflow. The target is `v4.4.0 / 4.4 / 163`; device smoke remains required before promotion beyond the generated release.
+- Active fix task: keep Codex and non-Codex terminal sessions on the same native shortcut-bar structure. `TerminalScreen` now keeps the shortcut bar inside `NativeTerminalView` for Codex too, the old native IME overlap compensation chain is removed, and the OpenAI-compatible Codex proxy preserves `responses` tool-call structures instead of flattening them into plain text. The fixes are prepared for the next cloud build, but Android device smoke is still required after release.
 - Release baseline: local `f206113` and remote `e698148` share the exact verified `3.4` source tree. GitHub `v3.5.0`/`v3.6.0`, their tags, APK assets, and associated Actions runs were removed; `basic-resource` remains the valid 3.4 baseline resource.
-- Current published release: `v4.3.0 / 4.3 / 162`, derived from source anchor `2.5.0+143`. Workflow `.github/workflows/flutter-build.yml` enforces logical build `162` as its release floor and only packages `arm64-v8a`.
-- Cloud result: Actions run `29474846658` succeeded at remote commit `c323ac3b641a41c2530d20ab64557913aa21d470` and published `CiYuanXia-v4.3-162-arm64-v8a.apk` in GitHub Release `v4.3.0`. The build and release jobs both completed successfully.
-- Local artifact: `dist/github-release-v4.3.0/CiYuanXia-v4.3-162-arm64-v8a.apk` (316,450,107 bytes), SHA-256 `6b08709b66b1c57d0fe480673ad6183f46b087997b3462ec2b135108e2529ca0`; ZIP integrity and `zipalign` passed. Archive contains only `lib/arm64-v8a` native libraries.
+- Current published release: `v4.4.0 / 4.4 / 163`, derived from source anchor `2.5.0+143`. Workflow `.github/workflows/flutter-build.yml` enforces logical build `163` as its release floor and only packages `arm64-v8a`.
+- Cloud result: Actions run `29479840309` succeeded at remote commit `c44deeb4da325d44d0e171fcf3d06ae6490a2f53` and published `CiYuanXia-v4.4-163-arm64-v8a.apk` in GitHub Release `v4.4.0`. The build and release jobs both completed successfully.
+- Local artifact: the prior verified `v4.3.0` APK remains at `dist/github-release-v4.3.0/`; the `v4.4.0` release asset is downloading to `dist/github-release-v4.4.0/` and must be checksum, ZIP, zipalign, and signer verified after completion.
 - Signing: APK verifies with the existing release signer SHA-256 `0618eafd1855855749abb7c04d6f44edf9a4b7cb09e26fd882e856d5c994dde6`, so normal in-place update compatibility is retained.
 - App: `次元虾`, a Chinese Android integration for OpenClaw Gateway without a Termux app dependency.
 - Repository root: `/storage/emulated/0/ZeroTermux/开发/openclaw-termux-zh-5.5`.
 - Stack: Flutter/Dart Android app shell, Kotlin native Android services, PRoot Ubuntu RootFS runtime, and a legacy Node.js CLI package.
 - Package manager: npm at repo root with `package-lock.json`; Flutter dependencies are in `flutter_app/pubspec.yaml` and `flutter_app/pubspec.lock` is ignored.
-- Active branch: `codex-terminal-ime-lag-fix`; the GitHub API push created remote commit `b8db7a3`, so treat GitHub `main` as authoritative until local history is reconciled.
+- Active branch: `codex-terminal-ime-lag-fix`; current local status is `ahead 8, behind 9` relative to `shwiki/main`, so do not treat the local branch as the sole release truth until branch topology is reconciled.
 - Remotes: `origin` is Gitee `https://gitee.com/cds-y-code/openclaw-termux-zh.git`; `shwiki` is GitHub `https://github.com/shwiki1/openclaw-termux-zh.git`.
 - Cloud build: `.github/workflows/flutter-build.yml` builds an `arm64-v8a` APK and can create a GitHub Release.
 - GitHub Actions currently runs checkout, rootfs restore/build, `flutter analyze --no-fatal-infos`, APK packaging, and GitHub Release publication, but does not run `flutter test`.
 - Current source version: root `package.json` `2.5.0`; Flutter `pubspec.yaml` `2.5.0+143`.
-- App version: latest published installer/app display `4.3`; the repo keeps the semantic/source anchor at `2.5.0+143` and derives user-facing versions from the build number in fixed one-tenth steps.
-- Build number: latest published logical build `162`; failed builds `157`, `158`, `160`, and `161` remain reserved. The source anchor remains `143` in `flutter_app/pubspec.yaml` for CI derivation.
+- App version: latest published installer/app display `4.4`; the repo keeps the semantic/source anchor at `2.5.0+143` and derives user-facing versions from the build number in fixed one-tenth steps.
+- Build number: latest published logical build `163`; failed builds `157`, `158`, `160`, and `161` remain reserved. The source anchor remains `143` in `flutter_app/pubspec.yaml` for CI derivation.
 - Flutter unit tests exist under `flutter_app/test/` (12 files), but the current Termux session has no local `flutter` or `dart` SDK to execute them.
 - Version metadata is aligned to semantic source anchor `2.5.0+143` in Flutter defaults, Node compatibility CLI/package metadata, README files, STRUCTURE, and CHANGELOG.
 - Runtime Node defaults are aligned to Node.js `24.15.0` for arm64/x86_64 and `22.22.3` for armv7 across Flutter constants, prebuilt RootFS scripts, setup l10n copy, primary docs, basic-resource docs, fallback asset naming, license/source notices, and the legacy root Node CLI.
@@ -30,21 +30,26 @@ Last updated: 2026-07-16 06:20 UTC
 - Script assistant is split into Codex automation workflows and traditional JavaScript website scripts; traditional scripts can be created/imported/edited locally and Codex can generate and save them without silent execution.
 - Last recorded successful artifact before the browser tabs/UA build submission: GitHub Actions run `29293286907` produced `CiYuanXia-v2.0.50-141-arm64-v8a.apk` from `shwiki/codex-termux-runtime-fix` head `459a63536bdcbff5d5f05f96f3a81dc6d4d6889b`; artifact ID `8295917288`; artifact ZIP digest `sha256:153c4b895a1bf1838985266fd6dfcd4fb32e021d7704e70e16ed53ccaf7dbfe8`. The previous locally downloaded artifact remains `artifacts/github-run-29283260131/CiYuanXia-v2.0.50-140-arm64-v8a.apk`.
 - Latest shortcut-feedback cloud build: GitHub Actions run `29377510459` completed successfully from remote commit `f250722d5dd2709b388ee42030c10559977aba74` and published GitHub Release `v3.2.0`.
-- Latest GitHub Release asset: `CiYuanXia-v3.2-151-arm64-v8a.apk`; APK SHA256 `7b965bf4c25bdef528389dc2b95815273f6b267af6a74d4484623e62da7b638a`; release asset digest matches the locally downloaded APK SHA256.
+- Latest GitHub Release asset: `CiYuanXia-v4.4-163-arm64-v8a.apk`; local SHA256/ZIP/alignment verification for this asset is still pending while the download to `dist/github-release-v4.4.0/` completes.
 - Latest native-toolbar follow-up: local commit `2a2a7b0` moved the terminal page shortcut bar into `NativeTerminalView`; follow-up commit `c1b4f70` fixed the Kotlin `HorizontalScrollView.LayoutParams` compile error by switching that child to `ViewGroup.LayoutParams`, then GitHub API push advanced remote `main` to `c5be0df884a6e066fdedb07d6d245af03802a0fc` and run `29370762550` published `APP_VERSION_NAME=2.9.0`, `APP_VERSION_DISPLAY=2.9`, and `APP_VERSION_CODE=148`.
 - Latest native terminal IME follow-up is now published: local commit `0ef16f9` added an original, official-Termux-inspired native container compensation path in `NativeTerminalView.kt`, then GitHub API push advanced remote `main` to `db7ce2e9e992be903fa80df9146362aee6c291c2` and run `29373389340` published `APP_VERSION_NAME=3.0.0`, `APP_VERSION_DISPLAY=3.0`, and `APP_VERSION_CODE=149`.
 - User device feedback on the previous `146 / 2.7` release reported that the terminal shortcut bar was being lifted twice; the follow-up `147 / 2.8` build now packages the `adjustPan` compensation fix but still has not been device-smoked in this session.
-- Latest locally downloaded artifact: `dist/github-release-v3.2.0/CiYuanXia-v3.2-151-arm64-v8a.apk`; local SHA256 matches the GitHub release digest `7b965bf4c25bdef528389dc2b95815273f6b267af6a74d4484623e62da7b638a`.
-- Management status: source, GitHub workflow, and the published `151 / 3.2` release are aligned on terminal/browser IME follow-ups, shortcut-key haptic/press feedback, browser readability, and version metadata; the remaining release gap is Android device smoke plus the missing `flutter test` CI gate.
+- Latest locally verified artifact remains the prior `v4.3.0` APK under `dist/github-release-v4.3.0/`; the newer `v4.4.0` release download is not yet fully verified in current local governance notes.
+- Management status: source anchor `2.5.0+143`, workflow release floor `163`, and the published `v4.4.0 / 4.4 / 163` release are aligned; the remaining governance gaps are Android device smoke for the latest IME fix, reconciliation of the ahead/behind branch topology, and the missing `flutter test` CI gate.
 - Project phase: feature work for Codex browser automation is ahead of validation; the immediate management focus is release-stabilization, not another feature branch.
-- Release topology note: local branch `codex-termux-runtime-fix` still reports ahead of the local `shwiki/main` ref; the authoritative GitHub `main` head is now `f250722d5dd2709b388ee42030c10559977aba74`, so future build provenance should continue naming the remote and SHA explicitly.
-- Next artifact expectation: if another fresh APK is required from the same source anchor, build `152` should display installer/app version `3.3` and use the short artifact name `CiYuanXia-v3.3-152-arm64-v8a.apk`.
+- Release topology note: `codex-terminal-ime-lag-fix` is currently `ahead 8, behind 9` versus `shwiki/main`, and `main` also diverges from `origin/main`. Future build provenance should continue naming both the remote and exact SHA instead of assuming the checked-out branch is authoritative.
+- Next artifact expectation: the queued Codex IME redesign/tool-proxy release should use logical build `164`, display installer/app version `4.5`, and publish `CiYuanXia-v4.5-164-arm64-v8a.apk`.
 - Compact Codex browser sidecar now disposes when closed on narrow screens, so the terminal route no longer carries a hidden WebView tree through IME reopen checks; the native terminal also skips redundant `requestFocus()` calls when keyboard reopen is already focused.
 
 ## Active Task
-- Fix complete locally: Codex terminal IME compensation now coalesces layout updates and defers screen redraws while the keyboard is moving. The next task is Android device smoke with a full-page Codex transcript while closing the keyboard.
+- Submit the Codex terminal redesign and tool-call proxy fix for the next GitHub Actions arm64 release build, then record the resulting run/artifact provenance and keep Android device smoke as the immediate post-build validation step.
 
 ## Recently Changed
+- Reworked `TerminalScreen` so Codex sessions use the same native platform-view shortcut bar as other terminal sessions. The terminal route no longer mounts a separate Flutter `TerminalToolbar`.
+- Reworked `NativeTerminalView.kt` to follow the simpler ZeroTermux-style structure: terminal surface plus native shortcut strip in one Android container, `adjustPan` plus the bottom input-strip visibility helper for IME motion, and no native global-layout overlap compensation chain.
+- Confirmed the ZeroTermux upstream reference is GPLv3-only, so this repo keeps only the layout/interaction idea and uses an original rewrite instead of copying upstream source.
+- Reworked the generated Codex proxy in `CliApiConfigService` so `responses` requests preserve `function_call`, `function_call_output`, and returned `tool_calls` when bridging through `/v1/chat/completions`. This fixes the previous structure loss that broke Codex tool calling against OpenAI-compatible upstreams.
+- Extended `lib/test.js` with source guards for the Codex Flutter toolbar split and the `responses` tool-call bridge; `npm test` now passes with 31 checks, `npm run lint -- --no-warn-ignored` passed, and `git diff --check` passed.
 - Reduced Codex terminal keyboard-close jank in `NativeTerminalView.kt`: IME bottom compensation now ignores small per-frame changes, avoids repeated input-strip scroll requests, and marks the terminal renderer deferred until the IME layout settles. Pending output redraws resume once after the transition instead of redrawing the full transcript during every keyboard animation frame.
 - Extended `lib/test.js` with source guards for IME transition settling and refresh deferral; `npm test` passed with 30 checks, `npm run lint` passed, and `git diff --check` passed.
 - Added a browser-panel-local high-contrast button theme: filled, outlined, text, and icon buttons now use explicit light foreground colors on the black browser surface; the address-bar `打开` button also explicitly uses white text/icons.

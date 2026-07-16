@@ -1,17 +1,17 @@
 # Build And Verification
 
 ## Pending Cloud Build
-- 2026-07-16 Codex terminal IME settled-compensation follow-up: pending GitHub `shwiki/main` build, arm64-v8a only, logical build `163`, semantic version `4.4.0`, and install-visible version `4.4`.
-- `.github/workflows/flutter-build.yml` now enforces `MINIMUM_RELEASE_BUILD=163`; failed builds `157`, `158`, `160`, and `161` remain reserved.
+- Planned Codex native-terminal redesign and tool-call proxy release: the next cloud build should consume logical build `164`, derive semantic version `v4.5.0`, display installer/app version `4.5`, and publish `CiYuanXia-v4.5-164-arm64-v8a.apk`.
+- Source anchor remains `2.5.0+143`; the workflow must continue deriving the release build from the existing floor and latest published release. Failed builds `157`, `158`, `160`, and `161` remain reserved and must not be reused.
 
 ## Latest Cloud Build
-- Browser sidecar persistence, horizontal dual-script workspaces, black-surface browser button contrast, and Codex terminal IME-close performance release: GitHub Actions run `29474846658` passed at remote commit `c323ac3b641a41c2530d20ab64557913aa21d470` and published GitHub Release `v4.3.0`.
-- Versioning: source anchor remains `2.5.0+143`; workflow derived logical build `162`, semantic version `4.3.0`, and install-visible version `4.3`. `.github/workflows/flutter-build.yml` enforces `MINIMUM_RELEASE_BUILD=162`; failed builds `157`, `158`, `160`, and `161` remain reserved.
-- Artifact: `CiYuanXia-v4.3-162-arm64-v8a.apk` (316,450,107 bytes), downloaded locally at `dist/github-release-v4.3.0/CiYuanXia-v4.3-162-arm64-v8a.apk`; SHA-256 `6b08709b66b1c57d0fe480673ad6183f46b087997b3462ec2b135108e2529ca0`.
-- Verification: GitHub build and release jobs passed; local `unzip -t`, `zipalign -c -v 4`, and `apksigner verify --verbose --print-certs` passed. The APK contains `lib/arm64-v8a` native libraries and retains signer SHA-256 `0618eafd1855855749abb7c04d6f44edf9a4b7cb09e26fd882e856d5c994dde6`.
-- Local checks before submission: `npm run lint`, `npm test` (30 passed), project-memory validation, and `git diff --check` passed. Flutter/Dart checks remain unavailable in Termux; Actions completed Flutter analysis and APK packaging.
+- Codex terminal IME settled-compensation release: GitHub Actions run `29479840309` passed at remote commit `c44deeb4da325d44d0e171fcf3d06ae6490a2f53` and published GitHub Release `v4.4.0`.
+- Versioning: source anchor remains `2.5.0+143`; workflow derived logical build `163`, semantic version `4.4.0`, and install-visible version `4.4`. `.github/workflows/flutter-build.yml` enforces `MINIMUM_RELEASE_BUILD=163`; failed builds `157`, `158`, `160`, and `161` remain reserved.
+- Artifact: `CiYuanXia-v4.4-163-arm64-v8a.apk` (316,450,167 bytes), release URL verified. The local download to `dist/github-release-v4.4.0/` is in progress and needs checksum, ZIP, alignment, and signing checks when network transfer completes.
+- Verification: GitHub build and release jobs passed; `npm run lint`, `npm test` (30 passed), project-memory validation, and `git diff --check` passed before submission. Flutter/Dart checks remain unavailable in Termux; Actions completed Flutter analysis and APK packaging.
 
 ## Local Checks Only
+- 2026-07-16 Codex native-terminal redesign and tool-call proxy fix: `npm test` passed with 31 checks; `npm run lint -- --no-warn-ignored` passed; `git diff --check` passed. Local `flutter`, `dart`, and `kotlinc` remain unavailable, so Flutter analyze/test and native compile checks were not run locally.
 - 2026-07-15 Codex terminal IME lag follow-up: `git diff --check` passed; `npm test` passed with 28 checks; `npm run lint -- --no-warn-ignored` passed; local `flutter`, `dart`, and `kotlinc` remain unavailable, so Flutter analyze/test and native compile checks were not run locally.
 - Formatting: not run in this session; Flutter/Dart SDK unavailable locally.
 - 2026-07-15 terminal shortcut feedback build: `git diff --check` passed; `npm test` passed with 28 checks; `npm run lint -- --no-warn-ignored` passed; `gh auth status` confirmed the authenticated `shwiki1` GitHub session; GitHub Actions run `29377510459` succeeded and published release `v3.2.0`. Local `flutter`, `dart`, and `kotlinc` remain unavailable, so Flutter analyze/test and native compile checks were not run locally.
@@ -49,15 +49,16 @@
 
 ## Version Management
 - Canonical version file: `flutter_app/pubspec.yaml` for Flutter app version/build, plus root `package.json` for npm package version. Keep them aligned for releases.
-- Current user-facing version: latest published display `3.7`; the repo still keeps the source anchor at `2.5.0+143` and derives display versions from the target build number.
-- Current build number: latest published logical build `156`; the repo anchor remains `143` in `flutter_app/pubspec.yaml`.
+- Current user-facing version: latest published display `4.4`; the repo still keeps the source anchor at `2.5.0+143` and derives display versions from the target build number.
+- Current build number: latest published logical build `163`; the repo anchor remains `143` in `flutter_app/pubspec.yaml`.
 - Current source semantic anchor: `2.5.0` in `flutter_app/pubspec.yaml` and `package.json`.
 - Latest successful display-version cloud build: GitHub Actions run `29373389340` used remote commit `db7ce2e9e992be903fa80df9146362aee6c291c2`, published release `v3.0.0`, and produced `CiYuanXia-v3.0-149-arm64-v8a.apk`.
 - Latest successful display-version cloud build: GitHub Actions run `29375096798` used remote commit `92b8b59d29a298a05dcb01f290f32df34beb1254`, published release `v3.1.0`, and produced `CiYuanXia-v3.1-150-arm64-v8a.apk`.
 - Latest successful display-version cloud build: GitHub Actions run `29377510459` used remote commit `f250722d5dd2709b388ee42030c10559977aba74`, published release `v3.2.0`, and produced `CiYuanXia-v3.2-151-arm64-v8a.apk`.
 - Latest successful display-version cloud build: GitHub Actions run `29452076550` used remote commit `23976fc39aaa353b77f83179efb5e4685a12a1ac`, published release `v3.7.0`, and produced `CiYuanXia-v3.7-156-arm64-v8a.apk` from the verified 3.4 feature baseline.
+- Latest successful display-version cloud build: GitHub Actions run `29479840309` used remote commit `c44deeb4da325d44d0e171fcf3d06ae6490a2f53`, published release `v4.4.0`, and produced `CiYuanXia-v4.4-163-arm64-v8a.apk`.
 - User device feedback on the previous `146 / 2.7` release led to the terminal shortcut-bar double-lift compensation follow-up; that follow-up is now packaged in `147 / 2.8` and still requires Android device smoke.
-- Next expected published cloud build from the current source anchor must use a new logical build greater than `156`; never recreate the withdrawn `154 / 3.5` or `155 / 3.6` artifacts.
+- Next expected published cloud build from the current source anchor must use a new logical build greater than `163`; never recreate the withdrawn `154 / 3.5` or `155 / 3.6` artifacts, and do not reuse `157`, `158`, `160`, or `161`.
 - Last cloud build version before submitting the browser tabs/UA build: source metadata `2.0.50+140`; GitHub Actions run `29293286907` generated CI version `2.0.50+141` for the arm64 split APK.
 - Last cloud build artifact before submitting the browser tabs/UA build: `ciyuanxia-apks` artifact ID `8295917288`, containing `CiYuanXia-v2.0.50-141-arm64-v8a.apk`, artifact ZIP digest `sha256:153c4b895a1bf1838985266fd6dfcd4fb32e021d7704e70e16ed53ccaf7dbfe8`.
 - Version bump policy: Increment the numeric build number for every new cloud build. Keep the repo semantic anchor at `2.5.0+143`, then derive artifact versions automatically from the target build number in fixed one-tenth steps: `144 -> 2.5.0 / 2.5`, `145 -> 2.6.0 / 2.6`, `146 -> 2.7.0 / 2.7`, `147 -> 2.8.0 / 2.8`, `148 -> 2.9.0 / 2.9`, `149 -> 3.0.0 / 3.0`.
@@ -79,11 +80,11 @@
 - Successful cloud build: GitHub Actions run `29373389340` used remote commit `db7ce2e9e992be903fa80df9146362aee6c291c2`, published release `v3.0.0`, logged `APP_VERSION_NAME=3.0.0`, `APP_VERSION_DISPLAY=3.0`, `APP_VERSION_CODE=149`, and produced `CiYuanXia-v3.0-149-arm64-v8a.apk`.
 - Successful cloud build: GitHub Actions run `29375096798` used remote commit `92b8b59d29a298a05dcb01f290f32df34beb1254`, published release `v3.1.0`, logged `APP_VERSION_NAME=3.1.0`, `APP_VERSION_DISPLAY=3.1`, `APP_VERSION_CODE=150`, and produced `CiYuanXia-v3.1-150-arm64-v8a.apk`.
 - Successful cloud build: GitHub Actions run `29377510459` used remote commit `f250722d5dd2709b388ee42030c10559977aba74`, published release `v3.2.0`, logged `APP_VERSION_NAME=3.2.0`, `APP_VERSION_DISPLAY=3.2`, `APP_VERSION_CODE=151`, and produced `CiYuanXia-v3.2-151-arm64-v8a.apk`.
-- Latest GitHub Release asset: `CiYuanXia-v3.2-151-arm64-v8a.apk`.
-- Latest APK SHA256: `7b965bf4c25bdef528389dc2b95815273f6b267af6a74d4484623e62da7b638a`.
-- Latest locally downloaded artifact path: `dist/github-release-v3.2.0/CiYuanXia-v3.2-151-arm64-v8a.apk`.
-- Latest artifact ZIP digest/SHA256: `sha256:4d114774e06620aa4d5269aef645c0ec974df5443d3f5c5680eb60efdde813c4`.
-- Latest artifact ID: `8328525344`.
+- Latest GitHub Release asset: `CiYuanXia-v4.4-163-arm64-v8a.apk`.
+- Latest APK SHA256: pending local verification for `v4.4.0`; record it after the release download in `dist/github-release-v4.4.0/` completes.
+- Latest locally verified artifact path: `dist/github-release-v4.3.0/`; the newer `dist/github-release-v4.4.0/` download is still pending checksum/ZIP/alignment/signing verification.
+- Latest artifact ZIP digest/SHA256: pending local verification for `v4.4.0`.
+- Latest artifact ID: unknown in current local governance files; recover from GitHub only if full artifact provenance is required.
 - Install-visible APK versionName policy: manifest `versionName` now resolves to the short display version, for example semantic `2.5.0` -> installer/app display `2.5`.
 
 ## Dependencies And Release Safety
@@ -93,7 +94,7 @@
 - Android dependencies: Termux terminal-view, RecyclerView, Media3, ffmpeg-kit-full, commons-compress, xz, zstd-jni.
 - Signing: workflow accepts `KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD`; if absent, release artifacts use debug signing fallback.
 - Release artifact naming: `CiYuanXia-v<version>-<versionCode>-arm64-v8a.apk`.
-- Last successful artifact checksum: APK SHA256 `796a0f46ac20948f4f7b7115cb58ff30aa15017c4dc316011a800bc01edbb6e8`; artifact ZIP digest `sha256:1c1a4cf53a8c370c5579798184a9f9265921cbab75d0992120e53cdf749f3184`.
+- Last successful artifact checksum: latest published `v4.4.0` checksum is not yet recorded locally; keep the established signer SHA-256 `0618eafd1855855749abb7c04d6f44edf9a4b7cb09e26fd882e856d5c994dde6` as the current update-compatibility anchor until the local release verification is completed.
 - Secret hygiene: `.gitignore` excludes `.env`, `flutter_app/android/key.properties`, `*.jks`, `*.keystore`, local configs with API keys, and build output.
 - Runtime assets: `openclaw-rootfs-noble-arm64.tar.gz` is currently a Git LFS pointer; `basic-resource` Release stores large runtime assets and SHA256 values.
 - Runtime Node defaults are aligned to Node.js `24.15.0` for arm64/x86_64 and `22.22.3` for armv7. Future Node upgrades must update Flutter constants, RootFS scripts, setup l10n copy, primary docs, resource docs, legacy installer URLs, cached asset names, license/source notices, and the `lib/test.js` drift guard together.
@@ -104,7 +105,7 @@
 - Unit tests: `npm test` passed locally with 28 checks after the browser/terminal IME focus handoff follow-up and now covers the browser soft-input arbitration guard, the reduced native terminal IME retry guard, the native-toolbar path guard, the native IME compensation guard, and the workflow version-source guard; Flutter tests were not run locally and are not currently part of the workflow, which runs analyze and the APK build.
 - Current release-management gap: `.github/workflows/flutter-build.yml` can produce a green APK artifact without executing `flutter test`, even though focused Flutter unit tests exist under `flutter_app/test/`.
 - Current browser automation test coverage includes generated MCP/browser-script string assertions for tab list/new/switch/close and UA switching in `flutter_app/test/cli_api_config_service_test.dart`, but those Flutter tests could not be executed locally without the Flutter SDK.
-- Current Node self-test includes the runtime-version drift guard, browser header/menu guards, route-scoped terminal IME guards, the native terminal input-strip guard, the native-toolbar path guard, and the native global-layout IME compensation guard; it now passes with 26 checks.
+- Current Node self-test includes the runtime-version drift guard, browser header/menu guards, route-scoped terminal IME guards, the native terminal input-strip guard, the native-toolbar path guard, and the no-compensation native-terminal guard; it now passes with 31 checks.
 - Auto-inspection caveat: `inspect_app_project.py` currently detects only the root Node shell for this repo; future agents must verify the Flutter/Kotlin app manually from `flutter_app/pubspec.yaml`, `flutter_app/android/app/build.gradle`, and source entry points.
 - Integration/E2E tests: no Flutter `integration_test`, Maestro, Appium, or emulator test workflow found.
 - Device/emulator/browser smoke target: none run in this session. Use Android 10+ arm64 device/emulator for install/setup/gateway smoke.
@@ -122,8 +123,8 @@
 - Signing secrets: `KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD` for GitHub Actions release signing.
 
 ## Notes
-- 2026-07-15 release recovery policy: after deleting withdrawn `3.5 / 154` and `3.6 / 155` cloud resources, `.github/workflows/flutter-build.yml` enforces `MINIMUM_RELEASE_BUILD=156`. This intentionally builds the verified `3.4` source tree as `3.7 / 156` so Android update versionCodes are never reused.
-- 2026-07-15 release verification: `v3.7.0` asset downloaded to `dist/github-release-v3.7.0/`; SHA-256 is `769f7a961bdb5410b9c91329dfd0211f068d837e649c7f441aa1a936482218ce`, ZIP integrity and `zipalign` passed, and APK signer matches the established release certificate.
+- 2026-07-16 release-floor policy: `.github/workflows/flutter-build.yml` now enforces `MINIMUM_RELEASE_BUILD=163`. This preserves Android update monotonicity after the withdrawn `154 / 3.5` and `155 / 3.6` artifacts and the later failed `157`, `158`, `160`, and `161` attempts.
+- 2026-07-16 release verification gap: `v4.4.0` is published, but local checksum, ZIP integrity, `zipalign`, and signer verification for the `dist/github-release-v4.4.0/` download still need to be recorded.
 - Do not commit secret values.
 - Use GitHub Actions for native packaging and release artifacts.
 - Project instruction: build/release only Android `arm64-v8a` APK unless the user explicitly asks for another ABI/AAB.

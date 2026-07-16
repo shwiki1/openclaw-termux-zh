@@ -3403,40 +3403,117 @@ def join_input_text(value):
                 continue
             if item.get("type") == "input_text":
                 parts.append(str(item.get("text") or ""))
+            elif item.get("type") == "output_text":
+                parts.append(str(item.get("text") or ""))
+            elif item.get("type") == "text":
+                parts.append(str(item.get("text") or ""))
             elif item.get("type") == "message":
                 parts.append(join_input_text(item.get("content")))
         return "\n".join(part for part in parts if part)
     if isinstance(value, dict):
         if value.get("type") == "input_text":
             return str(value.get("text") or "")
+        if value.get("type") == "output_text":
+            return str(value.get("text") or "")
+        if value.get("type") == "text":
+            return str(value.get("text") or "")
         if value.get("type") == "message":
             return join_input_text(value.get("content"))
     return ""
 
 
-def responses_to_chat(payload, forced_model, path):
-    model = forced_model or payload.get("model") or ""
-    input_value = payload.get("input")
-    messages = []
-    if isinstance(input_value, list):
-        for item in input_value:
-            if not isinstance(item, dict):
-                continue
-            role = item.get("role") or "user"
-            content = join_input_text(item.get("content"))
-            if not content:
-                content = join_input_text(item)
-            if content:
-                messages.append({"role": role, "content": content})
-    else:
+def stringify_response_output(value):
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value
+    if isinstance(value, (dict, list)):
+        return json.dumps(value, ensure_ascii=False)
+    return str(value)
+
+
+def responses_to_chat_messages(input_value):
+    if not isinstance(input_value, list):
         text = join_input_text(input_value)
+        return [{"role": "user", "content": text}] if text else []
+
+    messages = []
+    pending_assistant = None
+
+    def flush_pending():
+        nonlocal pending_assistant
+        if not pending_assistant:
+            return
+        if not pending_assistant.get("tool_calls"):
+            pending_assistant.pop("tool_calls", None)
+        if pending_assistant.get("content", "") == "":
+            pending_assistant["content"] = None
+        if pending_assistant.get("content") is not None or pending_assistant.get("tool_calls"):
+            messages.append(pending_assistant)
+        pending_assistant = None
+
+    for item in input_value:
+        if isinstance(item, str):
+            flush_pending()
+            if item:
+                messages.append({"role": "user", "content": item})
+            continue
+        if not isinstance(item, dict):
+            continue
+
+        item_type = item.get("type")
+        if item_type == "message":
+            flush_pending()
+            role = item.get("role") or "user"
+            text = join_input_text(item.get("content"))
+            if role == "assistant":
+                pending_assistant = {"role": "assistant", "content": text or None, "tool_calls": []}
+            elif text:
+                messages.append({"role": role, "content": text})
+            continue
+
+        if item_type == "function_call":
+            if pending_assistant is None:
+                pending_assistant = {"role": "assistant", "content": None, "tool_calls": []}
+            pending_assistant.setdefault("tool_calls", []).append({
+                "id": item.get("call_id") or item.get("id") or "tool_call",
+                "type": "function",
+                "function": {
+                    "name": item.get("name") or "",
+                    "arguments": item.get("arguments") or json.dumps(item.get("input") or {}, ensure_ascii=False),
+                },
+            })
+            continue
+
+        if item_type == "function_call_output":
+            flush_pending()
+            messages.append({
+                "role": "tool",
+                "tool_call_id": item.get("call_id") or item.get("tool_call_id") or item.get("id") or "tool_call",
+                "content": stringify_response_output(item.get("output")),
+            })
+            continue
+
+        if item_type == "reasoning":
+            continue
+
+        text = join_input_text(item)
+        flush_pending()
         if text:
             messages.append({"role": "user", "content": text})
 
-    if not messages:
-        instructions = str(payload.get("instructions") or "").strip()
-        if instructions:
-            messages.append({"role": "user", "content": instructions})
+    flush_pending()
+    return messages
+
+
+def responses_to_chat(payload, forced_model, path):
+    model = forced_model or payload.get("model") or ""
+    input_value = payload.get("input")
+    messages = responses_to_chat_messages(input_value)
+
+    instructions = str(payload.get("instructions") or "").strip()
+    if instructions:
+        messages.insert(0, {"role": "system", "content": instructions})
 
     request = {
         "model": model,
@@ -3478,26 +3555,38 @@ def chat_to_responses(payload, original_model):
     response_id = payload.get("id") or "resp_openclaw"
     model = payload.get("model") or original_model or ""
     usage = payload.get("usage") or {}
+    output = []
+    if text:
+        output.append({
+            "id": f"{response_id}_output_0",
+            "type": "message",
+            "role": "assistant",
+            "content": [
+                {
+                    "type": "output_text",
+                    "text": text,
+                    "annotations": [],
+                },
+            ],
+        })
+    for index, call in enumerate(message.get("tool_calls") or []):
+        function = call.get("function") if isinstance(call, dict) else {}
+        output.append({
+            "id": f"{response_id}_function_{index}",
+            "type": "function_call",
+            "call_id": call.get("id") or f"tool_call_{index}",
+            "name": function.get("name") or "",
+            "arguments": function.get("arguments") or "{}",
+            "status": "completed",
+        })
     return {
         "id": response_id,
         "object": "response",
         "created_at": payload.get("created") or 0,
         "status": "completed",
         "model": model,
-        "output": [
-            {
-                "id": f"{response_id}_output_0",
-                "type": "message",
-                "role": "assistant",
-                "content": [
-                    {
-                        "type": "output_text",
-                        "text": text,
-                        "annotations": [],
-                    },
-                ],
-            },
-        ],
+        "output": output,
+        "output_text": text,
         "usage": {
             "input_tokens": usage.get("prompt_tokens") or 0,
             "output_tokens": usage.get("completion_tokens") or 0,
@@ -3683,6 +3772,200 @@ function sendJson(res, status, payload) {
   res.end(body);
 }
 
+function joinInputText(value) {
+  if (typeof value === "string") return value;
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => {
+        if (typeof item === "string") return item;
+        if (!item || typeof item !== "object") return "";
+        if (item.type === "input_text" || item.type === "output_text" || item.type === "text") {
+          return item.text || "";
+        }
+        if (item.type === "message") {
+          return joinInputText(item.content);
+        }
+        return "";
+      })
+      .filter(Boolean)
+      .join("\n");
+  }
+  if (value && typeof value === "object") {
+    if (value.type === "input_text" || value.type === "output_text" || value.type === "text") {
+      return value.text || "";
+    }
+    if (value.type === "message") {
+      return joinInputText(value.content);
+    }
+  }
+  return "";
+}
+
+function stringifyResponseOutput(value) {
+  if (value == null) return "";
+  if (typeof value === "string") return value;
+  if (typeof value === "object") return JSON.stringify(value);
+  return String(value);
+}
+
+function responsesToChatMessages(input) {
+  if (!Array.isArray(input)) {
+    const text = joinInputText(input);
+    return text ? [{ role: "user", content: text }] : [];
+  }
+
+  const messages = [];
+  let pendingAssistant = null;
+
+  const flushPending = () => {
+    if (!pendingAssistant) return;
+    if (!pendingAssistant.tool_calls?.length) {
+      delete pendingAssistant.tool_calls;
+    }
+    if (pendingAssistant.content === "") {
+      pendingAssistant.content = null;
+    }
+    if (pendingAssistant.content != null || pendingAssistant.tool_calls?.length) {
+      messages.push(pendingAssistant);
+    }
+    pendingAssistant = null;
+  };
+
+  for (const item of input) {
+    if (typeof item === "string") {
+      flushPending();
+      if (item) messages.push({ role: "user", content: item });
+      continue;
+    }
+    if (!item || typeof item !== "object") continue;
+
+    if (item.type === "message") {
+      flushPending();
+      const role = item.role || "user";
+      const text = joinInputText(item.content);
+      if (role === "assistant") {
+        pendingAssistant = { role: "assistant", content: text || null, tool_calls: [] };
+      } else if (text) {
+        messages.push({ role, content: text });
+      }
+      continue;
+    }
+
+    if (item.type === "function_call") {
+      if (!pendingAssistant) {
+        pendingAssistant = { role: "assistant", content: null, tool_calls: [] };
+      }
+      pendingAssistant.tool_calls.push({
+        id: item.call_id || item.id || "tool_call",
+        type: "function",
+        function: {
+          name: item.name || "",
+          arguments: item.arguments || JSON.stringify(item.input || {}),
+        },
+      });
+      continue;
+    }
+
+    if (item.type === "function_call_output") {
+      flushPending();
+      messages.push({
+        role: "tool",
+        tool_call_id: item.call_id || item.tool_call_id || item.id || "tool_call",
+        content: stringifyResponseOutput(item.output),
+      });
+      continue;
+    }
+
+    if (item.type === "reasoning") {
+      continue;
+    }
+
+    const text = joinInputText(item);
+    flushPending();
+    if (text) {
+      messages.push({ role: "user", content: text });
+    }
+  }
+
+  flushPending();
+  return messages;
+}
+
+function responsesToChat(payload, forcedModel) {
+  const request = {
+    model: forcedModel || payload.model || "",
+    messages: responsesToChatMessages(payload.input),
+    stream: Boolean(payload.stream),
+  };
+  const instructions = String(payload.instructions || "").trim();
+  if (instructions) {
+    request.messages.unshift({ role: "system", content: instructions });
+  }
+  if (payload.temperature !== undefined) request.temperature = payload.temperature;
+  if (payload.max_output_tokens !== undefined) request.max_tokens = payload.max_output_tokens;
+  if (payload.top_p !== undefined) request.top_p = payload.top_p;
+  if (Array.isArray(payload.tools)) request.tools = payload.tools;
+  if (typeof payload.tool_choice === "string" || (payload.tool_choice && typeof payload.tool_choice === "object")) {
+    request.tool_choice = payload.tool_choice;
+  }
+  if (payload.reasoning !== undefined) request.reasoning = payload.reasoning;
+  return request;
+}
+
+function chatToResponses(payload, originalModel) {
+  const choice = (payload.choices || [])[0] || {};
+  const message = choice.message || {};
+  const responseId = payload.id || "resp_openclaw";
+  let text = "";
+  if (typeof message.content === "string") {
+    text = message.content;
+  } else if (Array.isArray(message.content)) {
+    text = message.content
+      .map((item) => (item && item.type === "text" ? item.text || "" : ""))
+      .filter(Boolean)
+      .join("\n");
+  }
+  const output = [];
+  if (text) {
+    output.push({
+      id: `${responseId}_output_0`,
+      type: "message",
+      role: "assistant",
+      content: [
+        {
+          type: "output_text",
+          text,
+          annotations: [],
+        },
+      ],
+    });
+  }
+  for (const [index, call] of (message.tool_calls || []).entries()) {
+    output.push({
+      id: `${responseId}_function_${index}`,
+      type: "function_call",
+      call_id: call.id || `tool_call_${index}`,
+      name: call.function?.name || "",
+      arguments: call.function?.arguments || "{}",
+      status: "completed",
+    });
+  }
+  return {
+    id: responseId,
+    object: "response",
+    created_at: payload.created || 0,
+    status: "completed",
+    model: payload.model || originalModel || "",
+    output,
+    output_text: text,
+    usage: {
+      input_tokens: payload.usage?.prompt_tokens || 0,
+      output_tokens: payload.usage?.completion_tokens || 0,
+      total_tokens: payload.usage?.total_tokens || 0,
+    },
+  };
+}
+
 const server = http.createServer((clientReq, clientRes) => {
   const cfg = config();
   const requestUrl = new URL(clientReq.url, `http://${cfg.host}:${cfg.port}`);
@@ -3715,15 +3998,33 @@ const server = http.createServer((clientReq, clientRes) => {
   clientReq.on("data", (chunk) => bodyChunks.push(chunk));
   clientReq.on("end", () => {
     let body = Buffer.concat(bodyChunks);
-    if (cfg.model && body.length && ["POST", "PUT", "PATCH"].includes(clientReq.method || "")) {
+    const parsedPath = requestUrl.pathname;
+    let targetPath = clientReq.url;
+    let expectingResponses = false;
+    if (body.length && ["POST", "PUT", "PATCH"].includes(clientReq.method || "")) {
       try {
         const payload = JSON.parse(body.toString("utf8"));
-        if (payload && typeof payload === "object" && typeof payload.model === "string") {
-          payload.model = cfg.model;
-          body = Buffer.from(JSON.stringify(payload));
-          headers["content-length"] = body.length;
+        if (payload && typeof payload === "object") {
+          if (parsedPath === "/v1/responses") {
+            body = Buffer.from(JSON.stringify(responsesToChat(payload, cfg.model)));
+            targetPath = "/v1/chat/completions";
+            expectingResponses = true;
+          } else {
+            if (cfg.model && typeof payload.model === "string") {
+              payload.model = cfg.model;
+            }
+            body = Buffer.from(JSON.stringify(payload));
+          }
         }
       } catch (_) {}
+    }
+    headers["content-length"] = body.length;
+
+    try {
+      target = new URL(targetUrl(cfg.upstream, targetPath));
+    } catch (error) {
+      sendJson(clientRes, 502, { error: String(error.message || error) });
+      return;
     }
 
     const transport = target.protocol === "https:" ? https : http;
@@ -3734,12 +4035,25 @@ const server = http.createServer((clientReq, clientRes) => {
         headers,
       },
       (upstreamRes) => {
-        const responseHeaders = { ...upstreamRes.headers };
-        delete responseHeaders["transfer-encoding"];
-        delete responseHeaders.connection;
-        delete responseHeaders["content-encoding"];
-        clientRes.writeHead(upstreamRes.statusCode || 502, responseHeaders);
-        upstreamRes.pipe(clientRes);
+        const responseChunks = [];
+        upstreamRes.on("data", (chunk) => responseChunks.push(chunk));
+        upstreamRes.on("end", () => {
+          const responseBody = Buffer.concat(responseChunks);
+          if (expectingResponses) {
+            try {
+              const payload = JSON.parse(responseBody.toString("utf8"));
+              sendJson(clientRes, upstreamRes.statusCode || 200, chatToResponses(payload, cfg.model));
+              return;
+            } catch (_) {}
+          }
+          const responseHeaders = { ...upstreamRes.headers };
+          delete responseHeaders["transfer-encoding"];
+          delete responseHeaders.connection;
+          delete responseHeaders["content-encoding"];
+          responseHeaders["content-length"] = responseBody.length;
+          clientRes.writeHead(upstreamRes.statusCode || 502, responseHeaders);
+          clientRes.end(responseBody);
+        });
       },
     );
 
