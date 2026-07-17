@@ -90,9 +90,25 @@ class CliApiConfigService {
     };
   }
 
-  static Future<void> saveSharedProfiles(List<CliApiConfig> profiles) async {
+  static Future<void> saveSharedProfiles(
+    List<CliApiConfig> profiles, {
+    String? codexSharedProfileId,
+  }) async {
     final configs = await _loadAll();
     configs['sharedProfiles'] = _sharedProfilesJson(profiles);
+    final bindCodexProfileId = codexSharedProfileId?.trim() ?? '';
+    if (bindCodexProfileId.isNotEmpty &&
+        profiles.any((item) => item.sharedProfileId == bindCodexProfileId)) {
+      final tools = _asMap(configs['tools']);
+      final currentCodex = _toolSettingsFromJson(
+        'codex',
+        _asMapOrNull(tools['codex']),
+      );
+      tools['codex'] = _toolSettingsJson(
+        currentCodex.copyWith(sharedProfileId: bindCodexProfileId),
+      );
+      configs['tools'] = tools;
+    }
     await _persistConfig(configs);
   }
 
@@ -199,126 +215,133 @@ class CliApiConfigService {
     final codexProxyEnvMode =
         _shouldManageToolRuntime(codex) ? '0600' : '0000';
 
+    Future<void> writeRootfsFile(String path, String content) async {
+      final ok = await NativeBridge.writeRootfsFile(path, content);
+      if (!ok) {
+        throw Exception('RootFS 配置写入失败：$path');
+      }
+    }
+
     await _writePrefsConfig(allConfigs);
-    await NativeBridge.writeRootfsFile(
+    await writeRootfsFile(
       _configPath,
       const JsonEncoder.withIndent('  ').convert(allConfigs),
     );
-    await NativeBridge.writeRootfsFile(_envPath, _buildGlobalEnvFile());
-    await NativeBridge.writeRootfsFile(
+    await writeRootfsFile(_envPath, _buildGlobalEnvFile());
+    await writeRootfsFile(
       _terminalThemePath,
       _buildTerminalThemeSh(),
     );
-    await NativeBridge.writeRootfsFile(
+    await writeRootfsFile(
       _cliWorkspaceAgentsPath,
       _buildCliWorkspaceAgentsMd(),
     );
-    await NativeBridge.writeRootfsFile(
+    await writeRootfsFile(
       _cliWorkspaceGeminiPath,
       _buildCliWorkspaceGeminiMd(),
     );
-    await NativeBridge.writeRootfsFile(
+    await writeRootfsFile(
       _cliWorkspaceContextPath,
       _buildCliWorkspaceContextMd(),
     );
-    await NativeBridge.writeRootfsFile(
+    await writeRootfsFile(
       _cliWorkspaceGeminiSettingsPath,
       _buildCliWorkspaceGeminiSettingsJson(gemini),
     );
-    await NativeBridge.writeRootfsFile(
+    await writeRootfsFile(
       _cliWorkspaceGeminiCustomModelsPath,
       _buildGeminiCustomModelsJson(gemini),
     );
-    await NativeBridge.writeRootfsFile(
+    await writeRootfsFile(
       _cliWorkspaceGenCliSettingsPath,
       _buildGenCliSettingsJson(activeConfigs['generic-agent']!),
     );
-    await NativeBridge.writeRootfsFile(
+    await writeRootfsFile(
       _genCliSettingsPath,
       _buildGenCliSettingsJson(activeConfigs['generic-agent']!),
     );
-    await NativeBridge.writeRootfsFile(
+    await writeRootfsFile(
       _cliWorkspaceSkillPath,
       _buildCliWorkspaceSkill(),
     );
     for (final entry in activeConfigs.entries) {
-      await NativeBridge.writeRootfsFile(
+      await writeRootfsFile(
         _toolEnvPath(entry.key),
         _buildToolEnvFile(entry.key, entry.value),
       );
     }
-    await NativeBridge.writeRootfsFile(_codexProxyPath, _buildCodexProxyPy());
-    await NativeBridge.writeRootfsFile(
+    await writeRootfsFile(_codexProxyPath, _buildCodexProxyPy());
+    await writeRootfsFile(
       _codexProxyJsPath,
       _buildCodexProxyJs(),
     );
-    await NativeBridge.writeRootfsFile(
+    await writeRootfsFile(
       _codexProxyEnvPath,
       _buildCodexProxyEnv(codex),
     );
-    await NativeBridge.writeRootfsFile(
+    await writeRootfsFile(
       _codexTermuxRuntimePath,
       _buildCodexTermuxRuntimeSh(),
     );
-    await NativeBridge.writeRootfsFile(
+    await writeRootfsFile(
       _browserMcpPath,
       _buildBrowserMcpScript(),
     );
-    await NativeBridge.writeRootfsFile(
+    await writeRootfsFile(
       _browserScriptLauncherPath,
       _buildBrowserScriptLauncherSh(),
     );
-    await NativeBridge.writeRootfsFile(
+    await writeRootfsFile(
       _browserSkillPath,
       _buildBrowserSkill(),
     );
-    await NativeBridge.writeRootfsFile(
+    await writeRootfsFile(
       _browserCodexSkillPath,
       _buildBrowserSkill(),
     );
-    await NativeBridge.writeRootfsFile(
+    await writeRootfsFile(
       _codexLauncherPath,
       _buildCodexLauncherSh(),
     );
-    await NativeBridge.writeRootfsFile(
+    await writeRootfsFile(
       _genericAgentLauncherPath,
       _buildGenericAgentLauncherSh(),
     );
-    await NativeBridge.writeRootfsFile(
+    await writeRootfsFile(
       _geminiLauncherPath,
       _buildGeminiLauncherSh(),
     );
-    await NativeBridge.writeRootfsFile(
+    await writeRootfsFile(
       _hermesLauncherPath,
       _buildHermesLauncherSh(),
     );
-    await NativeBridge.writeRootfsFile(_codexConfigPath, _buildCodexToml(codex));
-    await NativeBridge.writeRootfsFile(_codexAuthPath, _buildCodexAuthJson(codex));
-    await NativeBridge.writeRootfsFile(
+    await writeRootfsFile(_codexConfigPath, _buildCodexToml(codex));
+    await writeRootfsFile(_codexAuthPath, _buildCodexAuthJson(codex));
+    await writeRootfsFile(
       _codeBuddyModelsPath,
       _buildCodeBuddyModelsJson(activeConfigs['codebuddy']!),
     );
-    await NativeBridge.writeRootfsFile(
+    await writeRootfsFile(
       _codeBuddySettingsPath,
       _buildCodeBuddySettingsJson(activeConfigs['codebuddy']!),
     );
-    await NativeBridge.writeRootfsFile(
+    await writeRootfsFile(
       _qwenSettingsPath,
       _buildQwenSettingsJson(activeConfigs['qwen-code']!),
     );
-    await NativeBridge.writeRootfsFile(
+    await writeRootfsFile(
       _geminiSettingsPath,
       _buildGeminiSettingsJson(gemini),
     );
-    await NativeBridge.writeRootfsFile(
+    await writeRootfsFile(
       _geminiCustomModelsPath,
       _buildGeminiCustomModelsJson(gemini),
     );
-    await NativeBridge.writeRootfsFile(
+    await writeRootfsFile(
       _hermesConfigPath,
       _buildHermesConfigYaml(activeConfigs['hermes-agent']!),
     );
-    await NativeBridge.writeRootfsFile(
+    await writeRootfsFile(
       _hermesEnvPath,
       _buildHermesEnvFile(activeConfigs['hermes-agent']!),
     );
@@ -429,12 +452,25 @@ class CliApiConfigService {
     await _writePrefsConfig(normalized);
     try {
       await regenerateRuntimeFiles(configs: normalized);
-    } catch (_) {
+    } catch (error) {
       // Rootfs may not exist yet during first-run preconfiguration.
       // The setup flow calls regenerateRuntimeFiles() again after extraction.
-      return;
+      final rootfsReady = await _isRootfsReady();
+      if (!rootfsReady) {
+        return;
+      }
+      throw Exception('配置已保存到应用，但同步 Ubuntu RootFS 失败：$error');
     }
     await _syncCodexProxyProcess();
+  }
+
+  static Future<bool> _isRootfsReady() async {
+    try {
+      final osRelease = await NativeBridge.readRootfsFile('/etc/os-release');
+      return osRelease != null && osRelease.trim().isNotEmpty;
+    } catch (_) {
+      return false;
+    }
   }
 
   static Future<void> _syncCodexProxyProcess() async {

@@ -171,8 +171,8 @@ class _CliToolsScreenState extends State<CliToolsScreen> {
   }
 
   Future<void> _manageSharedApis() async {
-    final saved = await CliApiProfilesDialog.show(context);
-    if (saved && mounted) {
+    final savedProfileId = await CliApiProfilesDialog.show(context);
+    if (savedProfileId != null && mounted) {
       await _refresh(showLoader: false, forceStatusRefresh: true);
     }
   }
