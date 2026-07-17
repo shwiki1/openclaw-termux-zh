@@ -14,13 +14,19 @@ import android.widget.FrameLayout
 import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.updatePadding
 
 class NativeTerminalPagerActivity : Activity() {
     private lateinit var baseConfig: NativeTerminalSessionConfig
+    private lateinit var rootLayout: LinearLayout
     private lateinit var titleView: TextView
     private lateinit var pageHintView: TextView
     private lateinit var terminalTabButton: TextView
     private lateinit var browserTabButton: TextView
+    private lateinit var pasteButton: TextView
+    private lateinit var restartButton: TextView
     private lateinit var terminalPage: FrameLayout
     private lateinit var browserPage: FrameLayout
     private lateinit var terminalView: NativeTerminalSessionView
@@ -28,6 +34,7 @@ class NativeTerminalPagerActivity : Activity() {
     private var activePageIndex = PAGE_TERMINAL
     private var terminalTitle = "Terminal"
     private var sessionClosed = false
+    private var lastImeVisible = false
     private val pagerGestureDetector by lazy {
         GestureDetector(
             this,
@@ -101,9 +108,10 @@ class NativeTerminalPagerActivity : Activity() {
     }
 
     private fun createContentView(): View {
-        val root = LinearLayout(this).apply {
+        rootLayout = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(Color.BLACK)
+            clipToPadding = false
         }
 
         titleView = TextView(this).apply {
@@ -121,6 +129,8 @@ class NativeTerminalPagerActivity : Activity() {
         }
         terminalTabButton = createActionButton("终端") { showPage(PAGE_TERMINAL) }
         browserTabButton = createActionButton("浏览器") { showPage(PAGE_BROWSER) }
+        pasteButton = createActionButton("粘贴") { terminalView.paste() }
+        restartButton = createActionButton("重开") { terminalView.restart() }
 
         terminalView = NativeTerminalSessionView(
             context = this,
@@ -159,9 +169,9 @@ class NativeTerminalPagerActivity : Activity() {
             )
         }
 
-        root.addView(createTitleRow())
-        root.addView(createActionRow())
-        root.addView(
+        rootLayout.addView(createTitleRow())
+        rootLayout.addView(createActionRow())
+        rootLayout.addView(
             FrameLayout(this).apply {
                 addView(
                     terminalPage,
@@ -185,14 +195,34 @@ class NativeTerminalPagerActivity : Activity() {
             ),
         )
 
-        return root
+        bindWindowInsets()
+        return rootLayout
+    }
+
+    private fun bindWindowInsets() {
+        ViewCompat.setOnApplyWindowInsetsListener(rootLayout) { view, insets ->
+            val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            val imeVisible = insets.isVisible(WindowInsetsCompat.Type.ime())
+            view.updatePadding(
+                left = systemBars.left,
+                top = systemBars.top,
+                right = systemBars.right,
+                bottom = if (imeVisible) 0 else systemBars.bottom,
+            )
+            if (activePageIndex == PAGE_TERMINAL && (imeVisible || imeVisible != lastImeVisible)) {
+                terminalView.post { terminalView.requestToolbarVisible() }
+            }
+            lastImeVisible = imeVisible
+            insets
+        }
+        ViewCompat.requestApplyInsets(rootLayout)
     }
 
     private fun createTitleRow(): View {
         return LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(8), dp(8), dp(8), dp(4))
+            setPadding(dp(10), dp(10), dp(10), dp(4))
             addView(createActionButton("返回") { finish() })
             addView(
                 LinearLayout(this@NativeTerminalPagerActivity).apply {
@@ -217,11 +247,11 @@ class NativeTerminalPagerActivity : Activity() {
         val row = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(8), dp(0), dp(8), dp(6))
+            setPadding(dp(10), dp(0), dp(10), dp(6))
             addView(terminalTabButton)
             addView(browserTabButton)
-            addView(createActionButton("粘贴") { terminalView.paste() })
-            addView(createActionButton("重开") { terminalView.restart() })
+            addView(pasteButton)
+            addView(restartButton)
         }
         return HorizontalScrollView(this).apply {
             isHorizontalScrollBarEnabled = false
@@ -276,6 +306,11 @@ class NativeTerminalPagerActivity : Activity() {
             if (activePageIndex == PAGE_BROWSER) Color.parseColor("#2B2B2B")
             else Color.parseColor("#161616"),
         )
+        pasteButton.visibility = if (activePageIndex == PAGE_TERMINAL) View.VISIBLE else View.GONE
+        restartButton.visibility = if (activePageIndex == PAGE_TERMINAL) View.VISIBLE else View.GONE
+        if (activePageIndex == PAGE_TERMINAL) {
+            terminalView.post { terminalView.requestToolbarVisible() }
+        }
         updateChrome()
     }
 
@@ -288,7 +323,7 @@ class NativeTerminalPagerActivity : Activity() {
         pageHintView.text = if (activePageIndex == PAGE_TERMINAL) {
             "左滑切到浏览器 · 右滑回终端"
         } else {
-            "左滑仍在浏览器 · 右滑回终端"
+            "浏览器功能已切回原生布局 · 右滑回终端"
         }
     }
 

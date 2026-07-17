@@ -22,10 +22,12 @@ Operational Android utility app for managing an OpenClaw runtime. Existing scree
 - `TerminalToolbar`, `NativeTerminalView`, `NativeProotTerminal`: terminal input and native terminal surfaces. `TerminalScreen` now uses the native `NativeTerminalView` key strip (`useNativeToolbar: true`) so the terminal prompt and shortcut bar move as one Android surface during IME transitions. Both the native terminal shortcut bar and the Flutter fallback toolbar now provide explicit press-state background changes plus haptic feedback on taps.
 - `CliApiConfigDialog` / `CliApiProfilesDialog`: configuration dialogs.
 - `TerminalBrowserPanel` now includes a horizontal tab strip, add/close tab controls, a dedicated full-width address-bar row, a separate high-contrast navigation/tool row, a UA switch button, and a more menu for low-frequency tools. The script assistant remains available from the more menu and opens a bottom-sheet script directory with a pending-save draft card, save/edit pending draft, save-from-recent, run, rename, copy command/prompt, delete, loading, empty, and error states.
+- `NativeCodexBrowserView` should mirror the same information hierarchy on the native pager path: status row, horizontal tab strip, icon-based nav/tool row, dedicated address row, optional recent-actions strip, and optional inspector panel. Keep the native browser dense and operational rather than falling back to plain text-button scaffolding once the screen carries more than one control row.
 
 ## Icon Strategy
 - Flutter/Dart UI currently uses Material `Icons`.
 - Android native floating file manager uses Lucide-style PNG assets in `flutter_app/android/app/src/main/res/drawable-nodpi/`.
+- Native Codex pager/browser controls should reuse those existing Lucide-style PNG assets where possible instead of regressing to text-only controls once the surface becomes native.
 - When adding Flutter UI, prefer existing Material icon style unless the project migrates to a shared icon package intentionally.
 
 ## App Icon Pipeline
@@ -37,6 +39,7 @@ Operational Android utility app for managing an OpenClaw runtime. Existing scree
 - Verify safe areas, keyboard overlap, loading states, empty states, error states, and text fitting.
 - Important screens to manually smoke when UI changes: setup wizard, dashboard, terminal, Web dashboard, config editor, provider detail, backup manager, local model screens, settings/update flow.
 - For Codex browser UI changes, smoke the terminal browser sidecar on compact and wide widths, including tab strip overflow, add/switch/close tab behavior, back/forward/reload state, desktop/mobile UA switching, desktop UA page layout, pinch/page zoom behavior, more-menu tool access, pending-save script draft card, script assistant bottom sheet, and header icon density.
+- For native Codex pager UI changes, additionally smoke the dedicated Android pager header safe area, browser top strips, icon rendering/tint, recent-actions toggle, inspector cards, and address-row editing with IME open/close.
 - Keep Codex browser header/menu surfaces explicitly high-contrast on the black panel background. Do not rely on the global `ListTileTheme` muted icon color for popup menu entries inside the browser panel.
 - Keep browser IME behavior scoped to actual browser focus: the address bar and WebView form fields should switch the route away from terminal `adjustPan`, while simply keeping the sidecar mounted must not leave the route stuck in browser soft-input mode after the panel is hidden.
 - For Codex terminal performance changes, smoke long CLI output and sidecar open/close while output is active; the compact browser sidecar now disposes when closed, so hidden WebView overhead should not linger across IME reopen checks. UI transcript limits must not be described as CLI context limits.
