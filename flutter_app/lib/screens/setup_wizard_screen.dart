@@ -322,8 +322,8 @@ class _SetupWizardScreenState extends State<SetupWizardScreen> {
   }
 
   Future<void> _openCliApiConfig() async {
-    final saved = await CliApiProfilesDialog.show(context);
-    if (saved) {
+    final savedProfileId = await CliApiProfilesDialog.show(context);
+    if (savedProfileId != null) {
       await _loadCliApiConfigStatus();
     }
   }
