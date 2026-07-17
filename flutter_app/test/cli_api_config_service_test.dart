@@ -301,9 +301,11 @@ void main() {
       launcher,
       contains('refusing to fall back to a stale provider'),
     );
+    expect(launcher, contains('openclaw_kill_codex_proxy_port()'));
+    expect(launcher, contains('/proc/net/tcp'));
   });
 
-  test('saving CLI API config restarts the managed Codex proxy', () async {
+  test('saving CLI API config reuses or restarts the managed Codex proxy', () async {
     await CliApiConfigService.saveSharedProfiles(
       const <CliApiConfig>[
         CliApiConfig(
@@ -332,6 +334,8 @@ void main() {
     );
 
     final restartCommand = prootCommands.last;
+    expect(restartCommand, contains('openclaw_kill_codex_proxy_port()'));
+    expect(restartCommand, contains('/proc/net/tcp'));
     expect(restartCommand, contains('pkill -f "[c]odex-proxy.py"'));
     expect(restartCommand, contains('pkill -f "[c]odex-proxy.js"'));
     expect(
@@ -363,6 +367,14 @@ void main() {
       contains('Codex proxy did not become ready on 127.0.0.1:8787'),
     );
     expect(restartCommand, contains('configure_codex_termux_runtime || true'));
+    expect(
+      rootfsFiles['/root/.openclaw/codex-proxy.py'],
+      contains('class ReusableThreadingHTTPServer'),
+    );
+    expect(
+      rootfsFiles['/root/.openclaw/codex-proxy.py'],
+      contains('allow_reuse_address = True'),
+    );
   });
 
   test('saving selected shared API binds that profile to Codex upstream', () async {

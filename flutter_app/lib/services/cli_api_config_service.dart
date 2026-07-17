@@ -475,8 +475,46 @@ class CliApiConfigService {
 
   static Future<void> _syncCodexProxyProcess() async {
     final command = r'''
-pkill -f "[c]odex-proxy.py" >/dev/null 2>&1 || true
-pkill -f "[c]odex-proxy.js" >/dev/null 2>&1 || true
+openclaw_kill_codex_proxy_port() {
+  pkill -f "[c]odex-proxy.py" >/dev/null 2>&1 || true
+  pkill -f "[c]odex-proxy.js" >/dev/null 2>&1 || true
+  command -v python3 >/dev/null 2>&1 || return 0
+  python3 - <<'PY' >/dev/null 2>&1 || true
+import os
+import signal
+
+target_port = format(8787, "04X")
+inodes = set()
+for table in ("/proc/net/tcp", "/proc/net/tcp6"):
+    try:
+        with open(table, "r", encoding="utf-8") as handle:
+            next(handle, None)
+            for line in handle:
+                parts = line.split()
+                if len(parts) > 9 and parts[1].rsplit(":", 1)[-1].upper() == target_port:
+                    inodes.add(parts[9])
+    except OSError:
+        pass
+
+if inodes:
+    for pid in filter(str.isdigit, os.listdir("/proc")):
+        fd_dir = f"/proc/{pid}/fd"
+        try:
+            for fd in os.listdir(fd_dir):
+                try:
+                    link = os.readlink(os.path.join(fd_dir, fd))
+                except OSError:
+                    continue
+                if link.startswith("socket:[") and link[8:-1] in inodes:
+                    try:
+                        os.kill(int(pid), signal.SIGTERM)
+                    except OSError:
+                        pass
+                    break
+        except OSError:
+            pass
+PY
+}
 if [ -r __ENV_PATH__ ] && grep -q "^OPENCLAW_CODEX_PROXY_UPSTREAM=" __ENV_PATH__ 2>/dev/null; then
   set -a
   . __ENV_PATH__
@@ -490,8 +528,7 @@ if [ -r __ENV_PATH__ ] && grep -q "^OPENCLAW_CODEX_PROXY_UPSTREAM=" __ENV_PATH__
   if [ -n "$proxy_health" ] && printf "%s" "$proxy_health" | grep -F -- "$OPENCLAW_CODEX_PROXY_UPSTREAM" >/dev/null 2>&1; then
     proxy_ready=true
   else
-    pkill -f "[c]odex-proxy.py" >/dev/null 2>&1 || true
-    pkill -f "[c]odex-proxy.js" >/dev/null 2>&1 || true
+    openclaw_kill_codex_proxy_port
     for attempt in 1 2 3 4 5 6 7 8 9 10; do
       proxy_health="$(curl -fsS --max-time 1 http://127.0.0.1:8787/health 2>/dev/null || true)"
       [ -z "$proxy_health" ] && break
@@ -3285,13 +3322,52 @@ if [ "\$openclaw_proxy_should_run" = true ]; then
   if command -v configure_codex_termux_runtime >/dev/null 2>&1; then
     configure_codex_termux_runtime || true
   fi
+  openclaw_kill_codex_proxy_port() {
+    pkill -f "/root/.openclaw/codex-proxy.py" >/dev/null 2>&1 || true
+    pkill -f "/root/.openclaw/codex-proxy.js" >/dev/null 2>&1 || true
+    command -v python3 >/dev/null 2>&1 || return 0
+    python3 - <<'PY' >/dev/null 2>&1 || true
+import os
+import signal
+
+target_port = format(8787, "04X")
+inodes = set()
+for table in ("/proc/net/tcp", "/proc/net/tcp6"):
+    try:
+        with open(table, "r", encoding="utf-8") as handle:
+            next(handle, None)
+            for line in handle:
+                parts = line.split()
+                if len(parts) > 9 and parts[1].rsplit(":", 1)[-1].upper() == target_port:
+                    inodes.add(parts[9])
+    except OSError:
+        pass
+
+if inodes:
+    for pid in filter(str.isdigit, os.listdir("/proc")):
+        fd_dir = f"/proc/{pid}/fd"
+        try:
+            for fd in os.listdir(fd_dir):
+                try:
+                    link = os.readlink(os.path.join(fd_dir, fd))
+                except OSError:
+                    continue
+                if link.startswith("socket:[") and link[8:-1] in inodes:
+                    try:
+                        os.kill(int(pid), signal.SIGTERM)
+                    except OSError:
+                        pass
+                    break
+        except OSError:
+            pass
+PY
+  }
   openclaw_proxy_ready=false
   openclaw_proxy_health="\$(curl -fsS --max-time 1 http://127.0.0.1:8787/health 2>/dev/null || true)"
   if [ -n "\$openclaw_proxy_health" ] && printf "%s" "\$openclaw_proxy_health" | grep -F -- "\${OPENCLAW_CODEX_PROXY_UPSTREAM:-}" >/dev/null 2>&1; then
     openclaw_proxy_ready=true
   else
-    pkill -f "/root/.openclaw/codex-proxy.py" >/dev/null 2>&1 || true
-    pkill -f "/root/.openclaw/codex-proxy.js" >/dev/null 2>&1 || true
+    openclaw_kill_codex_proxy_port
     for openclaw_proxy_attempt in 1 2 3 4 5 6 7 8 9 10; do
       openclaw_proxy_health="\$(curl -fsS --max-time 1 http://127.0.0.1:8787/health 2>/dev/null || true)"
       [ -z "\$openclaw_proxy_health" ] && break
@@ -3840,9 +3916,13 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self._proxy()
 
 
+class ReusableThreadingHTTPServer(http.server.ThreadingHTTPServer):
+    allow_reuse_address = True
+
+
 if __name__ == "__main__":
     _, _, _, host, port = config()
-    http.server.ThreadingHTTPServer((host, port), Handler).serve_forever()
+    ReusableThreadingHTTPServer((host, port), Handler).serve_forever()
 ''';
   }
 
