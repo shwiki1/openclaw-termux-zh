@@ -1967,16 +1967,43 @@ require('/root/.openclaw/proot-compat.js');
 
     /** Read a file from inside the rootfs (e.g. /root/.openclaw/openclaw.json). */
     fun readRootfsFile(path: String): String? {
-        val file = File("$rootfsDir/$path")
+        val file = resolveRootfsFile(path)
         return if (file.exists()) file.readText() else null
     }
 
     /** Write content to a file inside the rootfs, creating parent dirs as needed. */
     fun writeRootfsFile(path: String, content: String) {
-        val file = File("$rootfsDir/$path")
-        file.parentFile?.mkdirs()
-        file.writeText(content)
+        val file = resolveRootfsFile(path)
+        val parent = file.parentFile
+            ?: throw IllegalArgumentException("Invalid rootfs path: $path")
+        if (!parent.exists() && !parent.mkdirs()) {
+            throw IllegalStateException("Unable to create parent directory: ${parent.absolutePath}")
+        }
+        applyDirectoryPermissions(parent)
+        if (file.exists()) {
+            file.setReadable(true, false)
+            file.setWritable(true, true)
+        }
+        try {
+            file.writeText(content)
+        } catch (firstError: Exception) {
+            if (file.exists() && !file.delete()) {
+                throw firstError
+            }
+            file.writeText(content)
+        }
         hardenRegularFilePermissions(file)
+    }
+
+    private fun resolveRootfsFile(path: String): File {
+        val root = File(rootfsDir).canonicalFile
+        val relative = path.trim().removePrefix("/")
+        require(relative.isNotEmpty()) { "RootFS path is empty" }
+        val target = File(root, relative).canonicalFile
+        require(target.path == root.path || target.path.startsWith(root.path + File.separator)) {
+            "RootFS path escapes rootfs: $path"
+        }
+        return target
     }
 
     fun copyBundledAssetToFile(assetPath: String, destinationPath: String) {
