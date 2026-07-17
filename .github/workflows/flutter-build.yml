@@ -439,7 +439,7 @@ jobs:
           retention-days: 30
 
       - name: Mirror APK to Gitee Release
-        if: ${{ secrets.GITEE_TOKEN != '' }}
+        if: ${{ !cancelled() && !failure() }}
         env:
           GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
           GITEE_OWNER: cds-y-code
@@ -452,6 +452,10 @@ jobs:
             Standalone Android app mirror for faster regional downloads.
         run: |
           set -euo pipefail
+          if [ -z "${GITEE_TOKEN:-}" ]; then
+            echo "GITEE_TOKEN is not configured; skipping Gitee mirror."
+            exit 0
+          fi
           python3 - <<'PY'
 import base64
 import json
