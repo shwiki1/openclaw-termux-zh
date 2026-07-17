@@ -326,7 +326,7 @@ void main() {
     );
     expect(
       restartCommand,
-      contains('set -a; . /root/.openclaw/codex-proxy.env; set +a'),
+      contains('. /root/.openclaw/codex-proxy.env'),
     );
     expect(
       restartCommand,
