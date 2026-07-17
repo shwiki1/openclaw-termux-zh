@@ -15,6 +15,7 @@ Operational Android utility app for managing an OpenClaw runtime. Existing scree
 - Elevation/shadow: mostly Material cards and low-emphasis borders; keep surfaces restrained.
 
 ## Components
+- `NativeTerminalActivity` owns the ordinary CLI top chrome and must apply system-bar/IME insets at the activity root. Its title and action rows use compact native cards; this is separate from Codex pager chrome and must not change the ordinary terminal shortcut strip into Codex styling.
 - `StatusCard`: repeated navigation/status card with icon, title, subtitle, optional trailing, optional tap.
 - `GatewayControls`, `NodeControls`: operational controls tied to gateway/node lifecycle.
 - `ProgressStep`, `OpenClawReleaseSelector`: setup and install flow components.

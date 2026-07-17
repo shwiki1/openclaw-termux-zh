@@ -32,6 +32,7 @@ class CliApiConfigService {
   static const _codexProxyPath = '/root/.openclaw/codex-proxy.py';
   static const _codexProxyJsPath = '/root/.openclaw/codex-proxy.js';
   static const _codexProxyEnvPath = '/root/.openclaw/codex-proxy.env';
+  static const _codexProxyLogPath = '/tmp/openclaw-codex-proxy.log';
   static const _codexTermuxRuntimePath =
       '/root/.openclaw/codex-termux-runtime.sh';
   static const _codexConfigPath = '/root/.codex/config.toml';
@@ -431,7 +432,25 @@ class CliApiConfigService {
     } catch (_) {
       // Rootfs may not exist yet during first-run preconfiguration.
       // The setup flow calls regenerateRuntimeFiles() again after extraction.
+      return;
     }
+    await _syncCodexProxyProcess();
+  }
+
+  static Future<void> _syncCodexProxyProcess() async {
+    await NativeBridge.runInProot(
+      'pkill -f "[c]odex-proxy.py" >/dev/null 2>&1 || true; '
+      'pkill -f "[c]odex-proxy.js" >/dev/null 2>&1 || true; '
+      'if [ -r $_codexProxyEnvPath ] && '
+      'grep -q "^OPENCLAW_CODEX_PROXY_UPSTREAM=" $_codexProxyEnvPath 2>/dev/null; then '
+      'if command -v python3 >/dev/null 2>&1 && [ -r $_codexProxyPath ]; then '
+      'nohup python3 $_codexProxyPath </dev/null >$_codexProxyLogPath 2>&1 & '
+      'elif command -v node >/dev/null 2>&1 && [ -r $_codexProxyJsPath ]; then '
+      'nohup node $_codexProxyJsPath </dev/null >$_codexProxyLogPath 2>&1 & '
+      'fi; '
+      'fi',
+      timeout: 10,
+    );
   }
 
   static Map<String, dynamic> _emptyConfig() => <String, dynamic>{

@@ -289,6 +289,43 @@ void main() {
     );
   });
 
+  test('saving CLI API config restarts the managed Codex proxy', () async {
+    await CliApiConfigService.saveSharedProfiles(
+      const <CliApiConfig>[
+        CliApiConfig(
+          toolId: 'shared',
+          sharedProfileId: 'shared-main',
+          profileName: 'Main API',
+          baseUrl: 'https://proxy.example.com/v1',
+          apiKey: 'sk-proxy',
+        ),
+      ],
+    );
+    await CliApiConfigService.saveToolSettings(
+      const CliApiConfig(
+        toolId: 'codex',
+        sharedProfileId: 'shared-main',
+        model: 'gpt-5.5',
+      ),
+    );
+
+    final restartCommand = prootCommands.last;
+    expect(restartCommand, contains('pkill -f "[c]odex-proxy.py"'));
+    expect(restartCommand, contains('pkill -f "[c]odex-proxy.js"'));
+    expect(
+      restartCommand,
+      contains('grep -q "^OPENCLAW_CODEX_PROXY_UPSTREAM="'),
+    );
+    expect(
+      restartCommand,
+      contains('nohup python3 /root/.openclaw/codex-proxy.py'),
+    );
+    expect(
+      restartCommand,
+      contains('nohup node /root/.openclaw/codex-proxy.js'),
+    );
+  });
+
   test('Codex installer contains the same Termux runtime repair', () {
     final installCommand = CliToolService.codexTool.installCommand;
     expect(
