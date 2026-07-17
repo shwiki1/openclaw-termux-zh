@@ -117,7 +117,15 @@ def get_release(owner: str, repo: str, token: str, tag: str) -> dict[str, Any] |
         raise
 
 
-def create_release(owner: str, repo: str, token: str, tag: str, name: str, body: str) -> dict[str, Any]:
+def create_release(
+    owner: str,
+    repo: str,
+    token: str,
+    tag: str,
+    name: str,
+    body: str,
+    target_commitish: str,
+) -> dict[str, Any]:
     release = request_json(
         "POST",
         f"/repos/{owner}/{repo}/releases",
@@ -127,6 +135,7 @@ def create_release(owner: str, repo: str, token: str, tag: str, name: str, body:
             "name": name,
             "body": body,
             "prerelease": "false",
+            "target_commitish": target_commitish,
         },
     )
     if not isinstance(release, dict) or "id" not in release:
@@ -152,6 +161,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--tag", required=True)
     parser.add_argument("--name", required=True)
     parser.add_argument("--body", default="")
+    parser.add_argument("--target-commitish", default="main")
     parser.add_argument("--artifact-dir", default="artifacts")
     parser.add_argument("--token-env", default="GITEE_TOKEN")
     return parser.parse_args()
@@ -171,7 +181,15 @@ def main() -> int:
 
     release = get_release(args.owner, args.repo, token, args.tag)
     if release is None:
-        release = create_release(args.owner, args.repo, token, args.tag, args.name, args.body)
+        release = create_release(
+            args.owner,
+            args.repo,
+            token,
+            args.tag,
+            args.name,
+            args.body,
+            args.target_commitish,
+        )
         print(f"Created Gitee release {args.tag}.")
     else:
         print(f"Using existing Gitee release {args.tag}.")
