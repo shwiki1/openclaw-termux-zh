@@ -29,12 +29,12 @@ class NativeTerminalPagerActivity : Activity() {
     private lateinit var restartButton: TextView
     private lateinit var terminalPage: FrameLayout
     private lateinit var browserPage: FrameLayout
+    private lateinit var pagesContainer: FrameLayout
     private lateinit var terminalView: NativeTerminalSessionView
     private lateinit var browserView: NativeCodexBrowserView
     private var activePageIndex = PAGE_TERMINAL
     private var terminalTitle = "Terminal"
     private var sessionClosed = false
-    private var lastImeVisible = false
     private val pagerGestureDetector by lazy {
         GestureDetector(
             this,
@@ -110,20 +110,20 @@ class NativeTerminalPagerActivity : Activity() {
     private fun createContentView(): View {
         rootLayout = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(Color.BLACK)
+            setBackgroundColor(NativeUiPalette.background)
             clipToPadding = false
         }
 
         titleView = TextView(this).apply {
-            setTextColor(Color.WHITE)
-            textSize = 16f
+            setTextColor(NativeUiPalette.textPrimary)
+            textSize = 17f
             typeface = Typeface.DEFAULT_BOLD
             maxLines = 1
             text = terminalTitle
         }
         pageHintView = TextView(this).apply {
-            setTextColor(Color.parseColor("#A0A0A0"))
-            textSize = 11f
+            setTextColor(NativeUiPalette.textMuted)
+            textSize = 11.5f
             typeface = Typeface.MONOSPACE
             text = "左滑切到浏览器 · 右滑回终端"
         }
@@ -149,7 +149,7 @@ class NativeTerminalPagerActivity : Activity() {
 
         browserView = NativeCodexBrowserView(this)
         terminalPage = FrameLayout(this).apply {
-            setBackgroundColor(Color.BLACK)
+            setBackgroundColor(NativeUiPalette.background)
             addView(
                 terminalView,
                 FrameLayout.LayoutParams(
@@ -159,7 +159,7 @@ class NativeTerminalPagerActivity : Activity() {
             )
         }
         browserPage = FrameLayout(this).apply {
-            setBackgroundColor(Color.BLACK)
+            setBackgroundColor(NativeUiPalette.background)
             addView(
                 browserView,
                 FrameLayout.LayoutParams(
@@ -171,28 +171,41 @@ class NativeTerminalPagerActivity : Activity() {
 
         rootLayout.addView(createTitleRow())
         rootLayout.addView(createActionRow())
+        pagesContainer = FrameLayout(this).apply {
+            background = nativeCardDrawable(
+                fillColor = NativeUiPalette.surface,
+                strokeColor = NativeUiPalette.borderStrong,
+                radiusDp = 22,
+            )
+            clipToOutline = true
+            setPadding(dp(1), dp(1), dp(1), dp(1))
+            addView(
+                terminalPage,
+                FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT,
+                    FrameLayout.LayoutParams.MATCH_PARENT,
+                ),
+            )
+            addView(
+                browserPage,
+                FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT,
+                    FrameLayout.LayoutParams.MATCH_PARENT,
+                ),
+            )
+        }
         rootLayout.addView(
-            FrameLayout(this).apply {
-                addView(
-                    terminalPage,
-                    FrameLayout.LayoutParams(
-                        FrameLayout.LayoutParams.MATCH_PARENT,
-                        FrameLayout.LayoutParams.MATCH_PARENT,
-                    ),
-                )
-                addView(
-                    browserPage,
-                    FrameLayout.LayoutParams(
-                        FrameLayout.LayoutParams.MATCH_PARENT,
-                        FrameLayout.LayoutParams.MATCH_PARENT,
-                    ),
-                )
-            },
+            pagesContainer,
             LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 0,
                 1f,
-            ),
+            ).apply {
+                marginStart = dp(12)
+                marginEnd = dp(12)
+                topMargin = dp(6)
+                bottomMargin = dp(12)
+            },
         )
 
         bindWindowInsets()
@@ -202,17 +215,17 @@ class NativeTerminalPagerActivity : Activity() {
     private fun bindWindowInsets() {
         ViewCompat.setOnApplyWindowInsetsListener(rootLayout) { view, insets ->
             val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
-            val imeVisible = insets.isVisible(WindowInsetsCompat.Type.ime())
+            val imeInsets = insets.getInsets(WindowInsetsCompat.Type.ime())
+            val navigationBars = insets.getInsets(WindowInsetsCompat.Type.navigationBars())
+            val imeBottom = (imeInsets.bottom - navigationBars.bottom).coerceAtLeast(0)
+            val imeVisible = insets.isVisible(WindowInsetsCompat.Type.ime()) && imeBottom > 0
             view.updatePadding(
                 left = systemBars.left,
                 top = systemBars.top,
                 right = systemBars.right,
-                bottom = if (imeVisible) 0 else systemBars.bottom,
+                bottom = 0,
             )
-            if (activePageIndex == PAGE_TERMINAL && (imeVisible || imeVisible != lastImeVisible)) {
-                terminalView.post { terminalView.requestToolbarVisible() }
-            }
-            lastImeVisible = imeVisible
+            pagesContainer.updatePadding(bottom = if (imeVisible) imeBottom else systemBars.bottom)
             insets
         }
         ViewCompat.requestApplyInsets(rootLayout)
@@ -222,7 +235,12 @@ class NativeTerminalPagerActivity : Activity() {
         return LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(10), dp(10), dp(10), dp(4))
+            background = nativeCardDrawable(
+                fillColor = NativeUiPalette.surface,
+                strokeColor = NativeUiPalette.border,
+                radiusDp = 18,
+            )
+            setPadding(dp(12), dp(12), dp(12), dp(10))
             addView(createActionButton("返回") { finish() })
             addView(
                 LinearLayout(this@NativeTerminalPagerActivity).apply {
@@ -240,6 +258,14 @@ class NativeTerminalPagerActivity : Activity() {
                 terminalView.closeSession()
                 finish()
             })
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            ).apply {
+                marginStart = dp(12)
+                marginEnd = dp(12)
+                topMargin = dp(12)
+            }
         }
     }
 
@@ -247,7 +273,7 @@ class NativeTerminalPagerActivity : Activity() {
         val row = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(10), dp(0), dp(10), dp(6))
+            setPadding(dp(8), dp(8), dp(8), dp(8))
             addView(terminalTabButton)
             addView(browserTabButton)
             addView(pasteButton)
@@ -256,6 +282,19 @@ class NativeTerminalPagerActivity : Activity() {
         return HorizontalScrollView(this).apply {
             isHorizontalScrollBarEnabled = false
             overScrollMode = View.OVER_SCROLL_NEVER
+            background = nativeCardDrawable(
+                fillColor = NativeUiPalette.surfaceAlt,
+                strokeColor = NativeUiPalette.border,
+                radiusDp = 18,
+            )
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            ).apply {
+                marginStart = dp(12)
+                marginEnd = dp(12)
+                topMargin = dp(10)
+            }
             addView(
                 row,
                 FrameLayout.LayoutParams(
@@ -270,13 +309,13 @@ class NativeTerminalPagerActivity : Activity() {
         return TextView(this).apply {
             text = label
             gravity = Gravity.CENTER
-            setTextColor(Color.WHITE)
+            setTextColor(NativeUiPalette.textPrimary)
             textSize = 12f
             typeface = Typeface.MONOSPACE
             minimumWidth = dp(52)
-            minHeight = dp(34)
-            setPadding(dp(10), dp(6), dp(10), dp(6))
-            background = actionButtonDrawable(Color.parseColor("#161616"))
+            minHeight = dp(38)
+            setPadding(dp(12), dp(8), dp(12), dp(8))
+            background = actionButtonDrawable(NativeUiPalette.surfaceRaised)
             setOnClickListener { onClick(it) }
         }.also { button ->
             button.layoutParams = LinearLayout.LayoutParams(
@@ -289,22 +328,23 @@ class NativeTerminalPagerActivity : Activity() {
     }
 
     private fun actionButtonDrawable(color: Int) =
-        android.graphics.drawable.GradientDrawable().apply {
-            cornerRadius = dp(6).toFloat()
-            setColor(color)
-        }
+        nativeCardDrawable(fillColor = color, strokeColor = NativeUiPalette.borderStrong, radiusDp = 14)
 
     private fun showPage(index: Int) {
         activePageIndex = if (index == PAGE_BROWSER) PAGE_BROWSER else PAGE_TERMINAL
         terminalPage.visibility = if (activePageIndex == PAGE_TERMINAL) View.VISIBLE else View.GONE
         browserPage.visibility = if (activePageIndex == PAGE_BROWSER) View.VISIBLE else View.GONE
         terminalTabButton.background = actionButtonDrawable(
-            if (activePageIndex == PAGE_TERMINAL) Color.parseColor("#2B2B2B")
-            else Color.parseColor("#161616"),
+            if (activePageIndex == PAGE_TERMINAL) NativeUiPalette.accentSoft else NativeUiPalette.surfaceRaised,
+        )
+        terminalTabButton.setTextColor(
+            if (activePageIndex == PAGE_TERMINAL) NativeUiPalette.accent else NativeUiPalette.textPrimary,
         )
         browserTabButton.background = actionButtonDrawable(
-            if (activePageIndex == PAGE_BROWSER) Color.parseColor("#2B2B2B")
-            else Color.parseColor("#161616"),
+            if (activePageIndex == PAGE_BROWSER) NativeUiPalette.accentSoft else NativeUiPalette.surfaceRaised,
+        )
+        browserTabButton.setTextColor(
+            if (activePageIndex == PAGE_BROWSER) NativeUiPalette.accent else NativeUiPalette.textPrimary,
         )
         pasteButton.visibility = if (activePageIndex == PAGE_TERMINAL) View.VISIBLE else View.GONE
         restartButton.visibility = if (activePageIndex == PAGE_TERMINAL) View.VISIBLE else View.GONE
@@ -325,6 +365,8 @@ class NativeTerminalPagerActivity : Activity() {
         } else {
             "浏览器功能已切回原生布局 · 右滑回终端"
         }
+        pasteButton.setTextColor(NativeUiPalette.textPrimary)
+        restartButton.setTextColor(NativeUiPalette.textPrimary)
     }
 
     private fun dp(value: Int): Int =

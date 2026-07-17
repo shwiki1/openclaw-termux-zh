@@ -90,9 +90,9 @@ class NativeTerminalSessionView(
     }
 
     init {
-        setBackgroundColor(Color.BLACK)
+        setBackgroundColor(NativeUiPalette.background)
         contentContainer.orientation = LinearLayout.VERTICAL
-        contentContainer.setBackgroundColor(Color.BLACK)
+        contentContainer.setBackgroundColor(NativeUiPalette.background)
         terminalView.setTerminalViewClient(client)
         terminalView.setTextSize(fontSize)
         terminalView.setTypeface(Typeface.MONOSPACE)
@@ -158,7 +158,9 @@ class NativeTerminalSessionView(
     }
 
     fun requestToolbarVisible() {
-        requestInputStripVisible()
+        if (!config.useNativeToolbar) {
+            requestInputStripVisible()
+        }
     }
 
     fun hideKeyboard() {
@@ -301,11 +303,15 @@ class NativeTerminalSessionView(
         val scrollView = HorizontalScrollView(context).apply {
             isHorizontalScrollBarEnabled = false
             overScrollMode = View.OVER_SCROLL_NEVER
-            setBackgroundColor(Color.BLACK)
+            background = context.nativeCardDrawable(
+                fillColor = NativeUiPalette.surfaceAlt,
+                strokeColor = NativeUiPalette.borderStrong,
+                radiusDp = 18,
+            )
         }
         val row = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
-            setPadding(dpToPx(4), dpToPx(4), dpToPx(4), dpToPx(4))
+            setPadding(dpToPx(6), dpToPx(6), dpToPx(6), dpToPx(6))
             gravity = Gravity.CENTER_VERTICAL
         }
         scrollView.addView(
@@ -385,12 +391,12 @@ class NativeTerminalSessionView(
         val button = TextView(row.context).apply {
             text = label
             gravity = Gravity.CENTER
-            setTextColor(Color.WHITE)
+            setTextColor(NativeUiPalette.textPrimary)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
             typeface = Typeface.MONOSPACE
-            minimumWidth = dpToPx(36)
-            minimumHeight = dpToPx(34)
-            setPadding(dpToPx(6), dpToPx(4), dpToPx(6), dpToPx(4))
+            minimumWidth = dpToPx(40)
+            minimumHeight = dpToPx(36)
+            setPadding(dpToPx(8), dpToPx(5), dpToPx(8), dpToPx(5))
             isClickable = true
             isFocusable = false
             isFocusableInTouchMode = false
@@ -440,10 +446,15 @@ class NativeTerminalSessionView(
     }
 
     private fun toolbarButtonDrawable(color: Int): GradientDrawable {
-        return GradientDrawable().apply {
-            cornerRadius = dpToPx(6).toFloat()
-            setColor(color)
-        }
+        return context.nativeCardDrawable(
+            fillColor = color,
+            strokeColor = if (color == TOOLBAR_ACTIVE_COLOR || color == TOOLBAR_ACTIVE_PRESSED_COLOR) {
+                NativeUiPalette.accent
+            } else {
+                NativeUiPalette.borderStrong
+            },
+            radiusDp = 14,
+        )
     }
 
     private fun updateModifierButtons() {
@@ -517,14 +528,6 @@ class NativeTerminalSessionView(
     private fun requestInputStripVisible() {
         val toolbar = toolbarStrip
         if (config.useNativeToolbar && toolbar != null) {
-            if (toolbar.width <= 0 || toolbar.height <= 0) {
-                return
-            }
-            inputStripRect.set(0, 0, toolbar.width, toolbar.height)
-            toolbar.requestRectangleOnScreen(inputStripRect, true)
-            parentInputStripRect.set(inputStripRect)
-            contentContainer.offsetDescendantRectToMyCoords(toolbar, parentInputStripRect)
-            requestRectangleOnScreen(parentInputStripRect, true)
             return
         }
         if (terminalView.width <= 0 || terminalView.height <= 0) {
@@ -548,10 +551,10 @@ class NativeTerminalSessionView(
         private const val MAX_FONT_SIZE = 32
         private const val MIN_TRANSCRIPT_ROWS = 400
         private const val MAX_TRANSCRIPT_ROWS = 3000
-        private const val TOOLBAR_BUTTON_COLOR = 0xFF161616.toInt()
-        private const val TOOLBAR_BUTTON_PRESSED_COLOR = 0xFF2B2B2B.toInt()
-        private const val TOOLBAR_ACTIVE_COLOR = 0xFF00C853.toInt()
-        private const val TOOLBAR_ACTIVE_PRESSED_COLOR = 0xFF009B3F.toInt()
+        private val TOOLBAR_BUTTON_COLOR = NativeUiPalette.surfaceRaised
+        private val TOOLBAR_BUTTON_PRESSED_COLOR = NativeUiPalette.surface
+        private val TOOLBAR_ACTIVE_COLOR = NativeUiPalette.accentSoft
+        private val TOOLBAR_ACTIVE_PRESSED_COLOR = NativeUiPalette.accentPressed
         private val CTRL_SEQUENCE_MAP = mapOf(
             "\u001b[A" to "\u001b[1;5A",
             "\u001b[B" to "\u001b[1;5B",
