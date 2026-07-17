@@ -443,11 +443,13 @@ jobs:
           GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
         run: |
           set -euo pipefail
-          if [ -z "${GITEE_TOKEN:-}" ]; then
-            echo "GITEE_TOKEN is not configured; skipping Gitee mirror."
-            exit 0
-          fi
-          echo "Gitee mirror is deferred until a dedicated upload script is added."
+          python3 scripts/mirror-apk-to-gitee.py \
+            --owner cds-y-code \
+            --repo openclaw-termux-zh \
+            --tag "v${APP_VERSION_NAME}" \
+            --name "次元虾 v${APP_VERSION_NAME}" \
+            --body "GitHub Actions ${GITHUB_RUN_ID} mirror for ${GITHUB_SHA}." \
+            --artifact-dir artifacts
 
       - name: Comment on PR
         if: github.event_name == 'pull_request'
