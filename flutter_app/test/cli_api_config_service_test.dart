@@ -291,6 +291,16 @@ void main() {
         'codex_configure_browser_mcp "\$codex_config" "/root/.openclaw/browser-mcp.mjs"',
       ),
     );
+    final launcher = rootfsFiles['/root/.openclaw/bin/codex']!;
+    expect(launcher, contains('configure_codex_termux_runtime || true'));
+    expect(
+      launcher,
+      contains('curl -fsS --max-time 1 http://127.0.0.1:8787/health'),
+    );
+    expect(
+      launcher,
+      contains('refusing to fall back to a stale provider'),
+    );
   });
 
   test('saving CLI API config restarts the managed Codex proxy', () async {
@@ -352,6 +362,7 @@ void main() {
       restartCommand,
       contains('Codex proxy did not become ready on 127.0.0.1:8787'),
     );
+    expect(restartCommand, contains('configure_codex_termux_runtime || true'));
   });
 
   test('saving selected shared API binds that profile to Codex upstream', () async {
@@ -430,5 +441,14 @@ void main() {
     expect(installCommand, contains('startup_timeout_sec = 60'));
     expect(installCommand, contains('approvals_reviewer'));
     expect(installCommand, contains('tui.terminal_title'));
+    expect(installCommand, contains('configure_codex_termux_runtime || true'));
+    expect(
+      installCommand,
+      contains('curl -fsS --max-time 1 http://127.0.0.1:8787/health'),
+    );
+    expect(
+      installCommand,
+      contains('refusing to fall back to a stale provider'),
+    );
   });
 }

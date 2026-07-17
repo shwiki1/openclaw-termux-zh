@@ -933,6 +933,16 @@ mkdir -p \
   2>/dev/null || true
 cd "${OPENCLAW_CLI_WORKSPACE:-/root/openclaw-cli-workspace}" 2>/dev/null || cd /root
 if [ -r /root/.openclaw/codex-proxy.env ] && grep -q '^OPENCLAW_CODEX_PROXY_UPSTREAM=' /root/.openclaw/codex-proxy.env 2>/dev/null; then
+  set -a
+  . /root/.openclaw/codex-proxy.env
+  set +a
+  if [ -z "${OPENCLAW_CODEX_PROXY_UPSTREAM:-}" ]; then
+    echo "OpenClaw Codex proxy upstream is empty; refusing to start without a configured upstream." >&2
+    exit 1
+  fi
+  if command -v configure_codex_termux_runtime >/dev/null 2>&1; then
+    configure_codex_termux_runtime || true
+  fi
   pkill -f "/root/.openclaw/codex-proxy.py" >/dev/null 2>&1 || true
   pkill -f "/root/.openclaw/codex-proxy.js" >/dev/null 2>&1 || true
   if command -v python3 >/dev/null 2>&1 && [ -r /root/.openclaw/codex-proxy.py ]; then
@@ -940,7 +950,20 @@ if [ -r /root/.openclaw/codex-proxy.env ] && grep -q '^OPENCLAW_CODEX_PROXY_UPST
   elif command -v node >/dev/null 2>&1 && [ -r /root/.openclaw/codex-proxy.js ]; then
     nohup node /root/.openclaw/codex-proxy.js >/tmp/openclaw-codex-proxy.log 2>&1 &
   fi
-  sleep 0.5
+  openclaw_proxy_ready=false
+  for openclaw_proxy_attempt in 1 2 3 4 5 6 7 8 9 10; do
+    openclaw_proxy_health="$(curl -fsS --max-time 1 http://127.0.0.1:8787/health 2>/dev/null || true)"
+    if [ -n "$openclaw_proxy_health" ] && printf "%s" "$openclaw_proxy_health" | grep -F -- "${OPENCLAW_CODEX_PROXY_UPSTREAM:-}" >/dev/null 2>&1; then
+      openclaw_proxy_ready=true
+      break
+    fi
+    sleep 0.2
+  done
+  if [ "$openclaw_proxy_ready" != true ]; then
+    cat /tmp/openclaw-codex-proxy.log >&2 2>/dev/null || true
+    echo "OpenClaw Codex proxy did not become ready on 127.0.0.1:8787; refusing to fall back to a stale provider." >&2
+    exit 1
+  fi
 fi
 
 CODEX_JS="/opt/openclaw-cli/codex/node_modules/@openai/codex/bin/codex.js"
