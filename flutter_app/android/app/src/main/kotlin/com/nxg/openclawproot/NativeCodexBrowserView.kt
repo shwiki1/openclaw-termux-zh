@@ -1165,9 +1165,10 @@ class NativeCodexBrowserView(
         val automationScripts = loadStoredAutomationScripts()
         val userScripts = loadStoredUserScripts()
         var dialog: AlertDialog? = null
-        val refreshLibrary = {
+        val refreshLibrary: () -> Unit = {
             dialog?.dismiss()
             mainHandler.post { showScriptLibrary() }
+            Unit
         }
         val content = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
