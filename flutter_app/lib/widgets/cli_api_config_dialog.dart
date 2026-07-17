@@ -118,13 +118,30 @@ class _CliApiConfigDialogState extends State<CliApiConfigDialog> {
     }
     final profiles = await CliApiConfigService.loadSharedProfiles();
     if (!mounted) return;
+    final selectedProfileId = _pickSharedProfileId(
+      requested: _sharedProfileId,
+      profiles: profiles,
+    );
+    if (selectedProfileId != _sharedProfileId) {
+      await CliApiConfigService.saveToolSettings(
+        _toolSettings(sharedProfileId: selectedProfileId),
+      );
+      if (!mounted) return;
+    }
     setState(() {
       _sharedProfiles = profiles;
-      _sharedProfileId = _pickSharedProfileId(
-        requested: _sharedProfileId,
-        profiles: profiles,
-      );
+      _sharedProfileId = selectedProfileId;
     });
+  }
+
+  CliApiConfig _toolSettings({String? sharedProfileId}) {
+    return CliApiConfig(
+      toolId: widget.tool.id,
+      sharedProfileId: sharedProfileId ?? _sharedProfileId,
+      model: _modelController.text,
+      reasoningEffort: _reasoningEffort,
+      modelMapping: _mappingController.text,
+    );
   }
 
   Future<void> _fetchModels() async {
@@ -257,15 +274,7 @@ class _CliApiConfigDialogState extends State<CliApiConfigDialog> {
     });
 
     try {
-      await CliApiConfigService.saveToolSettings(
-        CliApiConfig(
-          toolId: widget.tool.id,
-          sharedProfileId: _sharedProfileId,
-          model: _modelController.text,
-          reasoningEffort: _reasoningEffort,
-          modelMapping: _mappingController.text,
-        ),
-      );
+      await CliApiConfigService.saveToolSettings(_toolSettings());
       if (!mounted) return;
       Navigator.of(context).pop(true);
     } catch (error) {

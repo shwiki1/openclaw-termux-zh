@@ -301,6 +301,14 @@ void main() {
         ),
       ],
     );
+    expect(
+      rootfsFiles['/root/.openclaw/codex-proxy.env'],
+      contains("OPENCLAW_CODEX_PROXY_UPSTREAM='https://proxy.example.com/v1'"),
+    );
+    expect(
+      rootfsFiles['/root/.codex/config.toml'],
+      contains('base_url = "http://127.0.0.1:8787/v1"'),
+    );
     await CliApiConfigService.saveToolSettings(
       const CliApiConfig(
         toolId: 'codex',
@@ -318,11 +326,27 @@ void main() {
     );
     expect(
       restartCommand,
+      contains('set -a; . /root/.openclaw/codex-proxy.env; set +a'),
+    );
+    expect(
+      restartCommand,
       contains('nohup python3 /root/.openclaw/codex-proxy.py'),
     );
     expect(
       restartCommand,
       contains('nohup node /root/.openclaw/codex-proxy.js'),
+    );
+    expect(
+      restartCommand,
+      contains('curl -fsS --max-time 1 http://127.0.0.1:8787/health'),
+    );
+    expect(
+      restartCommand,
+      contains('grep -F -- "\$OPENCLAW_CODEX_PROXY_UPSTREAM"'),
+    );
+    expect(
+      restartCommand,
+      contains('Codex proxy did not become ready on 127.0.0.1:8787'),
     );
   });
 

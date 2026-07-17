@@ -443,10 +443,27 @@ class CliApiConfigService {
       'pkill -f "[c]odex-proxy.js" >/dev/null 2>&1 || true; '
       'if [ -r $_codexProxyEnvPath ] && '
       'grep -q "^OPENCLAW_CODEX_PROXY_UPSTREAM=" $_codexProxyEnvPath 2>/dev/null; then '
+      'set -a; . $_codexProxyEnvPath; set +a; '
+      'rm -f $_codexProxyLogPath; '
       'if command -v python3 >/dev/null 2>&1 && [ -r $_codexProxyPath ]; then '
       'nohup python3 $_codexProxyPath </dev/null >$_codexProxyLogPath 2>&1 & '
       'elif command -v node >/dev/null 2>&1 && [ -r $_codexProxyJsPath ]; then '
       'nohup node $_codexProxyJsPath </dev/null >$_codexProxyLogPath 2>&1 & '
+      'else echo "Codex proxy runtime is unavailable" >&2; exit 1; '
+      'fi; '
+      'proxy_ready=false; '
+      'for attempt in 1 2 3 4 5 6 7 8 9 10; do '
+      'proxy_health="\$(curl -fsS --max-time 1 http://127.0.0.1:8787/health 2>/dev/null || true)"; '
+      'if [ -n "$proxy_health" ] && '
+      'printf "%s" "$proxy_health" | grep -F -- "$OPENCLAW_CODEX_PROXY_UPSTREAM" >/dev/null 2>&1; then '
+      'proxy_ready=true; break; '
+      'fi; '
+      'sleep 0.2; '
+      'done; '
+      'if [ "$proxy_ready" != true ]; then '
+      'cat $_codexProxyLogPath >&2 2>/dev/null || true; '
+      'echo "Codex proxy did not become ready on 127.0.0.1:8787" >&2; '
+      'exit 1; '
       'fi; '
       'fi',
       timeout: 10,
@@ -590,13 +607,19 @@ class CliApiConfigService {
     Map<String, dynamic> config,
   ) {
     final toolSettings = _toolSettingsFromConfig(toolId, config);
+    final sharedProfiles = _sharedProfilesFromConfig(config);
     final profile = _sharedProfileById(
-      _sharedProfilesFromConfig(config),
-      toolSettings.sharedProfileId,
-    );
+          sharedProfiles,
+          toolSettings.sharedProfileId,
+        ) ??
+        (toolSettings.sharedProfileId.trim().isEmpty && sharedProfiles.length == 1
+            ? sharedProfiles.single
+            : null);
     return CliApiConfig(
       toolId: toolId,
-      sharedProfileId: toolSettings.sharedProfileId,
+      sharedProfileId: toolSettings.sharedProfileId.trim().isNotEmpty
+          ? toolSettings.sharedProfileId
+          : (profile?.sharedProfileId ?? ''),
       profileName: toolSettings.profileName.trim().isNotEmpty
           ? toolSettings.profileName
           : (profile?.profileName ?? ''),
