@@ -3,7 +3,6 @@ package com.agent.cyx
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
-import android.graphics.Color
 import android.graphics.Typeface
 import android.os.Bundle
 import android.view.Gravity
@@ -13,9 +12,13 @@ import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
 import android.widget.PopupMenu
 import android.widget.TextView
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.updatePadding
 
 class NativeTerminalActivity : Activity() {
     private lateinit var launchGroupId: String
+    private lateinit var rootLayout: LinearLayout
     private lateinit var titleView: TextView
     private lateinit var sessionBadgeView: TextView
     private lateinit var sessionSwitcherView: TextView
@@ -64,33 +67,40 @@ class NativeTerminalActivity : Activity() {
     }
 
     private fun createContentView(): View {
-        val root = LinearLayout(this).apply {
+        window.statusBarColor = NativeUiPalette.background
+        window.navigationBarColor = NativeUiPalette.background
+        rootLayout = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(Color.BLACK)
+            setBackgroundColor(NativeUiPalette.background)
+            clipToPadding = false
         }
 
         titleView = TextView(this).apply {
-            setTextColor(Color.WHITE)
-            textSize = 16f
+            setTextColor(NativeUiPalette.textPrimary)
+            textSize = 15f
             typeface = Typeface.DEFAULT_BOLD
             maxLines = 1
         }
         sessionBadgeView = TextView(this).apply {
-            setTextColor(Color.WHITE)
+            setTextColor(NativeUiPalette.textMuted)
             textSize = 11f
             typeface = Typeface.DEFAULT_BOLD
             setPadding(dp(8), dp(3), dp(8), dp(3))
-            background = actionButtonDrawable(0x22222222)
+            background = nativeCardDrawable(
+                fillColor = NativeUiPalette.surfaceRaised,
+                strokeColor = NativeUiPalette.borderStrong,
+                radiusDp = 8,
+            )
             visibility = View.GONE
         }
-        sessionSwitcherView = createActionButton("SESS") {
+        sessionSwitcherView = createActionButton("会话") {
             showSessionMenu(it)
         }
         terminalContainer = FrameLayout(this)
 
-        root.addView(createTitleRow())
-        root.addView(createActionRow())
-        root.addView(
+        rootLayout.addView(createTitleRow())
+        rootLayout.addView(createActionRow())
+        rootLayout.addView(
             terminalContainer,
             LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
@@ -98,16 +108,42 @@ class NativeTerminalActivity : Activity() {
                 1f,
             ),
         )
+        bindWindowInsets()
+        return rootLayout
+    }
 
-        return root
+    private fun bindWindowInsets() {
+        ViewCompat.setOnApplyWindowInsetsListener(rootLayout) { view, insets ->
+            val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            val imeInsets = insets.getInsets(WindowInsetsCompat.Type.ime())
+            val navigationBars = insets.getInsets(WindowInsetsCompat.Type.navigationBars())
+            val imeBottom = (imeInsets.bottom - navigationBars.bottom).coerceAtLeast(0)
+            val imeVisible = insets.isVisible(WindowInsetsCompat.Type.ime()) && imeBottom > 0
+            view.updatePadding(
+                left = systemBars.left,
+                top = systemBars.top,
+                right = systemBars.right,
+                bottom = 0,
+            )
+            terminalContainer.updatePadding(
+                bottom = if (imeVisible) imeBottom else systemBars.bottom,
+            )
+            insets
+        }
+        ViewCompat.requestApplyInsets(rootLayout)
     }
 
     private fun createTitleRow(): View {
         return LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(8), dp(8), dp(8), dp(4))
-            addView(createActionButton("BACK") { finish() })
+            background = nativeCardDrawable(
+                fillColor = NativeUiPalette.surface,
+                strokeColor = NativeUiPalette.border,
+                radiusDp = 10,
+            )
+            setPadding(dp(8), dp(8), dp(8), dp(8))
+            addView(createActionButton("返回") { finish() })
             addView(
                 titleView,
                 LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
@@ -116,6 +152,14 @@ class NativeTerminalActivity : Activity() {
                 },
             )
             addView(sessionBadgeView)
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            ).apply {
+                marginStart = dp(6)
+                marginEnd = dp(6)
+                topMargin = dp(6)
+            }
         }
     }
 
@@ -123,16 +167,30 @@ class NativeTerminalActivity : Activity() {
         val row = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(8), dp(0), dp(8), dp(6))
+            setPadding(dp(6), dp(6), dp(6), dp(6))
             addView(sessionSwitcherView)
-            addView(createActionButton("NEW") { openNewSession() })
-            addView(createActionButton("PASTE") { activeTerminalView?.paste() })
-            addView(createActionButton("RST") { activeTerminalView?.restart() })
-            addView(createActionButton("CLOSE") { closeCurrentSession() })
+            addView(createActionButton("新建") { openNewSession() })
+            addView(createActionButton("粘贴") { activeTerminalView?.paste() })
+            addView(createActionButton("重启") { activeTerminalView?.restart() })
+            addView(createActionButton("关闭") { closeCurrentSession() })
         }
         return HorizontalScrollView(this).apply {
             isHorizontalScrollBarEnabled = false
             overScrollMode = View.OVER_SCROLL_NEVER
+            background = nativeCardDrawable(
+                fillColor = NativeUiPalette.surfaceAlt,
+                strokeColor = NativeUiPalette.border,
+                radiusDp = 10,
+            )
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            ).apply {
+                marginStart = dp(6)
+                marginEnd = dp(6)
+                topMargin = dp(6)
+                bottomMargin = dp(4)
+            }
             addView(
                 row,
                 FrameLayout.LayoutParams(
@@ -147,13 +205,13 @@ class NativeTerminalActivity : Activity() {
         return TextView(this).apply {
             text = label
             gravity = Gravity.CENTER
-            setTextColor(Color.WHITE)
+            setTextColor(NativeUiPalette.textPrimary)
             textSize = 12f
             typeface = Typeface.MONOSPACE
-            minimumWidth = dp(46)
-            minHeight = dp(34)
-            setPadding(dp(10), dp(6), dp(10), dp(6))
-            background = actionButtonDrawable(0xFF161616.toInt())
+            minimumWidth = dp(44)
+            minHeight = dp(32)
+            setPadding(dp(9), dp(5), dp(9), dp(5))
+            background = actionButtonDrawable(NativeUiPalette.surfaceRaised)
             setOnClickListener { onClick(it) }
         }.also { button ->
             val params = LinearLayout.LayoutParams(
@@ -166,10 +224,11 @@ class NativeTerminalActivity : Activity() {
     }
 
     private fun actionButtonDrawable(color: Int) =
-        android.graphics.drawable.GradientDrawable().apply {
-            cornerRadius = dp(6).toFloat()
-            setColor(color)
-        }
+        nativeCardDrawable(
+            fillColor = color,
+            strokeColor = NativeUiPalette.borderStrong,
+            radiusDp = 8,
+        )
 
     private fun showSession(index: Int, restart: Boolean = false) {
         if (index !in sessions.indices) {
