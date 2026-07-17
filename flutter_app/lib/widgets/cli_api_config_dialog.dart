@@ -112,17 +112,17 @@ class _CliApiConfigDialogState extends State<CliApiConfigDialog> {
   }
 
   Future<void> _openSharedProfilesManager() async {
-    final saved = await CliApiProfilesDialog.show(context);
-    if (!saved) {
+    final savedProfileId = await CliApiProfilesDialog.show(context);
+    if (savedProfileId == null) {
       return;
     }
     final profiles = await CliApiConfigService.loadSharedProfiles();
     if (!mounted) return;
     final selectedProfileId = _pickSharedProfileId(
-      requested: _sharedProfileId,
+      requested: savedProfileId,
       profiles: profiles,
     );
-    if (selectedProfileId != _sharedProfileId) {
+    if (selectedProfileId.isNotEmpty) {
       await CliApiConfigService.saveToolSettings(
         _toolSettings(sharedProfileId: selectedProfileId),
       );

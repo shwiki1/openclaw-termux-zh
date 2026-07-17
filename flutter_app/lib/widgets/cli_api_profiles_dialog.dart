@@ -6,12 +6,12 @@ import '../services/cli_api_config_service.dart';
 class CliApiProfilesDialog extends StatefulWidget {
   const CliApiProfilesDialog({super.key});
 
-  static Future<bool> show(BuildContext context) async {
-    final result = await showDialog<bool>(
+  static Future<String?> show(BuildContext context) async {
+    final result = await showDialog<String>(
       context: context,
       builder: (_) => const CliApiProfilesDialog(),
     );
-    return result == true;
+    return result;
   }
 
   @override
@@ -169,9 +169,13 @@ class _CliApiProfilesDialogState extends State<CliApiProfilesDialog> {
     });
     try {
       _persistCurrentProfileInMemory();
-      await CliApiConfigService.saveSharedProfiles(_profiles);
+      final selectedProfileId = _profiles[_activeIndex].sharedProfileId;
+      await CliApiConfigService.saveSharedProfiles(
+        _profiles,
+        codexSharedProfileId: selectedProfileId,
+      );
       if (!mounted) return;
-      Navigator.of(context).pop(true);
+      Navigator.of(context).pop(selectedProfileId);
     } catch (error) {
       if (!mounted) return;
       setState(() {
@@ -321,7 +325,7 @@ class _CliApiProfilesDialogState extends State<CliApiProfilesDialog> {
       ),
       actions: [
         TextButton(
-          onPressed: _saving ? null : () => Navigator.of(context).pop(false),
+          onPressed: _saving ? null : () => Navigator.of(context).pop(),
           child: const Text('取消'),
         ),
         FilledButton(

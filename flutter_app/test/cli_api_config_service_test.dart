@@ -13,6 +13,7 @@ void main() {
   const channel = MethodChannel(AppConstants.channelName);
   late Map<String, String> rootfsFiles;
   late List<String> prootCommands;
+  String? failedWritePath;
 
   setUp(() {
     SharedPreferences.setMockInitialValues({});
@@ -27,6 +28,9 @@ void main() {
         case 'readRootfsFile':
           return rootfsFiles[arguments['path'] as String];
         case 'writeRootfsFile':
+          if (arguments['path'] == failedWritePath) {
+            return false;
+          }
           rootfsFiles[arguments['path'] as String] =
               arguments['content'] as String;
           return true;
@@ -347,6 +351,68 @@ void main() {
     expect(
       restartCommand,
       contains('Codex proxy did not become ready on 127.0.0.1:8787'),
+    );
+  });
+
+  test('saving selected shared API binds that profile to Codex upstream', () async {
+    await CliApiConfigService.saveSharedProfiles(
+      const <CliApiConfig>[
+        CliApiConfig(
+          toolId: 'shared',
+          sharedProfileId: 'shared-old',
+          profileName: 'Old API',
+          baseUrl: 'https://old.example.com/v1',
+          apiKey: 'sk-old',
+        ),
+        CliApiConfig(
+          toolId: 'shared',
+          sharedProfileId: 'shared-new',
+          profileName: 'New API',
+          baseUrl: 'https://new.example.com/v1',
+          apiKey: 'sk-new',
+        ),
+      ],
+      codexSharedProfileId: 'shared-new',
+    );
+
+    final storedConfig = jsonDecode(
+      rootfsFiles['/root/.openclaw/app/cli-api-config.json']!,
+    ) as Map<String, dynamic>;
+    final codex = (storedConfig['tools'] as Map<String, dynamic>)['codex']
+        as Map<String, dynamic>;
+    expect(codex['sharedProfileId'], 'shared-new');
+    expect(
+      rootfsFiles['/root/.openclaw/codex-proxy.env'],
+      contains("OPENCLAW_CODEX_PROXY_UPSTREAM='https://new.example.com/v1'"),
+    );
+    expect(
+      rootfsFiles['/root/.openclaw/codex-proxy.env'],
+      isNot(contains('old.example.com')),
+    );
+    expect(
+      rootfsFiles['/root/.openclaw/cli-env-codex.sh'],
+      contains("export OPENAI_API_KEY='sk-new'"),
+    );
+  });
+
+  test('installed RootFS write failure is surfaced instead of silently ignored', () async {
+    rootfsFiles['/etc/os-release'] = 'ID=ubuntu\n';
+    failedWritePath = '/root/.openclaw/codex-proxy.env';
+
+    expect(
+      () => CliApiConfigService.saveSharedProfiles(
+        const <CliApiConfig>[
+          CliApiConfig(
+            toolId: 'shared',
+            sharedProfileId: 'shared-main',
+            profileName: 'Main API',
+            baseUrl: 'https://proxy.example.com/v1',
+            apiKey: 'sk-proxy',
+          ),
+        ],
+        codexSharedProfileId: 'shared-main',
+      ),
+      throwsA(isA<Exception>()),
     );
   });
 
