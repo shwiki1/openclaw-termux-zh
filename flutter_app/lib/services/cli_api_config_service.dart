@@ -438,34 +438,44 @@ class CliApiConfigService {
   }
 
   static Future<void> _syncCodexProxyProcess() async {
+    final command = r'''
+pkill -f "[c]odex-proxy.py" >/dev/null 2>&1 || true
+pkill -f "[c]odex-proxy.js" >/dev/null 2>&1 || true
+if [ -r __ENV_PATH__ ] && grep -q "^OPENCLAW_CODEX_PROXY_UPSTREAM=" __ENV_PATH__ 2>/dev/null; then
+  set -a
+  . __ENV_PATH__
+  set +a
+  rm -f __LOG_PATH__
+  if command -v python3 >/dev/null 2>&1 && [ -r __PY_PATH__ ]; then
+    nohup python3 __PY_PATH__ </dev/null >__LOG_PATH__ 2>&1 &
+  elif command -v node >/dev/null 2>&1 && [ -r __JS_PATH__ ]; then
+    nohup node __JS_PATH__ </dev/null >__LOG_PATH__ 2>&1 &
+  else
+    echo "Codex proxy runtime is unavailable" >&2
+    exit 1
+  fi
+  proxy_ready=false
+  for attempt in 1 2 3 4 5 6 7 8 9 10; do
+    proxy_health="$(curl -fsS --max-time 1 http://127.0.0.1:8787/health 2>/dev/null || true)"
+    if [ -n "$proxy_health" ] && printf "%s" "$proxy_health" | grep -F -- "$OPENCLAW_CODEX_PROXY_UPSTREAM" >/dev/null 2>&1; then
+      proxy_ready=true
+      break
+    fi
+    sleep 0.2
+  done
+  if [ "$proxy_ready" != true ]; then
+    cat __LOG_PATH__ >&2 2>/dev/null || true
+    echo "Codex proxy did not become ready on 127.0.0.1:8787" >&2
+    exit 1
+  fi
+fi
+'''
+        .replaceAll('__ENV_PATH__', _codexProxyEnvPath)
+        .replaceAll('__LOG_PATH__', _codexProxyLogPath)
+        .replaceAll('__PY_PATH__', _codexProxyPath)
+        .replaceAll('__JS_PATH__', _codexProxyJsPath);
     await NativeBridge.runInProot(
-      'pkill -f "[c]odex-proxy.py" >/dev/null 2>&1 || true; '
-      'pkill -f "[c]odex-proxy.js" >/dev/null 2>&1 || true; '
-      'if [ -r $_codexProxyEnvPath ] && '
-      'grep -q "^OPENCLAW_CODEX_PROXY_UPSTREAM=" $_codexProxyEnvPath 2>/dev/null; then '
-      'set -a; . $_codexProxyEnvPath; set +a; '
-      'rm -f $_codexProxyLogPath; '
-      'if command -v python3 >/dev/null 2>&1 && [ -r $_codexProxyPath ]; then '
-      'nohup python3 $_codexProxyPath </dev/null >$_codexProxyLogPath 2>&1 & '
-      'elif command -v node >/dev/null 2>&1 && [ -r $_codexProxyJsPath ]; then '
-      'nohup node $_codexProxyJsPath </dev/null >$_codexProxyLogPath 2>&1 & '
-      'else echo "Codex proxy runtime is unavailable" >&2; exit 1; '
-      'fi; '
-      'proxy_ready=false; '
-      'for attempt in 1 2 3 4 5 6 7 8 9 10; do '
-      'proxy_health="\$(curl -fsS --max-time 1 http://127.0.0.1:8787/health 2>/dev/null || true)"; '
-      'if [ -n "$proxy_health" ] && '
-      'printf "%s" "$proxy_health" | grep -F -- "$OPENCLAW_CODEX_PROXY_UPSTREAM" >/dev/null 2>&1; then '
-      'proxy_ready=true; break; '
-      'fi; '
-      'sleep 0.2; '
-      'done; '
-      'if [ "$proxy_ready" != true ]; then '
-      'cat $_codexProxyLogPath >&2 2>/dev/null || true; '
-      'echo "Codex proxy did not become ready on 127.0.0.1:8787" >&2; '
-      'exit 1; '
-      'fi; '
-      'fi',
+      command,
       timeout: 10,
     );
   }

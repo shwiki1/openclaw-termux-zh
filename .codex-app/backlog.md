@@ -1,7 +1,7 @@
 # Backlog
 
 ## Priority Now
-- Build and device-smoke `5.8 / 177`: create or edit the sole shared API, save it, confirm Codex automatically binds it, and verify the 8787 `/health` response reports that exact upstream before sending a Codex request.
+- Build and device-smoke `5.9 / 178`: create or edit the sole shared API, save it, confirm Codex automatically binds it, and verify the 8787 `/health` response reports that exact upstream before sending a Codex request.
 - Device-smoke the locally verified `5.7 / 176` feature build: update-install it over published `5.4`, save a changed Codex API profile and verify the running local proxy uses it without reopening Codex; then open each non-Codex CLI and verify its title/actions sit below the status bar and remain usable through IME open/close.
 - Device-smoke the locally verified `5.6 / 175` feature candidate on Android 10+ arm64, including update install from published `5.4`, native terminal IME open/close, shortcut-bar position, pager navigation, browser form/address IME, script-library actions, and `browser_*` automation.
 - Resolve the signing provenance discrepancy: run `29551560421` reported missing `KEYSTORE_BASE64`, but the downloaded APK uses the established signer SHA-256 `0618eafd1855855749abb7c04d6f44edf9a4b7cb09e26fd882e856d5c994dde6`.

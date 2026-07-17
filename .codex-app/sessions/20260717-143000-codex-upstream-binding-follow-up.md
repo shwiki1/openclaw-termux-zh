@@ -27,7 +27,8 @@ Fix device feedback that a saved API address was not becoming the upstream behin
 ## Cloud Build
 
 - Target branch: GitHub `codex-terminal-ime-lag-fix`.
-- Required fresh build: logical `177`, semantic `5.8.0`, display `5.8`, arm64 only.
+- Run `29587775641` for logical `177`, semantic `5.8.0`, display `5.8` failed during release Flutter compilation because shell variables in the proxy health-check command were parsed as Dart interpolations.
+- Required retry build: logical `178`, semantic `5.9.0`, display `5.9`, arm64 only.
 
 ## Version And Artifacts
 
