@@ -1193,12 +1193,15 @@ class NativeCodexBrowserView(
                     setPadding(0, 0, 0, dp(10))
                     addView(createSmallActionButton("保存最近流程") {
                         saveRecentActionsAsScript(refreshLibrary)
+                        Unit
                     })
                     addView(createSmallActionButton("新增传统脚本") {
                         editUserScript(script = null, initialCode = "", onSaved = refreshLibrary)
+                        Unit
                     })
                     addView(createSmallActionButton("导入") {
                         importUserScript(refreshLibrary)
+                        Unit
                     })
                 },
             )
