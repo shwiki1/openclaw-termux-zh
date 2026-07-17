@@ -163,6 +163,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--body", default="")
     parser.add_argument("--target-commitish", default="main")
     parser.add_argument("--artifact-dir", default="artifacts")
+    parser.add_argument("--max-upload-mb", type=int, default=100)
     parser.add_argument("--token-env", default="GITEE_TOKEN")
     return parser.parse_args()
 
@@ -178,6 +179,22 @@ def main() -> int:
     apk_files = sorted(artifact_dir.glob("*.apk"))
     if not apk_files:
         raise GiteeError(f"No APK files found in {artifact_dir}")
+
+    max_upload_bytes = args.max_upload_mb * 1024 * 1024
+    uploadable_apks = []
+    for apk_file in apk_files:
+        size = apk_file.stat().st_size
+        if size > max_upload_bytes:
+            print(
+                f"Skipping {apk_file.name}: {size} bytes exceeds Gitee release "
+                f"attachment limit ({max_upload_bytes} bytes)."
+            )
+            continue
+        uploadable_apks.append(apk_file)
+
+    if not uploadable_apks:
+        print("No APK files are small enough for Gitee release attachments; skipping Gitee mirror.")
+        return 0
 
     release = get_release(args.owner, args.repo, token, args.tag)
     if release is None:
@@ -198,7 +215,7 @@ def main() -> int:
     if release_id is None:
         raise GiteeError("Gitee release payload did not include an id")
 
-    for apk_file in apk_files:
+    for apk_file in uploadable_apks:
         existing = find_existing_asset(release, apk_file.name)
         if existing is not None:
             print(f"Gitee asset already exists; skipping {apk_file.name}.")
