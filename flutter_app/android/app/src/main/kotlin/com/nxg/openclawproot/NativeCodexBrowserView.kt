@@ -1,9 +1,13 @@
 package com.agent.cyx
 
 import android.annotation.SuppressLint
+import android.app.AlertDialog
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.graphics.Color
 import android.graphics.Typeface
+import android.graphics.drawable.GradientDrawable
 import android.os.Handler
 import android.os.Looper
 import android.text.InputType
@@ -19,8 +23,16 @@ import android.webkit.WebViewClient
 import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.HorizontalScrollView
+import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.PopupMenu
+import android.widget.ScrollView
 import android.widget.TextView
+import androidx.core.content.ContextCompat
+import androidx.core.graphics.drawable.DrawableCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.updatePadding
 import org.json.JSONArray
 import org.json.JSONObject
 import org.json.JSONTokener
@@ -84,19 +96,53 @@ private data class NativeBrowserTab(
     val navigationCallbacks: MutableList<() -> Unit> = mutableListOf(),
 )
 
+private data class NativeBrowserUiActionEntry(
+    val action: String,
+    val message: String,
+    val ok: Boolean,
+)
+
+private enum class NativeBrowserInspectorMode {
+    INTERACTABLES,
+    LINKS,
+}
+
 @SuppressLint("SetJavaScriptEnabled")
 class NativeCodexBrowserView(
     context: Context,
 ) : FrameLayout(context), NativeBrowserAutomationController {
     private val mainHandler = Handler(Looper.getMainLooper())
     private val tabs = mutableListOf<NativeBrowserTab>()
+    private val rootLayout = LinearLayout(context)
+    private val statusColumn = LinearLayout(context)
     private val tabStrip = LinearLayout(context)
+    private val recentActionsColumn = LinearLayout(context)
+    private val inspectorColumn = LinearLayout(context)
+    private val inspectorItemsColumn = LinearLayout(context)
     private val webViewContainer = FrameLayout(context)
     private val addressInput = EditText(context)
     private val bridgeStatusView = TextView(context)
+    private val bridgeMetaView = TextView(context)
     private val uaButton = TextView(context)
+    private val backButton = FrameLayout(context)
+    private val forwardButton = FrameLayout(context)
+    private val reloadButton = FrameLayout(context)
+    private val moreButton = FrameLayout(context)
+    private val newTabButton = FrameLayout(context)
+    private val inspectorToggleButton = TextView(context)
+    private val inspectorElementsButton = TextView(context)
+    private val inspectorLinksButton = TextView(context)
+    private val inspectorErrorView = TextView(context)
+    private val inspectorLoadingView = TextView(context)
     private var nextTabId = 1
     private var activeTabIndex = 0
+    private val recentActions = ArrayDeque<NativeBrowserUiActionEntry>()
+    private var showRecentActions = false
+    private var showInspector = false
+    private var inspectorLoading = false
+    private var inspectorMode = NativeBrowserInspectorMode.INTERACTABLES
+    private var inspectorError = ""
+    private var inspectorItems = emptyList<Map<String, Any?>>()
 
     init {
         setBackgroundColor(Color.BLACK)
@@ -134,104 +180,109 @@ class NativeCodexBrowserView(
         callback: (Map<String, Any?>) -> Unit,
     ) {
         mainHandler.post {
+            val trackedCallback: (Map<String, Any?>) -> Unit = { result ->
+                recordAction(action, result)
+                callback(result)
+                syncChrome()
+            }
             when (action) {
-                "get_state" -> callback(snapshot(message = "Browser state loaded."))
-                "self_test" -> runSelfTest(callback)
+                "get_state" -> trackedCallback(snapshot(message = "Browser state loaded."))
+                "self_test" -> runSelfTest(trackedCallback)
                 "health_check" -> runHealthCheck(
                     quietWindowMs = payload.intValue("quietWindowMs", 500),
                     timeoutMs = payload.intValue("timeoutMs", 10000),
-                    callback = callback,
+                    callback = trackedCallback,
                 )
-                "open" -> openUrl(payload.stringValue("url"), callback)
-                "back" -> goBack(callback)
-                "forward" -> goForward(callback)
-                "reload" -> reloadPage(callback)
-                "tab_list" -> callback(snapshot(message = "Browser tabs loaded."))
-                "tab_new" -> openNewTab(payload.nullableStringValue("url"), callback)
-                "tab_switch" -> switchTab(payload.intValue("id", 0), callback)
-                "tab_close" -> closeTab(payload.nullableIntValue("id"), callback)
-                "set_ua" -> setUserAgent(payload.stringValue("mode"), callback)
-                "click" -> click(payload.stringValue("selector"), callback)
+                "open" -> openUrl(payload.stringValue("url"), trackedCallback)
+                "back" -> goBack(trackedCallback)
+                "forward" -> goForward(trackedCallback)
+                "reload" -> reloadPage(trackedCallback)
+                "tab_list" -> trackedCallback(snapshot(message = "Browser tabs loaded."))
+                "tab_new" -> openNewTab(payload.nullableStringValue("url"), trackedCallback)
+                "tab_switch" -> switchTab(payload.intValue("id", 0), trackedCallback)
+                "tab_close" -> closeTab(payload.nullableIntValue("id"), trackedCallback)
+                "set_ua" -> setUserAgent(payload.stringValue("mode"), trackedCallback)
+                "click" -> click(payload.stringValue("selector"), trackedCallback)
                 "type" -> typeText(
                     selector = payload.stringValue("selector"),
                     text = payload.stringValue("text"),
                     submit = payload.booleanValue("submit"),
-                    callback = callback,
+                    callback = trackedCallback,
                 )
                 "paste" -> pasteText(
                     selector = payload.stringValue("selector"),
                     text = payload.stringValue("text"),
                     submit = payload.booleanValue("submit"),
-                    callback = callback,
+                    callback = trackedCallback,
                 )
                 "wait_for_resource" -> waitForResource(
                     pattern = payload.stringValue("pattern"),
                     timeoutMs = payload.intValue("timeoutMs", 10000),
-                    callback = callback,
+                    callback = trackedCallback,
                 )
                 "list_overlays" -> listOverlays(
                     maxItems = payload.intValue("maxItems", 24),
-                    callback = callback,
+                    callback = trackedCallback,
                 )
                 "click_at" -> clickAt(
                     x = payload.doubleValue("x"),
                     y = payload.doubleValue("y"),
-                    callback = callback,
+                    callback = trackedCallback,
                 )
-                "reset_tab" -> resetTab(payload.nullableStringValue("url"), callback)
+                "reset_tab" -> resetTab(payload.nullableStringValue("url"), trackedCallback)
                 "wait_for_text" -> waitForText(
                     text = payload.stringValue("text"),
                     timeoutMs = payload.intValue("timeoutMs", 10000),
-                    callback = callback,
+                    callback = trackedCallback,
                 )
                 "wait_for_selector" -> waitForSelector(
                     selector = payload.stringValue("selector"),
                     timeoutMs = payload.intValue("timeoutMs", 10000),
                     visible = payload.booleanValue("visible", true),
-                    callback = callback,
+                    callback = trackedCallback,
                 )
                 "scroll" -> scrollPage(
                     selector = payload.nullableStringValue("selector"),
                     direction = payload.stringValue("direction", "down"),
                     pixels = payload.intValue("pixels", 700),
-                    callback = callback,
+                    callback = trackedCallback,
                 )
                 "press_key" -> pressKey(
                     selector = payload.nullableStringValue("selector"),
                     key = payload.stringValue("key"),
-                    callback = callback,
+                    callback = trackedCallback,
                 )
                 "select_option" -> selectOption(
                     selector = payload.stringValue("selector"),
                     value = payload.nullableStringValue("value"),
                     label = payload.nullableStringValue("label"),
                     index = payload.nullableIntValue("index"),
-                    callback = callback,
+                    callback = trackedCallback,
                 )
                 "extract" -> extract(
                     selector = payload.nullableStringValue("selector"),
                     prompt = payload.nullableStringValue("prompt"),
                     maxLength = payload.intValue("maxLength", 4000),
-                    callback = callback,
+                    callback = trackedCallback,
                 )
                 "list_links" -> listLinks(
                     filter = payload.nullableStringValue("filter"),
                     maxItems = payload.intValue("maxItems", 12),
-                    callback = callback,
+                    callback = trackedCallback,
                 )
                 "list_interactables" -> listInteractables(
                     filter = payload.nullableStringValue("filter"),
                     maxItems = payload.intValue("maxItems", 16),
-                    callback = callback,
+                    callback = trackedCallback,
                 )
-                "highlight" -> highlight(payload.stringValue("selector"), callback)
+                "highlight" -> highlight(payload.stringValue("selector"), trackedCallback)
                 "capture_snapshot" -> captureSnapshot(
                     selector = payload.nullableStringValue("selector"),
                     maxLength = payload.intValue("maxLength", 8000),
-                    callback = callback,
+                    callback = trackedCallback,
                 )
-                "eval" -> eval(payload.stringValue("script"), callback)
-                else -> callback(
+                "eval" -> eval(payload.stringValue("script"), trackedCallback)
+                else -> trackedCallback(
                     snapshot(
                         ok = false,
                         message = "Unsupported native browser action: $action",
@@ -242,17 +293,32 @@ class NativeCodexBrowserView(
     }
 
     private fun setupLayout() {
-        val root = LinearLayout(context).apply {
+        rootLayout.apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(Color.BLACK)
+            clipToPadding = false
         }
 
+        statusColumn.apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(12), dp(10), dp(12), dp(6))
+            setBackgroundColor(Color.parseColor("#050505"))
+        }
         bridgeStatusView.apply {
             setTextColor(Color.parseColor("#B7F7CC"))
             textSize = 11f
-            setPadding(dp(10), dp(8), dp(10), dp(2))
+            typeface = Typeface.DEFAULT_BOLD
             text = "浏览器自动化已连接"
         }
+        bridgeMetaView.apply {
+            setTextColor(Color.parseColor("#9CA3AF"))
+            textSize = 11f
+            typeface = Typeface.MONOSPACE
+            maxLines = 1
+            text = "Codex 浏览器原生页"
+        }
+        statusColumn.addView(bridgeStatusView)
+        statusColumn.addView(bridgeMetaView)
 
         val tabScroller = HorizontalScrollView(context).apply {
             isHorizontalScrollBarEnabled = false
@@ -270,21 +336,63 @@ class NativeCodexBrowserView(
             )
         }
 
+        val navRow = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(10), dp(8), dp(10), dp(6))
+            setBackgroundColor(Color.parseColor("#0B0B0B"))
+        }
+        configureIconButton(backButton, R.drawable.lucide_chevron_left, "后退") {
+            executeAction("back", emptyMap()) {}
+        }
+        configureIconButton(forwardButton, R.drawable.lucide_chevron_left, "前进", rotation = 180f) {
+            executeAction("forward", emptyMap()) {}
+        }
+        configureIconButton(reloadButton, R.drawable.lucide_refresh_cw, "刷新") {
+            executeAction("reload", emptyMap()) {}
+        }
+        configureIconButton(newTabButton, R.drawable.lucide_plus, "新建标签页") {
+            executeAction("tab_new", emptyMap()) {}
+        }
+        configureIconButton(moreButton, R.drawable.lucide_layout_list, "更多浏览器工具") {
+            showMoreMenu(it)
+        }
+        navRow.addView(backButton)
+        navRow.addView(forwardButton)
+        navRow.addView(reloadButton)
+        navRow.addView(newTabButton)
+        navRow.addView(
+            View(context),
+            LinearLayout.LayoutParams(0, 1, 1f),
+        )
+        uaButton.apply {
+            minimumWidth = dp(52)
+            gravity = Gravity.CENTER
+            typeface = Typeface.MONOSPACE
+            textSize = 12f
+            setPadding(dp(12), dp(9), dp(12), dp(9))
+            setOnClickListener {
+                val nextMode = if (activeTabOrNull()?.userAgentMode == NativeBrowserUserAgentMode.DESKTOP) {
+                    NativeBrowserUserAgentMode.MOBILE
+                } else {
+                    NativeBrowserUserAgentMode.DESKTOP
+                }
+                executeAction("set_ua", mapOf("mode" to nextMode.value)) {}
+            }
+        }
+        navRow.addView(uaButton)
+        navRow.addView(moreButton)
+
         val addressRow = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(8), dp(6), dp(8), dp(6))
+            setPadding(dp(10), dp(6), dp(10), dp(8))
             setBackgroundColor(Color.parseColor("#111111"))
         }
-
-        addressRow.addView(createActionButton("←") { executeAction("back", emptyMap()) {} })
-        addressRow.addView(createActionButton("→") { executeAction("forward", emptyMap()) {} })
-        addressRow.addView(createActionButton("↻") { executeAction("reload", emptyMap()) {} })
-
         addressInput.apply {
             setTextColor(Color.WHITE)
             setHintTextColor(Color.parseColor("#8A8A8A"))
-            hint = "输入网址或本地地址"
+            hint = "输入网址、后台地址或 localhost"
             background = actionButtonDrawable(Color.parseColor("#161616"))
             typeface = Typeface.MONOSPACE
             textSize = 12f
@@ -292,36 +400,111 @@ class NativeCodexBrowserView(
             setPadding(dp(12), dp(10), dp(12), dp(10))
             setSingleLine(true)
             setOnEditorActionListener { _, _, _ ->
-                openUrl(addressInput.text?.toString().orEmpty()) {}
+                executeAction("open", mapOf("url" to addressInput.text?.toString().orEmpty())) {}
                 true
             }
         }
         addressRow.addView(
             addressInput,
             LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
-                marginStart = dp(6)
-                marginEnd = dp(6)
+                marginEnd = dp(8)
+            },
+        )
+        addressRow.addView(
+            createActionButton("打开") {
+                executeAction("open", mapOf("url" to addressInput.text?.toString().orEmpty())) {}
             },
         )
 
-        uaButton.apply {
-            minimumWidth = dp(48)
+        recentActionsColumn.apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(12), dp(8), dp(12), dp(8))
+            setBackgroundColor(Color.parseColor("#050505"))
+            visibility = View.GONE
         }
-        addressRow.addView(
-            uaButton.also {
-                it.setOnClickListener {
-                    val nextMode = if (activeTabOrNull()?.userAgentMode == NativeBrowserUserAgentMode.DESKTOP) {
-                        NativeBrowserUserAgentMode.MOBILE
-                    } else {
-                        NativeBrowserUserAgentMode.DESKTOP
-                    }
-                    executeAction("set_ua", mapOf("mode" to nextMode.value)) {}
+
+        inspectorColumn.apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(12), dp(8), dp(12), dp(8))
+            setBackgroundColor(Color.parseColor("#070707"))
+            visibility = View.GONE
+        }
+        inspectorToggleButton.apply {
+            setTextColor(Color.WHITE)
+            textSize = 12f
+            typeface = Typeface.DEFAULT_BOLD
+            text = "显示检查器"
+            setOnClickListener {
+                showInspector = !showInspector
+                if (showInspector && inspectorItems.isEmpty() && !inspectorLoading) {
+                    loadInspector(inspectorMode)
                 }
+                updateInspectorUi()
+            }
+        }
+        inspectorElementsButton.apply {
+            setOnClickListener { loadInspector(NativeBrowserInspectorMode.INTERACTABLES) }
+        }
+        inspectorLinksButton.apply {
+            setOnClickListener { loadInspector(NativeBrowserInspectorMode.LINKS) }
+        }
+        inspectorErrorView.apply {
+            setTextColor(Color.parseColor("#FCA5A5"))
+            textSize = 11f
+            visibility = View.GONE
+        }
+        inspectorLoadingView.apply {
+            setTextColor(Color.parseColor("#FBBF24"))
+            textSize = 11f
+            text = "正在读取当前页面…"
+            visibility = View.GONE
+        }
+        val inspectorActionsRow = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            addView(inspectorElementsButton)
+            addView(inspectorLinksButton)
+        }
+        val inspectorScroll = ScrollView(context).apply {
+            isFillViewport = true
+            addView(
+                inspectorItemsColumn.apply {
+                    orientation = LinearLayout.VERTICAL
+                },
+                ViewGroup.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                ),
+            )
+        }
+        inspectorColumn.addView(
+            LinearLayout(context).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                addView(
+                    TextView(context).apply {
+                        text = "页面检查器"
+                        setTextColor(Color.WHITE)
+                        textSize = 12f
+                        typeface = Typeface.DEFAULT_BOLD
+                    },
+                    LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),
+                )
+                addView(inspectorToggleButton)
             },
         )
-        addressRow.addView(createActionButton("打开") {
-            openUrl(addressInput.text?.toString().orEmpty()) {}
-        })
+        inspectorColumn.addView(inspectorActionsRow)
+        inspectorColumn.addView(inspectorLoadingView)
+        inspectorColumn.addView(inspectorErrorView)
+        inspectorColumn.addView(
+            inspectorScroll,
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                dp(210),
+            ).apply {
+                topMargin = dp(8)
+            },
+        )
 
         webViewContainer.layoutParams = LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT,
@@ -329,12 +512,16 @@ class NativeCodexBrowserView(
             1f,
         )
 
-        root.addView(bridgeStatusView)
-        root.addView(tabScroller)
-        root.addView(addressRow)
-        root.addView(webViewContainer)
+        rootLayout.addView(statusColumn)
+        rootLayout.addView(tabScroller)
+        rootLayout.addView(navRow)
+        rootLayout.addView(addressRow)
+        rootLayout.addView(recentActionsColumn)
+        rootLayout.addView(inspectorColumn)
+        rootLayout.addView(webViewContainer)
+        bindInsets()
         addView(
-            root,
+            rootLayout,
             LayoutParams(
                 LayoutParams.MATCH_PARENT,
                 LayoutParams.MATCH_PARENT,
@@ -362,10 +549,67 @@ class NativeCodexBrowserView(
         }
     }
 
-    private fun actionButtonDrawable(color: Int) =
-        android.graphics.drawable.GradientDrawable().apply {
+    private fun configureIconButton(
+        target: FrameLayout,
+        iconRes: Int,
+        description: String,
+        rotation: Float = 0f,
+        onClick: (View) -> Unit,
+    ) {
+        target.removeAllViews()
+        target.background = actionButtonDrawable(Color.parseColor("#111111"), strokeColor = Color.parseColor("#252525"))
+        target.setOnClickListener { onClick(it) }
+        val iconDrawable = ContextCompat.getDrawable(context, iconRes)?.mutate()
+        if (iconDrawable != null) {
+            DrawableCompat.setTint(iconDrawable, Color.WHITE)
+        }
+        target.addView(
+            ImageView(context).apply {
+                setImageDrawable(iconDrawable)
+                this.rotation = rotation
+                contentDescription = description
+            },
+            LayoutParams(dp(18), dp(18), Gravity.CENTER),
+        )
+        target.layoutParams = LinearLayout.LayoutParams(dp(38), dp(38)).apply {
+            marginEnd = dp(6)
+        }
+    }
+
+    private fun createSmallActionButton(
+        label: String,
+        active: Boolean = false,
+        onClick: () -> Unit,
+    ): TextView {
+        return TextView(context).apply {
+            text = label
+            gravity = Gravity.CENTER
+            setTextColor(Color.WHITE)
+            textSize = 11f
+            typeface = Typeface.MONOSPACE
+            setPadding(dp(10), dp(7), dp(10), dp(7))
+            background = actionButtonDrawable(
+                if (active) Color.parseColor("#2A2A2A") else Color.parseColor("#141414"),
+                strokeColor = if (active) Color.parseColor("#B91C1C") else Color.parseColor("#252525"),
+            )
+            setOnClickListener { onClick() }
+        }.also { button ->
+            button.layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+            ).apply {
+                marginEnd = dp(6)
+            }
+        }
+    }
+
+    private fun actionButtonDrawable(color: Int, strokeColor: Int? = null) =
+        GradientDrawable().apply {
             cornerRadius = dp(7).toFloat()
             setColor(color)
+            if (strokeColor != null) {
+                setStroke(dp(1), strokeColor)
+            }
         }
 
     private fun activeTabOrNull(): NativeBrowserTab? = tabs.getOrNull(activeTabIndex)
@@ -392,8 +636,15 @@ class NativeCodexBrowserView(
         }
         bridgeStatusView.text = if (tab.loading) {
             "浏览器自动化已连接 · 页面加载中"
+        } else if (tab.error.isNotEmpty()) {
+            "浏览器自动化已连接 · 页面异常"
         } else {
             "浏览器自动化已连接 · ${tab.title.ifBlank { "Browser" }}"
+        }
+        bridgeMetaView.text = when {
+            tab.error.isNotEmpty() -> tab.error
+            tab.currentUrl.isNotEmpty() -> tab.currentUrl
+            else -> "Codex 浏览器原生页"
         }
         uaButton.text = tab.userAgentMode.label
         uaButton.setTextColor(Color.WHITE)
@@ -401,8 +652,12 @@ class NativeCodexBrowserView(
         uaButton.textSize = 12f
         uaButton.typeface = Typeface.MONOSPACE
         uaButton.setPadding(dp(12), dp(10), dp(12), dp(10))
-        uaButton.background = actionButtonDrawable(Color.parseColor("#161616"))
+        uaButton.background = actionButtonDrawable(Color.parseColor("#161616"), strokeColor = Color.parseColor("#252525"))
+        backButton.alpha = if (tab.canGoBack) 1f else 0.45f
+        forwardButton.alpha = if (tab.canGoForward) 1f else 0.45f
         renderTabStrip()
+        renderRecentActions()
+        updateInspectorUi()
     }
 
     private fun renderTabStrip() {
@@ -410,10 +665,8 @@ class NativeCodexBrowserView(
         tabs.forEachIndexed { index, tab ->
             tabStrip.addView(
                 TextView(context).apply {
-                    text = buildString {
-                        append(if (index == activeTabIndex) "● " else "○ ")
-                        append(tab.title.ifBlank { "Browser ${index + 1}" }.take(24))
-                    }
+                    val title = tab.title.ifBlank { "标签页 ${index + 1}" }.take(22)
+                    text = "${tab.userAgentMode.label} · $title"
                     setTextColor(Color.WHITE)
                     textSize = 11f
                     typeface = Typeface.MONOSPACE
@@ -421,6 +674,7 @@ class NativeCodexBrowserView(
                     background = actionButtonDrawable(
                         if (index == activeTabIndex) Color.parseColor("#2A2A2A")
                         else Color.parseColor("#141414"),
+                        strokeColor = if (index == activeTabIndex) Color.parseColor("#B91C1C") else Color.parseColor("#252525"),
                     )
                     setOnClickListener {
                         activeIndexSafeSet(index)
@@ -435,12 +689,294 @@ class NativeCodexBrowserView(
                 },
             )
         }
-        tabStrip.addView(createActionButton("+") {
-            executeAction("tab_new", emptyMap()) {}
-        })
-        tabStrip.addView(createActionButton("×") {
+        tabStrip.addView(createSmallActionButton("关闭当前") {
             executeAction("tab_close", emptyMap()) {}
         })
+    }
+
+    private fun bindInsets() {
+        ViewCompat.setOnApplyWindowInsetsListener(rootLayout) { view, insets ->
+            val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            val imeVisible = insets.isVisible(WindowInsetsCompat.Type.ime())
+            view.updatePadding(
+                left = systemBars.left,
+                right = systemBars.right,
+                bottom = if (imeVisible) 0 else systemBars.bottom,
+            )
+            insets
+        }
+        ViewCompat.requestApplyInsets(rootLayout)
+    }
+
+    private fun recordAction(action: String, result: Map<String, Any?>) {
+        val message = result["message"]?.toString()?.trim().orEmpty().ifEmpty { action }
+        val ok = when (val value = result["ok"]) {
+            is Boolean -> value
+            else -> true
+        }
+        if (!ok) {
+            showRecentActions = true
+        }
+        recentActions.addFirst(NativeBrowserUiActionEntry(action = action, message = message, ok = ok))
+        while (recentActions.size > 3) {
+            recentActions.removeLast()
+        }
+    }
+
+    private fun renderRecentActions() {
+        recentActionsColumn.removeAllViews()
+        if (!showRecentActions || recentActions.isEmpty()) {
+            recentActionsColumn.visibility = View.GONE
+            return
+        }
+        recentActionsColumn.visibility = View.VISIBLE
+        recentActionsColumn.addView(
+            TextView(context).apply {
+                text = "最近浏览器操作"
+                setTextColor(Color.WHITE)
+                textSize = 12f
+                typeface = Typeface.DEFAULT_BOLD
+            },
+        )
+        recentActions.forEach { entry ->
+            recentActionsColumn.addView(
+                TextView(context).apply {
+                    text = "${if (entry.ok) "成功" else "失败"} · ${entry.action} · ${entry.message}"
+                    setTextColor(if (entry.ok) Color.parseColor("#D1FAE5") else Color.parseColor("#FECACA"))
+                    textSize = 11f
+                    typeface = Typeface.MONOSPACE
+                    setPadding(0, dp(6), 0, 0)
+                },
+            )
+        }
+    }
+
+    private fun updateInspectorUi() {
+        val shouldShow = showInspector || inspectorLoading || inspectorItems.isNotEmpty()
+        inspectorColumn.visibility = if (shouldShow) View.VISIBLE else View.GONE
+        inspectorToggleButton.text = if (showInspector) "隐藏检查器" else "显示检查器"
+        inspectorLoadingView.visibility = if (inspectorLoading) View.VISIBLE else View.GONE
+        inspectorErrorView.visibility = if (inspectorError.isNotEmpty()) View.VISIBLE else View.GONE
+        inspectorErrorView.text = inspectorError
+        inspectorElementsButton.text = if (inspectorMode == NativeBrowserInspectorMode.INTERACTABLES) "元素中" else "元素"
+        inspectorLinksButton.text = if (inspectorMode == NativeBrowserInspectorMode.LINKS) "链接中" else "链接"
+        inspectorElementsButton.background = actionButtonDrawable(
+            if (inspectorMode == NativeBrowserInspectorMode.INTERACTABLES) Color.parseColor("#2A2A2A") else Color.parseColor("#141414"),
+            strokeColor = if (inspectorMode == NativeBrowserInspectorMode.INTERACTABLES) Color.parseColor("#B91C1C") else Color.parseColor("#252525"),
+        )
+        inspectorLinksButton.background = actionButtonDrawable(
+            if (inspectorMode == NativeBrowserInspectorMode.LINKS) Color.parseColor("#2A2A2A") else Color.parseColor("#141414"),
+            strokeColor = if (inspectorMode == NativeBrowserInspectorMode.LINKS) Color.parseColor("#B91C1C") else Color.parseColor("#252525"),
+        )
+        inspectorElementsButton.setTextColor(Color.WHITE)
+        inspectorLinksButton.setTextColor(Color.WHITE)
+        inspectorElementsButton.gravity = Gravity.CENTER
+        inspectorLinksButton.gravity = Gravity.CENTER
+        inspectorElementsButton.textSize = 11f
+        inspectorLinksButton.textSize = 11f
+        inspectorElementsButton.typeface = Typeface.MONOSPACE
+        inspectorLinksButton.typeface = Typeface.MONOSPACE
+        inspectorElementsButton.setPadding(dp(10), dp(8), dp(10), dp(8))
+        inspectorLinksButton.setPadding(dp(10), dp(8), dp(10), dp(8))
+        renderInspectorItems()
+    }
+
+    private fun renderInspectorItems() {
+        inspectorItemsColumn.removeAllViews()
+        if (inspectorItems.isEmpty()) {
+            inspectorItemsColumn.addView(
+                TextView(context).apply {
+                    text = if (inspectorMode == NativeBrowserInspectorMode.LINKS) {
+                        "当前页面没有可见链接。"
+                    } else {
+                        "当前页面没有可见可交互元素。"
+                    }
+                    setTextColor(Color.parseColor("#9CA3AF"))
+                    textSize = 11f
+                    setPadding(0, dp(4), 0, 0)
+                },
+            )
+            return
+        }
+        inspectorItems.forEach { item ->
+            inspectorItemsColumn.addView(
+                if (inspectorMode == NativeBrowserInspectorMode.LINKS) {
+                    createLinkInspectorCard(item)
+                } else {
+                    createInteractableInspectorCard(item)
+                },
+            )
+        }
+    }
+
+    private fun createLinkInspectorCard(item: Map<String, Any?>): View {
+        val href = item["href"]?.toString()?.trim().orEmpty()
+        val text = item["text"]?.toString()?.trim().orEmpty().ifEmpty { "(无链接文字)" }
+        return LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(10), dp(10), dp(10), dp(10))
+            background = actionButtonDrawable(Color.parseColor("#111111"), strokeColor = Color.parseColor("#252525"))
+            addView(
+                TextView(context).apply {
+                    setTextColor(Color.WHITE)
+                    textSize = 12f
+                    typeface = Typeface.DEFAULT_BOLD
+                    this.text = text
+                },
+            )
+            addView(
+                TextView(context).apply {
+                    setTextColor(Color.parseColor("#9CA3AF"))
+                    textSize = 11f
+                    typeface = Typeface.MONOSPACE
+                    this.text = href
+                    setPadding(0, dp(4), 0, 0)
+                },
+            )
+            addView(
+                LinearLayout(context).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    addView(createSmallActionButton("复制") { copyToClipboard(href, "链接地址") })
+                    addView(createSmallActionButton("打开") {
+                        executeAction("open", mapOf("url" to href)) {}
+                    })
+                },
+            )
+        }.also { card ->
+            card.layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+            ).apply {
+                bottomMargin = dp(8)
+            }
+        }
+    }
+
+    private fun createInteractableInspectorCard(item: Map<String, Any?>): View {
+        val selector = item["selector"]?.toString()?.trim().orEmpty()
+        val label = item["text"]?.toString()?.trim().orEmpty()
+            .ifEmpty { item["aria"]?.toString()?.trim().orEmpty() }
+            .ifEmpty { item["tag"]?.toString()?.trim().orEmpty().ifEmpty { "element" } }
+        val meta = listOf(
+            item["tag"]?.toString()?.trim().orEmpty(),
+            item["role"]?.toString()?.trim().orEmpty(),
+            item["type"]?.toString()?.trim().orEmpty(),
+            item["placeholder"]?.toString()?.trim().orEmpty(),
+        ).filter { it.isNotEmpty() }.joinToString(" · ")
+        return LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(10), dp(10), dp(10), dp(10))
+            background = actionButtonDrawable(Color.parseColor("#111111"), strokeColor = Color.parseColor("#252525"))
+            addView(
+                TextView(context).apply {
+                    setTextColor(Color.WHITE)
+                    textSize = 12f
+                    typeface = Typeface.DEFAULT_BOLD
+                    text = label
+                },
+            )
+            if (meta.isNotEmpty()) {
+                addView(
+                    TextView(context).apply {
+                        setTextColor(Color.parseColor("#9CA3AF"))
+                        textSize = 11f
+                        text = meta
+                        setPadding(0, dp(4), 0, 0)
+                    },
+                )
+            }
+            addView(
+                TextView(context).apply {
+                    setTextColor(Color.parseColor("#FBBF24"))
+                    textSize = 11f
+                    typeface = Typeface.MONOSPACE
+                    text = selector
+                    setPadding(0, dp(4), 0, 0)
+                },
+            )
+            addView(
+                LinearLayout(context).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    addView(createSmallActionButton("复制") { copyToClipboard(selector, "选择器") })
+                    addView(createSmallActionButton("标记") {
+                        executeAction("highlight", mapOf("selector" to selector)) {}
+                    })
+                    addView(createSmallActionButton("点击") {
+                        executeAction("click", mapOf("selector" to selector)) {}
+                    })
+                },
+            )
+        }.also { card ->
+            card.layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+            ).apply {
+                bottomMargin = dp(8)
+            }
+        }
+    }
+
+    private fun loadInspector(mode: NativeBrowserInspectorMode) {
+        inspectorMode = mode
+        inspectorLoading = true
+        inspectorError = ""
+        inspectorItems = emptyList()
+        showInspector = true
+        updateInspectorUi()
+        val callback: (Map<String, Any?>) -> Unit = { result ->
+            val actionResult = result["actionResult"] as? Map<*, *>
+            val items = actionResult?.get("items") as? List<*>
+            inspectorItems = items
+                ?.mapNotNull { item ->
+                    val entry = item as? Map<*, *> ?: return@mapNotNull null
+                    entry.entries.associate { entryItem -> entryItem.key.toString() to entryItem.value }
+                }
+                ?: emptyList()
+            inspectorLoading = false
+            val ok = when (val value = result["ok"]) {
+                is Boolean -> value
+                else -> true
+            }
+            inspectorError = if (ok) "" else result["message"]?.toString().orEmpty()
+            updateInspectorUi()
+        }
+        if (mode == NativeBrowserInspectorMode.LINKS) {
+            listLinks(filter = null, maxItems = 20, callback = callback)
+        } else {
+            listInteractables(filter = null, maxItems = 24, callback = callback)
+        }
+    }
+
+    private fun showMoreMenu(anchor: View) {
+        PopupMenu(context, anchor).apply {
+            menu.add(0, MENU_RECENT_ACTIONS, 0, if (showRecentActions) "隐藏最近操作" else "显示最近操作")
+            menu.add(0, MENU_INSPECTOR, 1, if (showInspector) "隐藏检查器" else "显示检查器")
+            menu.add(0, MENU_SNAPSHOT, 2, "查看页面快照")
+            menu.add(0, MENU_COPY_URL, 3, "复制当前地址")
+            menu.add(0, MENU_WELCOME, 4, "打开欢迎页")
+            menu.add(0, MENU_SELF_TEST, 5, "运行自检")
+            setOnMenuItemClickListener { item ->
+                when (item.itemId) {
+                    MENU_RECENT_ACTIONS -> {
+                        showRecentActions = !showRecentActions
+                        renderRecentActions()
+                    }
+                    MENU_INSPECTOR -> {
+                        showInspector = !showInspector
+                        if (showInspector && inspectorItems.isEmpty() && !inspectorLoading) {
+                            loadInspector(inspectorMode)
+                        }
+                        updateInspectorUi()
+                    }
+                    MENU_SNAPSHOT -> showSnapshotPreview()
+                    MENU_COPY_URL -> copyToClipboard(activeTabOrNull()?.currentUrl.orEmpty(), "当前地址")
+                    MENU_WELCOME -> activeTabOrNull()?.let(::loadWelcomePage)
+                    MENU_SELF_TEST -> executeAction("self_test", emptyMap()) {}
+                }
+                true
+            }
+            show()
+        }
     }
 
     private fun activeIndexSafeSet(index: Int) {
@@ -449,6 +985,42 @@ class NativeCodexBrowserView(
         }
         activeTabIndex = index
         attachActiveTab()
+    }
+
+    private fun showSnapshotPreview() {
+        captureSnapshot(selector = null, maxLength = 3200) { result ->
+            val actionResult = result["actionResult"] as? Map<*, *>
+            val title = actionResult?.get("title")?.toString()?.trim().orEmpty().ifEmpty { "当前页面" }
+            val url = actionResult?.get("url")?.toString()?.trim().orEmpty()
+            val text = actionResult?.get("text")?.toString()?.trim().orEmpty()
+            val summary = buildString {
+                append(title)
+                if (url.isNotEmpty()) {
+                    append("\n")
+                    append(url)
+                }
+                if (text.isNotEmpty()) {
+                    append("\n\n")
+                    append(text.take(1800))
+                }
+            }
+            AlertDialog.Builder(context)
+                .setTitle("页面快照")
+                .setMessage(summary.ifEmpty { "当前页面没有可读取的快照内容。" })
+                .setPositiveButton("复制") { _, _ ->
+                    copyToClipboard(summary, "页面快照")
+                }
+                .setNegativeButton("关闭", null)
+                .show()
+        }
+    }
+
+    private fun copyToClipboard(text: String, label: String) {
+        if (text.trim().isEmpty()) {
+            return
+        }
+        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager ?: return
+        clipboard.setPrimaryClip(ClipData.newPlainText(label, text))
     }
 
     private fun createTab(
@@ -1681,6 +2253,12 @@ class NativeCodexBrowserView(
         (value * resources.displayMetrics.density).toInt()
 
     companion object {
+        private const val MENU_RECENT_ACTIONS = 1001
+        private const val MENU_INSPECTOR = 1002
+        private const val MENU_SNAPSHOT = 1003
+        private const val MENU_COPY_URL = 1004
+        private const val MENU_WELCOME = 1005
+        private const val MENU_SELF_TEST = 1006
         private const val WELCOME_HTML = """
 <!doctype html>
 <html lang="zh-CN">

@@ -1,6 +1,7 @@
 # Backlog
 
 ## Priority Now
+- Device-smoke the 2026-07-17 native Codex pager UI stabilization on Android: verify top safe-area spacing, terminal shortcut-bar lift with IME, browser icon-button rendering, recent-actions toggle, and inspector cards before any new cloud build.
 - Device-smoke the native Codex pager on Android before any new cloud build: terminal full-scrollback IME open/close smoothness, horizontal page switching, native browser address-bar/form input, and `browser_*` tool actions against the new native `WebView`.
 - Decide whether the current native browser parity is sufficient to replace the old Flutter browser sidecar for Codex, or whether the script assistant / inspector UI also needs a native port before push/build.
 - Push the native terminal activity follow-up to GitHub `main`, watch the next arm64 release build, and record the resulting post-`172` provenance before any further terminal IME work.

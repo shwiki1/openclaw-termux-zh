@@ -1,9 +1,10 @@
 # Current App State
 
-Last updated: 2026-07-16 UTC
+Last updated: 2026-07-17 UTC
 
 ## Current Truth
 - Active fix task: move Codex off the Flutter `TerminalScreen`/`TerminalBrowserPanel` mixed page and onto a native dual-page Android surface. The current local follow-up launches ordinary CLI tools into `NativeTerminalActivity`, and launches Codex into a new `NativeTerminalPagerActivity` with page 1 native terminal and page 2 native `WebView` browser, while keeping the existing OpenAI-compatible `responses` proxy and browser loopback bridge contracts intact. This is an original rewrite guided by ZeroTermux/Termux architecture, not a GPL source copy.
+- Current local UI stabilization pass for the native Codex pager now adds root safe-area handling in `NativeTerminalPagerActivity`, restores terminal-toolbar IME visibility requests for native-toolbar sessions inside `NativeTerminalSessionView`, and upgrades `NativeCodexBrowserView` from a bare text-button shell to a denser native browser surface with separate status/tab/nav/address strips, Lucide-style native icon buttons, a recent-actions strip, and a native inspector panel for links/interactables. This still needs Android device smoke; local Flutter/Dart/Kotlin SDKs remain unavailable.
 - Release baseline: local `f206113` and remote `e698148` share the exact verified `3.4` source tree. GitHub `v3.5.0`/`v3.6.0`, their tags, APK assets, and associated Actions runs were removed; `basic-resource` remains the valid 3.4 baseline resource.
 - Current published release: `v5.4.0 / 5.4 / 173`, derived from source anchor `2.5.0+143`. Workflow `.github/workflows/flutter-build.yml` enforces logical build `166` as its release floor and only packages `arm64-v8a`.
 - Cloud result: Actions run `29538124523` succeeded at remote commit `02602bb2bed28feae0b9c4af9d3db20c83f329a3` and published `CiYuanXia-v5.4-173-arm64-v8a.apk` in GitHub Release `v5.4.0`. The build and release jobs both completed successfully.
@@ -42,9 +43,13 @@ Last updated: 2026-07-16 UTC
 - Compact Codex browser sidecar now disposes when closed on narrow screens, so the terminal route no longer carries a hidden WebView tree through IME reopen checks; the native terminal also skips redundant `requestFocus()` calls when keyboard reopen is already focused.
 
 ## Active Task
-- Device-smoke the new native Codex pager path on Android and confirm that IME open/close remains smooth with full-screen terminal scrollback, page 1 terminal and page 2 browser both stay responsive, the native shortcut bar stays attached above the keyboard, and `browser_*` Codex automation still works against the native `WebView`.
+- Device-smoke the stabilized native Codex pager path on Android and confirm three things on the same build: the terminal shortcut bar now stays attached above the IME without double-lift, the pager top area is no longer clipped by status-bar/cutout space, and the upgraded native browser header/inspector/recent-actions strips remain responsive while `browser_*` Codex automation still works against the native `WebView`.
 
 ## Recently Changed
+- 2026-07-17 native Codex pager UI stabilization: reworked `NativeTerminalPagerActivity.kt` so the pager root now applies system-bar insets and only shows terminal-specific action chips on the terminal page, added a direct `requestToolbarVisible()` path in `NativeTerminalSessionView.kt` so native-toolbar sessions can re-request only the toolbar strip above the IME, and rebuilt `NativeCodexBrowserView.kt` into a denser native browser layout with separate status/tab/nav/address rows, icon buttons, recent browser actions, a popup tools menu, snapshot preview, and an inspector panel for links/interactables. Updated `lib/test.js` source guards to cover the new native pager/browser structure. Local checks passed: `npm test`, `npm run lint -- --no-warn-ignored`, and `git diff --check`. Local `flutter`, `dart`, and `kotlinc` remain unavailable, so Flutter analyze/test and native compile checks were not run locally.
+- Committed the native Codex pager follow-up locally as `b7a259a` (`feat: add native codex terminal pager`).
+- Pushed `b7a259a1a053b911dfd74dd31fc313e12ec8cc3a` to GitHub branch `codex-terminal-ime-lag-fix` and triggered GitHub Actions run `29540907213` on Thursday, July 16, 2026 at `22:55 UTC`.
+- Current cloud-build status for run `29540907213`: still `In progress` at handoff time. Public workflow page shows `Status In progress`, `Artifacts –`, and the only visible job is `Build arm64-v8a APK`; local artifact download has not happened yet because the run has not completed.
 - Reworked `flutter_app/lib/screens/cli_tools_screen.dart` again so CLI tools no longer push Flutter `TerminalScreen`. Ordinary CLI tools now resolve the PRoot shell config in Dart and launch `NativeTerminalActivity`, while Codex tools start `BrowserAutomationService`, bind `NativeBrowserAutomationDelegate`, and launch the new native `NativeTerminalPagerActivity`.
 - Added `flutter_app/lib/services/native_browser_automation_delegate.dart` and extended `NativeBridge`/`MainActivity` with `openNativeTerminalPagerActivity` plus `invokeNativeBrowserAction`. The existing Dart browser loopback/token bridge and saved-script libraries stay in place, but browser actions now proxy into the native browser when the pager activity is active.
 - Added `flutter_app/android/app/src/main/kotlin/com/nxg/openclawproot/NativeTerminalPagerActivity.kt` and `NativeCodexBrowserView.kt`. The pager hosts a native terminal page and a native `WebView` browser page, supports left/right page switching, and exposes the current browser tab/automation surface to Flutter through `NativeBrowserAutomationRegistry`.
@@ -203,6 +208,7 @@ Last updated: 2026-07-16 UTC
 - GitHub Actions run `29283260131` succeeded from remote commit `7d9773731764`; downloaded `CiYuanXia-v2.0.50-140-arm64-v8a.apk` and verified ZIP integrity, arm64 PRoot libraries, APK SHA256, and manifest version fields.
 
 ## Checks
+- 2026-07-17 native Codex pager UI stabilization: `npm test` passed with 31 checks; `npm run lint -- --no-warn-ignored` passed; `git diff --check` passed. Local `flutter`, `dart`, and `kotlinc` remain unavailable, so Flutter analyze/test and native compile checks were not run locally.
 - 2026-07-16 terminal soft-input resize follow-up: `npm test` passed with 31 checks; `npm run lint -- --no-warn-ignored` passed; `git diff --check` passed. Local `flutter`, `dart`, and `kotlinc` remain unavailable, so Flutter analyze/test and native compile checks were not run locally.
 - 2026-07-16 native-toolbar rect-split follow-up: `npm test` passed with 31 checks; `npm run lint -- --no-warn-ignored` passed; `git diff --check` passed. Local `flutter`, `dart`, and `kotlinc` remain unavailable, so Flutter analyze/test and native compile checks were not run locally.
 - 2026-07-15 terminal shortcut feedback build: `git diff --check` passed; `npm test` passed with 28 checks; `npm run lint -- --no-warn-ignored` passed; `gh auth status` confirmed the authenticated `shwiki1` GitHub session; GitHub Actions run `29377510459` succeeded and published release `v3.2.0`. Local `flutter`, `dart`, and `kotlinc` remain unavailable, so Flutter analyze/test and native compile checks were not run locally.
@@ -295,6 +301,9 @@ Last updated: 2026-07-16 UTC
 - Project policy in `AGENTS.md`: build/release only Android `arm64-v8a` APK unless explicitly requested.
 
 ## Next Actions
+- Device-smoke the new native Codex pager UI build on Android: verify top safe-area spacing, repeated IME open/close with a full terminal transcript, and that the terminal shortcut strip rises once with the keyboard instead of staying underneath it.
+- Device-smoke the upgraded native browser page on Android: verify status/tab/nav/address rows fit on-screen, Lucide-style icon buttons render correctly, recent actions toggle works, the inspector loads both interactables and links, and browser form inputs still cooperate with IME open/close.
+- Compare the native browser page against the old Flutter `TerminalBrowserPanel` and decide whether the remaining gap is small enough to keep the native browser path, or whether script-library parity needs another native follow-up before the next cloud build.
 - Push the terminal IME window-resize handoff follow-up to GitHub `main`, watch the next arm64 release build, and download the resulting APK for Android device smoke.
 - Device-smoke the published `151 / 3.2` APK, specifically: confirm shortcut-key haptic feedback and pressed background states on the terminal key strip, then open terminal, dismiss IME, reopen IME several times in the same terminal session, and leave/reopen the terminal screen to confirm the lightweight native show/retry path removed the sticky reopen feel.
 - Verify the published APK installer, settings page, and in-app version text all show `3.2` while numeric build code remains separate.

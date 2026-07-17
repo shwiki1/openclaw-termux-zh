@@ -199,19 +199,22 @@ jobs:
             VERSION_CODE="$MINIMUM_RELEASE_BUILD"
           fi
           LATEST_RELEASE_BUILD="$(
-            {
-              gh api "repos/${GITHUB_REPOSITORY}/releases/latest" --jq '.assets[]?.name' 2>/dev/null || true
-            } \
+            gh api "repos/${GITHUB_REPOSITORY}/releases?per_page=20" \
+              --jq '.[] | select(.draft == false and .prerelease == false) | .assets[]?.name' \
               | sed -nE 's/.*-([0-9]+)-arm64-v8a\.apk/\1/p' \
               | sort -n \
               | tail -n 1
           )"
           if ! [[ "$LATEST_RELEASE_BUILD" =~ ^[0-9]+$ ]]; then
-            LATEST_RELEASE_BUILD=0
+            echo "ERROR: Unable to determine the latest published Android build number from GitHub Releases."
+            echo "This workflow refuses to silently fall back to ${MINIMUM_RELEASE_BUILD}, because that can regress artifacts to stale versions like 4.7 / 166."
+            exit 1
           fi
+          echo "Detected latest published Android build: ${LATEST_RELEASE_BUILD}"
           if [ "${LATEST_RELEASE_BUILD}" -ge "${VERSION_CODE}" ]; then
             VERSION_CODE="$((LATEST_RELEASE_BUILD + 1))"
           fi
+          echo "Selected next Android build: ${VERSION_CODE}"
           eval "$(
             python3 ../scripts/versioning.py derive \
               --base-version "$VERSION_BASE" \

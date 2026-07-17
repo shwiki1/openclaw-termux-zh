@@ -157,6 +157,10 @@ class NativeTerminalSessionView(
         focusAndShowKeyboard()
     }
 
+    fun requestToolbarVisible() {
+        requestInputStripVisible()
+    }
+
     fun hideKeyboard() {
         terminalView.removeCallbacks(keyboardRetryRunnable)
         val imm = terminalView.context.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
@@ -511,7 +515,16 @@ class NativeTerminalSessionView(
         (dp * resources.displayMetrics.density).roundToInt()
 
     private fun requestInputStripVisible() {
-        if (config.useNativeToolbar) {
+        val toolbar = toolbarStrip
+        if (config.useNativeToolbar && toolbar != null) {
+            if (toolbar.width <= 0 || toolbar.height <= 0) {
+                return
+            }
+            inputStripRect.set(0, 0, toolbar.width, toolbar.height)
+            toolbar.requestRectangleOnScreen(inputStripRect, true)
+            parentInputStripRect.set(inputStripRect)
+            contentContainer.offsetDescendantRectToMyCoords(toolbar, parentInputStripRect)
+            requestRectangleOnScreen(parentInputStripRect, true)
             return
         }
         if (terminalView.width <= 0 || terminalView.height <= 0) {
