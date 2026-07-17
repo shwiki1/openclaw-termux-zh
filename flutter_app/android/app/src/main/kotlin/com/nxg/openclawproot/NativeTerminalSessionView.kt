@@ -491,7 +491,6 @@ class NativeTerminalSessionView(
 
     private fun toolbarActivePressedColor(): Int =
         if (config.useCodexChrome) NativeUiPalette.accentPressed else 0xFF009B3F.toInt()
-    }
 
     private fun updateModifierButtons() {
         ctrlButtonView?.isSelected = ctrlModifierActive
