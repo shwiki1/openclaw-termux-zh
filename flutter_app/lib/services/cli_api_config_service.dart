@@ -485,17 +485,30 @@ if [ -r __ENV_PATH__ ] && grep -q "^OPENCLAW_CODEX_PROXY_UPSTREAM=" __ENV_PATH__
     . /root/.openclaw/codex-termux-runtime.sh
     configure_codex_termux_runtime || true
   fi
-  rm -f __LOG_PATH__
-  if command -v python3 >/dev/null 2>&1 && [ -r __PY_PATH__ ]; then
-    nohup python3 __PY_PATH__ </dev/null >__LOG_PATH__ 2>&1 &
-  elif command -v node >/dev/null 2>&1 && [ -r __JS_PATH__ ]; then
-    nohup node __JS_PATH__ </dev/null >__LOG_PATH__ 2>&1 &
-  else
-    echo "Codex proxy runtime is unavailable" >&2
-    exit 1
-  fi
   proxy_ready=false
+  proxy_health="$(curl -fsS --max-time 1 http://127.0.0.1:8787/health 2>/dev/null || true)"
+  if [ -n "$proxy_health" ] && printf "%s" "$proxy_health" | grep -F -- "$OPENCLAW_CODEX_PROXY_UPSTREAM" >/dev/null 2>&1; then
+    proxy_ready=true
+  else
+    pkill -f "[c]odex-proxy.py" >/dev/null 2>&1 || true
+    pkill -f "[c]odex-proxy.js" >/dev/null 2>&1 || true
+    for attempt in 1 2 3 4 5 6 7 8 9 10; do
+      proxy_health="$(curl -fsS --max-time 1 http://127.0.0.1:8787/health 2>/dev/null || true)"
+      [ -z "$proxy_health" ] && break
+      sleep 0.2
+    done
+    rm -f __LOG_PATH__
+    if command -v python3 >/dev/null 2>&1 && [ -r __PY_PATH__ ]; then
+      nohup python3 __PY_PATH__ </dev/null >__LOG_PATH__ 2>&1 &
+    elif command -v node >/dev/null 2>&1 && [ -r __JS_PATH__ ]; then
+      nohup node __JS_PATH__ </dev/null >__LOG_PATH__ 2>&1 &
+    else
+      echo "Codex proxy runtime is unavailable" >&2
+      exit 1
+    fi
+  fi
   for attempt in 1 2 3 4 5 6 7 8 9 10; do
+    [ "$proxy_ready" = true ] && break
     proxy_health="$(curl -fsS --max-time 1 http://127.0.0.1:8787/health 2>/dev/null || true)"
     if [ -n "$proxy_health" ] && printf "%s" "$proxy_health" | grep -F -- "$OPENCLAW_CODEX_PROXY_UPSTREAM" >/dev/null 2>&1; then
       proxy_ready=true
@@ -3272,15 +3285,26 @@ if [ "\$openclaw_proxy_should_run" = true ]; then
   if command -v configure_codex_termux_runtime >/dev/null 2>&1; then
     configure_codex_termux_runtime || true
   fi
-  pkill -f "/root/.openclaw/codex-proxy.py" >/dev/null 2>&1 || true
-  pkill -f "/root/.openclaw/codex-proxy.js" >/dev/null 2>&1 || true
-  if command -v python3 >/dev/null 2>&1 && [ -r /root/.openclaw/codex-proxy.py ]; then
-    nohup python3 /root/.openclaw/codex-proxy.py >/tmp/openclaw-codex-proxy.log 2>&1 &
-  elif command -v node >/dev/null 2>&1 && [ -r /root/.openclaw/codex-proxy.js ]; then
-    nohup node /root/.openclaw/codex-proxy.js >/tmp/openclaw-codex-proxy.log 2>&1 &
-  fi
   openclaw_proxy_ready=false
+  openclaw_proxy_health="\$(curl -fsS --max-time 1 http://127.0.0.1:8787/health 2>/dev/null || true)"
+  if [ -n "\$openclaw_proxy_health" ] && printf "%s" "\$openclaw_proxy_health" | grep -F -- "\${OPENCLAW_CODEX_PROXY_UPSTREAM:-}" >/dev/null 2>&1; then
+    openclaw_proxy_ready=true
+  else
+    pkill -f "/root/.openclaw/codex-proxy.py" >/dev/null 2>&1 || true
+    pkill -f "/root/.openclaw/codex-proxy.js" >/dev/null 2>&1 || true
+    for openclaw_proxy_attempt in 1 2 3 4 5 6 7 8 9 10; do
+      openclaw_proxy_health="\$(curl -fsS --max-time 1 http://127.0.0.1:8787/health 2>/dev/null || true)"
+      [ -z "\$openclaw_proxy_health" ] && break
+      sleep 0.2
+    done
+    if command -v python3 >/dev/null 2>&1 && [ -r /root/.openclaw/codex-proxy.py ]; then
+      nohup python3 /root/.openclaw/codex-proxy.py >/tmp/openclaw-codex-proxy.log 2>&1 &
+    elif command -v node >/dev/null 2>&1 && [ -r /root/.openclaw/codex-proxy.js ]; then
+      nohup node /root/.openclaw/codex-proxy.js >/tmp/openclaw-codex-proxy.log 2>&1 &
+    fi
+  fi
   for openclaw_proxy_attempt in 1 2 3 4 5 6 7 8 9 10; do
+    [ "\$openclaw_proxy_ready" = true ] && break
     openclaw_proxy_health="\$(curl -fsS --max-time 1 http://127.0.0.1:8787/health 2>/dev/null || true)"
     if [ -n "\$openclaw_proxy_health" ] && printf "%s" "\$openclaw_proxy_health" | grep -F -- "\${OPENCLAW_CODEX_PROXY_UPSTREAM:-}" >/dev/null 2>&1; then
       openclaw_proxy_ready=true
