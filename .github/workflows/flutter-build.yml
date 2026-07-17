@@ -211,8 +211,38 @@ jobs:
             exit 1
           fi
           echo "Detected latest published Android build: ${LATEST_RELEASE_BUILD}"
-          if [ "${LATEST_RELEASE_BUILD}" -ge "${VERSION_CODE}" ]; then
-            VERSION_CODE="$((LATEST_RELEASE_BUILD + 1))"
+          LATEST_WORKFLOW_BUILD="$(
+            gh run list \
+              --repo "${GITHUB_REPOSITORY}" \
+              --workflow "Build OpenClaw Apps" \
+              --event push \
+              --json databaseId,status,conclusion \
+              --limit 10 \
+              --jq '.[] | select(.status == "completed" and .conclusion == "success") | .databaseId' \
+              | while read -r run_id; do
+                  [ -n "$run_id" ] || continue
+                  build="$(
+                    gh run view "$run_id" --repo "${GITHUB_REPOSITORY}" --log 2>/dev/null \
+                      | sed -nE 's/.*Selected next Android build: ([0-9]+).*/\1/p' \
+                      | tail -n 1
+                  )"
+                  if [[ "$build" =~ ^[0-9]+$ ]]; then
+                    echo "$build"
+                    break
+                  fi
+                done
+          )"
+          if ! [[ "$LATEST_WORKFLOW_BUILD" =~ ^[0-9]+$ ]]; then
+            echo "WARNING: Unable to determine the latest successful workflow Android build from recent logs."
+            LATEST_WORKFLOW_BUILD=0
+          fi
+          echo "Detected latest successful workflow Android build: ${LATEST_WORKFLOW_BUILD}"
+          LATEST_KNOWN_BUILD="$LATEST_RELEASE_BUILD"
+          if [ "${LATEST_WORKFLOW_BUILD}" -gt "${LATEST_KNOWN_BUILD}" ]; then
+            LATEST_KNOWN_BUILD="${LATEST_WORKFLOW_BUILD}"
+          fi
+          if [ "${LATEST_KNOWN_BUILD}" -ge "${VERSION_CODE}" ]; then
+            VERSION_CODE="$((LATEST_KNOWN_BUILD + 1))"
           fi
           echo "Selected next Android build: ${VERSION_CODE}"
           eval "$(

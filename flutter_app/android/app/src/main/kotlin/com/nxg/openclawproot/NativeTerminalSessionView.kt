@@ -41,6 +41,7 @@ data class NativeTerminalSessionConfig(
     val emitOutput: Boolean = false,
     val renderingPaused: Boolean = false,
     val useNativeToolbar: Boolean = false,
+    val useCodexChrome: Boolean = false,
     val transcriptRows: Int = 3000,
     val fontSize: Int = 18,
 )
@@ -303,15 +304,25 @@ class NativeTerminalSessionView(
         val scrollView = HorizontalScrollView(context).apply {
             isHorizontalScrollBarEnabled = false
             overScrollMode = View.OVER_SCROLL_NEVER
-            background = context.nativeCardDrawable(
-                fillColor = NativeUiPalette.surfaceAlt,
-                strokeColor = NativeUiPalette.borderStrong,
-                radiusDp = 18,
-            )
+            if (config.useCodexChrome) {
+                background = context.nativeCardDrawable(
+                    fillColor = NativeUiPalette.surfaceAlt,
+                    strokeColor = NativeUiPalette.borderStrong,
+                    radiusDp = 12,
+                )
+            } else {
+                setBackgroundColor(Color.BLACK)
+            }
         }
         val row = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
-            setPadding(dpToPx(6), dpToPx(6), dpToPx(6), dpToPx(6))
+            val rowPadding = if (config.useCodexChrome) 4 else 2
+            setPadding(
+                dpToPx(rowPadding),
+                dpToPx(rowPadding),
+                dpToPx(rowPadding),
+                dpToPx(rowPadding),
+            )
             gravity = Gravity.CENTER_VERTICAL
         }
         scrollView.addView(
@@ -394,9 +405,14 @@ class NativeTerminalSessionView(
             setTextColor(NativeUiPalette.textPrimary)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
             typeface = Typeface.MONOSPACE
-            minimumWidth = dpToPx(40)
-            minimumHeight = dpToPx(36)
-            setPadding(dpToPx(8), dpToPx(5), dpToPx(8), dpToPx(5))
+            minimumWidth = dpToPx(if (config.useCodexChrome) 38 else 36)
+            minimumHeight = dpToPx(if (config.useCodexChrome) 34 else 32)
+            setPadding(
+                dpToPx(if (config.useCodexChrome) 8 else 6),
+                dpToPx(if (config.useCodexChrome) 5 else 4),
+                dpToPx(if (config.useCodexChrome) 8 else 6),
+                dpToPx(if (config.useCodexChrome) 5 else 4),
+            )
             isClickable = true
             isFocusable = false
             isFocusableInTouchMode = false
@@ -413,8 +429,8 @@ class NativeTerminalSessionView(
                 LinearLayout.LayoutParams.WRAP_CONTENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT,
             ).apply {
-                marginStart = dpToPx(2)
-                marginEnd = dpToPx(2)
+                marginStart = dpToPx(if (config.useCodexChrome) 2 else 1)
+                marginEnd = dpToPx(if (config.useCodexChrome) 2 else 1)
             },
         )
         return button
@@ -431,30 +447,50 @@ class NativeTerminalSessionView(
         return StateListDrawable().apply {
             addState(
                 intArrayOf(android.R.attr.state_selected, android.R.attr.state_pressed),
-                toolbarButtonDrawable(TOOLBAR_ACTIVE_PRESSED_COLOR),
+                toolbarButtonDrawable(toolbarActivePressedColor()),
             )
             addState(
                 intArrayOf(android.R.attr.state_pressed),
-                toolbarButtonDrawable(TOOLBAR_BUTTON_PRESSED_COLOR),
+                toolbarButtonDrawable(toolbarButtonPressedColor()),
             )
             addState(
                 intArrayOf(android.R.attr.state_selected),
-                toolbarButtonDrawable(TOOLBAR_ACTIVE_COLOR),
+                toolbarButtonDrawable(toolbarActiveColor()),
             )
-            addState(intArrayOf(), toolbarButtonDrawable(TOOLBAR_BUTTON_COLOR))
+            addState(intArrayOf(), toolbarButtonDrawable(toolbarButtonColor()))
         }
     }
 
     private fun toolbarButtonDrawable(color: Int): GradientDrawable {
-        return context.nativeCardDrawable(
-            fillColor = color,
-            strokeColor = if (color == TOOLBAR_ACTIVE_COLOR || color == TOOLBAR_ACTIVE_PRESSED_COLOR) {
-                NativeUiPalette.accent
-            } else {
-                NativeUiPalette.borderStrong
-            },
-            radiusDp = 14,
-        )
+        return if (config.useCodexChrome) {
+            context.nativeCardDrawable(
+                fillColor = color,
+                strokeColor = if (color == toolbarActiveColor() || color == toolbarActivePressedColor()) {
+                    NativeUiPalette.accent
+                } else {
+                    NativeUiPalette.borderStrong
+                },
+                radiusDp = 10,
+            )
+        } else {
+            GradientDrawable().apply {
+                cornerRadius = dpToPx(6).toFloat()
+                setColor(color)
+            }
+        }
+    }
+
+    private fun toolbarButtonColor(): Int =
+        if (config.useCodexChrome) NativeUiPalette.surfaceRaised else 0xFF161616.toInt()
+
+    private fun toolbarButtonPressedColor(): Int =
+        if (config.useCodexChrome) NativeUiPalette.surface else 0xFF2B2B2B.toInt()
+
+    private fun toolbarActiveColor(): Int =
+        if (config.useCodexChrome) NativeUiPalette.accentSoft else 0xFF00C853.toInt()
+
+    private fun toolbarActivePressedColor(): Int =
+        if (config.useCodexChrome) NativeUiPalette.accentPressed else 0xFF009B3F.toInt()
     }
 
     private fun updateModifierButtons() {
@@ -551,10 +587,6 @@ class NativeTerminalSessionView(
         private const val MAX_FONT_SIZE = 32
         private const val MIN_TRANSCRIPT_ROWS = 400
         private const val MAX_TRANSCRIPT_ROWS = 3000
-        private val TOOLBAR_BUTTON_COLOR = NativeUiPalette.surfaceRaised
-        private val TOOLBAR_BUTTON_PRESSED_COLOR = NativeUiPalette.surface
-        private val TOOLBAR_ACTIVE_COLOR = NativeUiPalette.accentSoft
-        private val TOOLBAR_ACTIVE_PRESSED_COLOR = NativeUiPalette.accentPressed
         private val CTRL_SEQUENCE_MAP = mapOf(
             "\u001b[A" to "\u001b[1;5A",
             "\u001b[B" to "\u001b[1;5B",
