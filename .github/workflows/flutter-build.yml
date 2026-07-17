@@ -439,7 +439,7 @@ jobs:
           retention-days: 30
 
       - name: Mirror APK to Gitee Release
-        if: env.GITEE_TOKEN != ''
+        if: ${{ secrets.GITEE_TOKEN != '' }}
         env:
           GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
           GITEE_OWNER: cds-y-code
@@ -458,7 +458,6 @@ import json
 import mimetypes
 import os
 import pathlib
-import sys
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -481,11 +480,11 @@ def request_json(method, url, payload=None):
     data = None
     req_headers = dict(headers)
     if payload is not None:
-      data = json.dumps(payload).encode('utf-8')
-      req_headers['Content-Type'] = 'application/json'
+        data = json.dumps(payload).encode('utf-8')
+        req_headers['Content-Type'] = 'application/json'
     req = urllib.request.Request(url, data=data, headers=req_headers, method=method)
     with urllib.request.urlopen(req, timeout=300) as resp:
-      return json.loads(resp.read().decode('utf-8'))
+        return json.loads(resp.read().decode('utf-8'))
 
 def request_raw(method, url, data, content_type):
     req_headers = dict(headers)
