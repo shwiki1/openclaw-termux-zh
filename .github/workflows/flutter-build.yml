@@ -439,100 +439,15 @@ jobs:
           retention-days: 30
 
       - name: Mirror APK to Gitee Release
-        if: ${{ !cancelled() && !failure() }}
         env:
           GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
-          GITEE_OWNER: cds-y-code
-          GITEE_REPO: openclaw-termux-zh
-          GITEE_RELEASE_TAG: v${{ steps.collect.outputs.version_name }}
-          GITEE_RELEASE_NAME: 次元虾 v${{ steps.collect.outputs.version }}
-          GITEE_RELEASE_BODY: |
-            ## 次元虾 Android v${{ steps.collect.outputs.version }}
-
-            Standalone Android app mirror for faster regional downloads.
         run: |
           set -euo pipefail
           if [ -z "${GITEE_TOKEN:-}" ]; then
             echo "GITEE_TOKEN is not configured; skipping Gitee mirror."
             exit 0
           fi
-          python3 - <<'PY'
-import base64
-import json
-import mimetypes
-import os
-import pathlib
-import urllib.error
-import urllib.parse
-import urllib.request
-
-owner = os.environ['GITEE_OWNER']
-repo = os.environ['GITEE_REPO']
-token = os.environ['GITEE_TOKEN']
-tag = os.environ['GITEE_RELEASE_TAG']
-name = os.environ['GITEE_RELEASE_NAME']
-body = os.environ['GITEE_RELEASE_BODY']
-apk_path = next(pathlib.Path('artifacts').glob('*.apk'))
-
-base_url = f'https://gitee.com/api/v5/repos/{owner}/{repo}'
-headers = {
-    'Authorization': f'token {token}',
-    'User-Agent': 'OpenClaw-Gitee-Mirror',
-}
-
-def request_json(method, url, payload=None):
-    data = None
-    req_headers = dict(headers)
-    if payload is not None:
-        data = json.dumps(payload).encode('utf-8')
-        req_headers['Content-Type'] = 'application/json'
-    req = urllib.request.Request(url, data=data, headers=req_headers, method=method)
-    with urllib.request.urlopen(req, timeout=300) as resp:
-        return json.loads(resp.read().decode('utf-8'))
-
-def request_raw(method, url, data, content_type):
-    req_headers = dict(headers)
-    req_headers['Content-Type'] = content_type
-    req = urllib.request.Request(url, data=data, headers=req_headers, method=method)
-    with urllib.request.urlopen(req, timeout=300) as resp:
-      return json.loads(resp.read().decode('utf-8'))
-
-try:
-    release = request_json('GET', f'{base_url}/releases/tags/{urllib.parse.quote(tag, safe="")}')
-except urllib.error.HTTPError as error:
-    if error.code != 404:
-        raise
-    release = request_json('POST', f'{base_url}/releases', {
-        'tag_name': tag,
-        'name': name,
-        'body': body,
-        'prerelease': False,
-        'draft': False,
-    })
-
-release_id = release['id']
-apk_name = apk_path.name
-boundary = '----OpenClawGiteeBoundary' + base64.b16encode(os.urandom(12)).decode('ascii').lower()
-mime = mimetypes.guess_type(apk_name)[0] or 'application/octet-stream'
-file_bytes = apk_path.read_bytes()
-parts = [
-    f'--{boundary}\r\n'.encode('utf-8'),
-    f'Content-Disposition: form-data; name="file"; filename="{apk_name}"\r\n'.encode('utf-8'),
-    f'Content-Type: {mime}\r\n\r\n'.encode('utf-8'),
-    file_bytes,
-    f'\r\n--{boundary}--\r\n'.encode('utf-8'),
-]
-multipart = b''.join(parts)
-
-upload_url = f'{base_url}/releases/{release_id}/attach_files'
-uploaded = request_raw('POST', upload_url, multipart, f'multipart/form-data; boundary={boundary}')
-print(json.dumps({
-    'release_id': release_id,
-    'release_html_url': release.get('html_url') or release.get('url'),
-    'asset_url': uploaded.get('browser_download_url') or uploaded.get('download_url'),
-    'asset_name': uploaded.get('name') or apk_name,
-}, ensure_ascii=False))
-PY
+          echo "Gitee mirror is deferred until a dedicated upload script is added."
 
       - name: Comment on PR
         if: github.event_name == 'pull_request'
