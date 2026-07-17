@@ -68,7 +68,11 @@ class NativeTerminalPagerActivity : Activity() {
             finish()
             return
         }
-        baseConfig = parsedConfig.copy(keepAlive = true, useNativeToolbar = true)
+        baseConfig = parsedConfig.copy(
+            keepAlive = true,
+            useNativeToolbar = true,
+            useCodexChrome = true,
+        )
         terminalTitle = parsedConfig.title
         setResult(Activity.RESULT_OK)
         TerminalSessionService.start(applicationContext)
@@ -175,7 +179,7 @@ class NativeTerminalPagerActivity : Activity() {
             background = nativeCardDrawable(
                 fillColor = NativeUiPalette.surface,
                 strokeColor = NativeUiPalette.borderStrong,
-                radiusDp = 22,
+                radiusDp = 12,
             )
             clipToOutline = true
             setPadding(dp(1), dp(1), dp(1), dp(1))
@@ -201,10 +205,10 @@ class NativeTerminalPagerActivity : Activity() {
                 0,
                 1f,
             ).apply {
-                marginStart = dp(12)
-                marginEnd = dp(12)
-                topMargin = dp(6)
-                bottomMargin = dp(12)
+                marginStart = dp(6)
+                marginEnd = dp(6)
+                topMargin = dp(4)
+                bottomMargin = dp(6)
             },
         )
 
@@ -238,9 +242,9 @@ class NativeTerminalPagerActivity : Activity() {
             background = nativeCardDrawable(
                 fillColor = NativeUiPalette.surface,
                 strokeColor = NativeUiPalette.border,
-                radiusDp = 18,
+                radiusDp = 10,
             )
-            setPadding(dp(12), dp(12), dp(12), dp(10))
+            setPadding(dp(10), dp(10), dp(10), dp(8))
             addView(createActionButton("返回") { finish() })
             addView(
                 LinearLayout(this@NativeTerminalPagerActivity).apply {
@@ -262,9 +266,9 @@ class NativeTerminalPagerActivity : Activity() {
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT,
             ).apply {
-                marginStart = dp(12)
-                marginEnd = dp(12)
-                topMargin = dp(12)
+                marginStart = dp(6)
+                marginEnd = dp(6)
+                topMargin = dp(6)
             }
         }
     }
@@ -273,7 +277,7 @@ class NativeTerminalPagerActivity : Activity() {
         val row = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(8), dp(8), dp(8), dp(8))
+            setPadding(dp(6), dp(6), dp(6), dp(6))
             addView(terminalTabButton)
             addView(browserTabButton)
             addView(pasteButton)
@@ -285,15 +289,15 @@ class NativeTerminalPagerActivity : Activity() {
             background = nativeCardDrawable(
                 fillColor = NativeUiPalette.surfaceAlt,
                 strokeColor = NativeUiPalette.border,
-                radiusDp = 18,
+                radiusDp = 10,
             )
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT,
             ).apply {
-                marginStart = dp(12)
-                marginEnd = dp(12)
-                topMargin = dp(10)
+                marginStart = dp(6)
+                marginEnd = dp(6)
+                topMargin = dp(6)
             }
             addView(
                 row,
@@ -312,9 +316,9 @@ class NativeTerminalPagerActivity : Activity() {
             setTextColor(NativeUiPalette.textPrimary)
             textSize = 12f
             typeface = Typeface.MONOSPACE
-            minimumWidth = dp(52)
-            minHeight = dp(38)
-            setPadding(dp(12), dp(8), dp(12), dp(8))
+            minimumWidth = dp(48)
+            minHeight = dp(34)
+            setPadding(dp(10), dp(6), dp(10), dp(6))
             background = actionButtonDrawable(NativeUiPalette.surfaceRaised)
             setOnClickListener { onClick(it) }
         }.also { button ->
@@ -322,13 +326,13 @@ class NativeTerminalPagerActivity : Activity() {
                 LinearLayout.LayoutParams.WRAP_CONTENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT,
             ).apply {
-                marginEnd = dp(6)
+                marginEnd = dp(4)
             }
         }
     }
 
     private fun actionButtonDrawable(color: Int) =
-        nativeCardDrawable(fillColor = color, strokeColor = NativeUiPalette.borderStrong, radiusDp = 14)
+        nativeCardDrawable(fillColor = color, strokeColor = NativeUiPalette.borderStrong, radiusDp = 8)
 
     private fun showPage(index: Int) {
         activePageIndex = if (index == PAGE_BROWSER) PAGE_BROWSER else PAGE_TERMINAL

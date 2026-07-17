@@ -28,6 +28,7 @@ import android.widget.LinearLayout
 import android.widget.PopupMenu
 import android.widget.ScrollView
 import android.widget.TextView
+import android.widget.Toast
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.drawable.DrawableCompat
 import androidx.core.view.ViewCompat
@@ -122,6 +123,10 @@ private data class NativeBrowserStoredScript(
 ) {
     val quickCommand: String
         get() = "/root/.openclaw/bin/browser-script run '${id.replace("'", "'\"'\"'")}'"
+
+    val codexPrompt: String
+        get() = "复用浏览器脚本 $fileName（id: $id）：优先调用 browser_script_run {\"id\":\"$id\"}；" +
+            "如果 MCP 工具不可用，在终端执行 $quickCommand。用途：$description"
 }
 
 private data class NativeBrowserStoredUserScript(
@@ -130,8 +135,14 @@ private data class NativeBrowserStoredUserScript(
     val description: String,
     val code: String,
     val matches: List<String>,
+    val createdAt: String,
     val updatedAt: String,
-)
+) {
+    val codexPrompt: String
+        get() = "请为传统网站用户脚本生成或修改脚本。脚本名：$name。用途：$description。匹配规则：" +
+            "${matches.ifEmpty { listOf("*://*/*") }.joinToString(", ")}。" +
+            "返回完整 JavaScript（可含 Tampermonkey 元数据），不要包含账号、令牌或个人数据。生成后可通过传统脚本库保存。"
+}
 
 private enum class NativeBrowserInspectorMode {
     INTERACTABLES,
@@ -168,6 +179,7 @@ class NativeCodexBrowserView(
     private var nextTabId = 1
     private var activeTabIndex = 0
     private val recentActions = ArrayDeque<NativeBrowserUiActionEntry>()
+    private val recentRecordableSteps = ArrayDeque<NativeBrowserStoredScriptStep>()
     private var showRecentActions = false
     private var showInspector = false
     private var inspectorLoading = false
@@ -212,7 +224,7 @@ class NativeCodexBrowserView(
     ) {
         mainHandler.post {
             val trackedCallback: (Map<String, Any?>) -> Unit = { result ->
-                recordAction(action, result)
+                recordAction(action, payload, result)
                 callback(result)
                 syncChrome()
             }
@@ -328,12 +340,12 @@ class NativeCodexBrowserView(
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(NativeUiPalette.background)
             clipToPadding = false
-            setPadding(dp(12), dp(12), dp(12), dp(12))
+            setPadding(dp(6), dp(6), dp(6), dp(6))
         }
 
         statusColumn.apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(14), dp(12), dp(14), dp(12))
+            setPadding(dp(10), dp(8), dp(10), dp(8))
             background = actionButtonDrawable(
                 NativeUiPalette.surface,
                 strokeColor = NativeUiPalette.borderStrong,
@@ -366,7 +378,7 @@ class NativeCodexBrowserView(
             addView(
                 tabStrip.apply {
                     orientation = LinearLayout.HORIZONTAL
-                    setPadding(dp(8), dp(8), dp(8), dp(8))
+                    setPadding(dp(6), dp(6), dp(6), dp(6))
                 },
                 ViewGroup.LayoutParams(
                     ViewGroup.LayoutParams.WRAP_CONTENT,
@@ -377,14 +389,14 @@ class NativeCodexBrowserView(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT,
             ).apply {
-                topMargin = dp(10)
+                topMargin = dp(6)
             }
         }
 
         val navRow = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(10), dp(10), dp(10), dp(10))
+            setPadding(dp(8), dp(8), dp(8), dp(8))
             background = actionButtonDrawable(
                 NativeUiPalette.surface,
                 strokeColor = NativeUiPalette.border,
@@ -393,7 +405,7 @@ class NativeCodexBrowserView(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT,
             ).apply {
-                topMargin = dp(10)
+                topMargin = dp(6)
             }
         }
         configureIconButton(backButton, R.drawable.lucide_chevron_left, "后退") {
@@ -440,7 +452,7 @@ class NativeCodexBrowserView(
         val addressRow = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(10), dp(10), dp(10), dp(10))
+            setPadding(dp(8), dp(8), dp(8), dp(8))
             background = actionButtonDrawable(
                 NativeUiPalette.surfaceAlt,
                 strokeColor = NativeUiPalette.border,
@@ -449,7 +461,7 @@ class NativeCodexBrowserView(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT,
             ).apply {
-                topMargin = dp(10)
+                topMargin = dp(6)
             }
         }
         addressInput.apply {
@@ -484,7 +496,7 @@ class NativeCodexBrowserView(
 
         recentActionsColumn.apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(14), dp(12), dp(14), dp(12))
+            setPadding(dp(10), dp(8), dp(10), dp(8))
             background = actionButtonDrawable(
                 NativeUiPalette.surface,
                 strokeColor = NativeUiPalette.border,
@@ -494,7 +506,7 @@ class NativeCodexBrowserView(
 
         inspectorColumn.apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(14), dp(12), dp(14), dp(12))
+            setPadding(dp(10), dp(8), dp(10), dp(8))
             background = actionButtonDrawable(
                 NativeUiPalette.surface,
                 strokeColor = NativeUiPalette.borderStrong,
@@ -583,7 +595,7 @@ class NativeCodexBrowserView(
             0,
             1f,
         ).apply {
-            topMargin = dp(10)
+            topMargin = dp(6)
         }
         webViewContainer.background = actionButtonDrawable(
             NativeUiPalette.surface,
@@ -616,7 +628,8 @@ class NativeCodexBrowserView(
             gravity = Gravity.CENTER
             textSize = 12f
             typeface = Typeface.MONOSPACE
-            setPadding(dp(12), dp(10), dp(12), dp(10))
+            minHeight = dp(34)
+            setPadding(dp(10), dp(8), dp(10), dp(8))
             background = actionButtonDrawable(
                 NativeUiPalette.accentSoft,
                 strokeColor = NativeUiPalette.accent,
@@ -627,7 +640,7 @@ class NativeCodexBrowserView(
                 ViewGroup.LayoutParams.WRAP_CONTENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT,
             ).apply {
-                marginEnd = dp(6)
+                marginEnd = dp(4)
             }
         }
     }
@@ -657,8 +670,8 @@ class NativeCodexBrowserView(
             },
             LayoutParams(dp(18), dp(18), Gravity.CENTER),
         )
-        target.layoutParams = LinearLayout.LayoutParams(dp(38), dp(38)).apply {
-            marginEnd = dp(6)
+        target.layoutParams = LinearLayout.LayoutParams(dp(34), dp(34)).apply {
+            marginEnd = dp(4)
         }
     }
 
@@ -673,7 +686,7 @@ class NativeCodexBrowserView(
             setTextColor(NativeUiPalette.textPrimary)
             textSize = 11f
             typeface = Typeface.MONOSPACE
-            setPadding(dp(10), dp(7), dp(10), dp(7))
+            setPadding(dp(8), dp(6), dp(8), dp(6))
             background = actionButtonDrawable(
                 if (active) NativeUiPalette.accentSoft else NativeUiPalette.surfaceAlt,
                 strokeColor = if (active) NativeUiPalette.accent else NativeUiPalette.borderStrong,
@@ -684,14 +697,14 @@ class NativeCodexBrowserView(
                 ViewGroup.LayoutParams.WRAP_CONTENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT,
             ).apply {
-                marginEnd = dp(6)
+                marginEnd = dp(4)
             }
         }
     }
 
     private fun actionButtonDrawable(color: Int, strokeColor: Int? = null) =
         GradientDrawable().apply {
-            cornerRadius = dp(14).toFloat()
+            cornerRadius = dp(8).toFloat()
             setColor(color)
             if (strokeColor != null) {
                 setStroke(dp(1), strokeColor)
@@ -802,23 +815,39 @@ class NativeCodexBrowserView(
         ViewCompat.setOnApplyWindowInsetsListener(rootLayout) { view, insets ->
             val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
             view.updatePadding(
-                left = dp(12) + systemBars.left,
-                right = dp(12) + systemBars.right,
-                bottom = dp(12) + systemBars.bottom,
+                left = dp(6) + systemBars.left,
+                right = dp(6) + systemBars.right,
+                bottom = dp(6) + systemBars.bottom,
             )
             insets
         }
         ViewCompat.requestApplyInsets(rootLayout)
     }
 
-    private fun recordAction(action: String, result: Map<String, Any?>) {
+    private fun recordAction(
+        action: String,
+        payload: Map<String, Any?>,
+        result: Map<String, Any?>,
+    ) {
         val message = result["message"]?.toString()?.trim().orEmpty().ifEmpty { action }
         val ok = when (val value = result["ok"]) {
             is Boolean -> value
             else -> true
         }
+        val normalizedAction = normalizeStoredScriptAction(action)
         if (!ok) {
             showRecentActions = true
+        } else if (normalizedAction in RUNNABLE_SCRIPT_ACTIONS) {
+            recentRecordableSteps.addLast(
+                NativeBrowserStoredScriptStep(
+                action = normalizedAction,
+                payload = payload.resolveScriptVariables(emptyMap()),
+                note = message,
+                ),
+            )
+            while (recentRecordableSteps.size > 24) {
+                recentRecordableSteps.removeFirst()
+            }
         }
         recentActions.addFirst(NativeBrowserUiActionEntry(action = action, message = message, ok = ok))
         while (recentActions.size > 3) {
@@ -1135,12 +1164,17 @@ class NativeCodexBrowserView(
     private fun showScriptLibrary() {
         val automationScripts = loadStoredAutomationScripts()
         val userScripts = loadStoredUserScripts()
+        var dialog: AlertDialog? = null
+        val refreshLibrary = {
+            dialog?.dismiss()
+            mainHandler.post { showScriptLibrary() }
+        }
         val content = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(18), dp(12), dp(18), dp(8))
             addView(
                 TextView(context).apply {
-                    text = "复用已有浏览器流程，或查看传统网站脚本源码。"
+                    text = "复用已有浏览器流程，或继续维护传统网站脚本。"
                     setTextColor(Color.parseColor("#D1D5DB"))
                     textSize = 12f
                 },
@@ -1153,12 +1187,27 @@ class NativeCodexBrowserView(
                     setPadding(0, dp(6), 0, dp(10))
                 },
             )
+            addView(
+                LinearLayout(context).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    setPadding(0, 0, 0, dp(10))
+                    addView(createSmallActionButton("保存最近流程") {
+                        saveRecentActionsAsScript(refreshLibrary)
+                    })
+                    addView(createSmallActionButton("新增传统脚本") {
+                        editUserScript(script = null, initialCode = "", onSaved = refreshLibrary)
+                    })
+                    addView(createSmallActionButton("导入") {
+                        importUserScript(refreshLibrary)
+                    })
+                },
+            )
             if (automationScripts.isEmpty()) {
-                addView(createEmptySection("还没有已保存的 Codex 自动化流程。"))
+                addView(createEmptySection("还没有已保存的 Codex 自动化流程。先在页面上跑一遍，再点“保存最近流程”。"))
             } else {
                 addView(createSectionTitle("Codex 自动化流程"))
                 automationScripts.forEach { script ->
-                    addView(createAutomationScriptCard(script))
+                    addView(createAutomationScriptCard(script, refreshLibrary))
                 }
             }
             if (userScripts.isEmpty()) {
@@ -1166,11 +1215,11 @@ class NativeCodexBrowserView(
             } else {
                 addView(createSectionTitle("传统网站脚本"))
                 userScripts.forEach { script ->
-                    addView(createUserScriptCard(script))
+                    addView(createUserScriptCard(script, refreshLibrary))
                 }
             }
         }
-        AlertDialog.Builder(context)
+        dialog = AlertDialog.Builder(context)
             .setTitle("浏览器脚本库")
             .setView(
                 ScrollView(context).apply {
@@ -1185,7 +1234,8 @@ class NativeCodexBrowserView(
                 },
             )
             .setPositiveButton("关闭", null)
-            .show()
+            .create()
+        dialog?.show()
     }
 
     private fun createSectionTitle(label: String): View {
@@ -1207,7 +1257,10 @@ class NativeCodexBrowserView(
         }
     }
 
-    private fun createAutomationScriptCard(script: NativeBrowserStoredScript): View {
+    private fun createAutomationScriptCard(
+        script: NativeBrowserStoredScript,
+        refreshLibrary: () -> Unit,
+    ): View {
         val meta = buildList {
             add("${script.steps.size} 步")
             if (script.runCount > 0) {
@@ -1260,14 +1313,33 @@ class NativeCodexBrowserView(
                 )
             }
             addView(
-                LinearLayout(context).apply {
-                    orientation = LinearLayout.HORIZONTAL
-                    setPadding(0, dp(8), 0, 0)
-                    addView(createSmallActionButton("运行") { promptAndRunScript(script) })
-                    addView(createSmallActionButton("步骤") { showAutomationScriptDetails(script) })
-                    addView(createSmallActionButton("复制命令") {
-                        copyToClipboard(script.quickCommand, "脚本命令")
-                    })
+                HorizontalScrollView(context).apply {
+                    isHorizontalScrollBarEnabled = false
+                    overScrollMode = View.OVER_SCROLL_NEVER
+                    addView(
+                        LinearLayout(context).apply {
+                            orientation = LinearLayout.HORIZONTAL
+                            setPadding(0, dp(8), 0, 0)
+                            addView(createSmallActionButton("运行") { promptAndRunScript(script) })
+                            addView(createSmallActionButton("重命名") {
+                                renameStoredAutomationScript(script, refreshLibrary)
+                            })
+                            addView(createSmallActionButton("步骤") { showAutomationScriptDetails(script) })
+                            addView(createSmallActionButton("复制命令") {
+                                copyToClipboard(script.quickCommand, "脚本命令")
+                            })
+                            addView(createSmallActionButton("复制提示") {
+                                copyToClipboard(script.codexPrompt, "Codex 提示词")
+                            })
+                            addView(createSmallActionButton("删除") {
+                                deleteStoredAutomationScript(script, refreshLibrary)
+                            })
+                        },
+                        ViewGroup.LayoutParams(
+                            ViewGroup.LayoutParams.WRAP_CONTENT,
+                            ViewGroup.LayoutParams.WRAP_CONTENT,
+                        ),
+                    )
                 },
             )
         }.also { card ->
@@ -1280,7 +1352,10 @@ class NativeCodexBrowserView(
         }
     }
 
-    private fun createUserScriptCard(script: NativeBrowserStoredUserScript): View {
+    private fun createUserScriptCard(
+        script: NativeBrowserStoredUserScript,
+        refreshLibrary: () -> Unit,
+    ): View {
         return LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(12), dp(12), dp(12), dp(12))
@@ -1307,7 +1382,7 @@ class NativeCodexBrowserView(
             addView(
                 TextView(context).apply {
                     text = matchLine
-                    setTextColor(Color.parseColor("#9CA3AF"))
+                    setTextColor(Color.parseColor("#FBBF24"))
                     textSize = 10.5f
                     typeface = Typeface.MONOSPACE
                     setPadding(0, dp(4), 0, 0)
@@ -1324,13 +1399,35 @@ class NativeCodexBrowserView(
                 )
             }
             addView(
-                LinearLayout(context).apply {
-                    orientation = LinearLayout.HORIZONTAL
-                    setPadding(0, dp(8), 0, 0)
-                    addView(createSmallActionButton("看源码") { showUserScriptSource(script) })
-                    addView(createSmallActionButton("复制源码") {
-                        copyToClipboard(script.code, "${script.name} 源码")
-                    })
+                HorizontalScrollView(context).apply {
+                    isHorizontalScrollBarEnabled = false
+                    overScrollMode = View.OVER_SCROLL_NEVER
+                    addView(
+                        LinearLayout(context).apply {
+                            orientation = LinearLayout.HORIZONTAL
+                            setPadding(0, dp(8), 0, 0)
+                            addView(createSmallActionButton("运行当前页") {
+                                runUserScript(script)
+                            })
+                            addView(createSmallActionButton("编辑") {
+                                editUserScript(script = script, initialCode = script.code, onSaved = refreshLibrary)
+                            })
+                            addView(createSmallActionButton("看源码") { showUserScriptSource(script) })
+                            addView(createSmallActionButton("复制源码") {
+                                copyToClipboard(script.code, "${script.name} 源码")
+                            })
+                            addView(createSmallActionButton("让 Codex 生成") {
+                                copyToClipboard(script.codexPrompt, "Codex 生成提示")
+                            })
+                            addView(createSmallActionButton("删除") {
+                                deleteStoredUserScript(script, refreshLibrary)
+                            })
+                        },
+                        ViewGroup.LayoutParams(
+                            ViewGroup.LayoutParams.WRAP_CONTENT,
+                            ViewGroup.LayoutParams.WRAP_CONTENT,
+                        ),
+                    )
                 },
             )
         }.also { card ->
@@ -1400,6 +1497,293 @@ class NativeCodexBrowserView(
                 copyToClipboard(script.code, "${script.name} 源码")
             }
             .setNegativeButton("关闭", null)
+            .show()
+    }
+
+    private fun saveRecentActionsAsScript(onSaved: () -> Unit) {
+        if (recentRecordableSteps.isEmpty()) {
+            showToast("还没有可保存的浏览器流程。")
+            return
+        }
+        promptAutomationScriptMetadata(
+            title = "保存最近流程",
+            initialFileName = defaultScriptFileName(),
+            initialDescription = "保存最近一次可复用的浏览器操作流程",
+        ) { fileName, description ->
+            val activeTab = activeTabOrNull()
+            saveStoredAutomationScript(
+                fileName = fileName,
+                description = description,
+                steps = recentRecordableSteps.toList(),
+                variables = emptyList(),
+                sourceUrl = activeTab?.currentUrl.orEmpty(),
+                sourceTitle = activeTab?.title.orEmpty(),
+            )
+            showToast("脚本已保存")
+            onSaved()
+        }
+    }
+
+    private fun promptAutomationScriptMetadata(
+        title: String,
+        initialFileName: String,
+        initialDescription: String,
+        onConfirm: (String, String) -> Unit,
+    ) {
+        val fileNameInput = EditText(context).apply {
+            setText(initialFileName)
+            setTextColor(Color.WHITE)
+            setHintTextColor(Color.parseColor("#7C7C7C"))
+            hint = "脚本文件名"
+            background = actionButtonDrawable(Color.parseColor("#101010"), strokeColor = Color.parseColor("#252525"))
+            setPadding(dp(10), dp(10), dp(10), dp(10))
+            setSingleLine(true)
+        }
+        val descriptionInput = EditText(context).apply {
+            setText(initialDescription)
+            setTextColor(Color.WHITE)
+            setHintTextColor(Color.parseColor("#7C7C7C"))
+            hint = "说明这个脚本适合什么任务"
+            background = actionButtonDrawable(Color.parseColor("#101010"), strokeColor = Color.parseColor("#252525"))
+            setPadding(dp(10), dp(10), dp(10), dp(10))
+            minLines = 2
+            maxLines = 4
+        }
+        val form = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(18), dp(10), dp(18), 0)
+            addView(fileNameInput)
+            addView(descriptionInput, spacedLayoutParams())
+        }
+        AlertDialog.Builder(context)
+            .setTitle(title)
+            .setView(form)
+            .setNegativeButton("取消", null)
+            .setPositiveButton("保存") { _, _ ->
+                onConfirm(
+                    fileNameInput.text?.toString().orEmpty(),
+                    descriptionInput.text?.toString().orEmpty(),
+                )
+            }
+            .show()
+    }
+
+    private fun renameStoredAutomationScript(
+        script: NativeBrowserStoredScript,
+        onSaved: () -> Unit,
+    ) {
+        promptAutomationScriptMetadata(
+            title = "重命名脚本",
+            initialFileName = script.fileName,
+            initialDescription = script.description,
+        ) { fileName, description ->
+            val scripts = loadStoredAutomationScripts().toMutableList()
+            val index = scripts.indexOfFirst { it.id == script.id }
+            if (index < 0) {
+                showToast("脚本不存在")
+                return@promptAutomationScriptMetadata
+            }
+            scripts[index] = scripts[index].copy(
+                fileName = normalizeStoredScriptFileName(fileName),
+                description = description.trim(),
+                updatedAt = java.time.Instant.now().toString(),
+            )
+            writeStoredAutomationScripts(scripts)
+            showToast("脚本已更新")
+            onSaved()
+        }
+    }
+
+    private fun deleteStoredAutomationScript(
+        script: NativeBrowserStoredScript,
+        onDeleted: () -> Unit,
+    ) {
+        AlertDialog.Builder(context)
+            .setTitle("删除脚本")
+            .setMessage("确定删除 ${script.fileName}？")
+            .setNegativeButton("取消", null)
+            .setPositiveButton("删除") { _, _ ->
+                writeStoredAutomationScripts(loadStoredAutomationScripts().filterNot { it.id == script.id })
+                showToast("脚本已删除")
+                onDeleted()
+            }
+            .show()
+    }
+
+    private fun importUserScript(onSaved: () -> Unit) {
+        val sourceInput = EditText(context).apply {
+            setTextColor(Color.WHITE)
+            setHintTextColor(Color.parseColor("#7C7C7C"))
+            hint = "粘贴 Tampermonkey / JavaScript 源码"
+            background = actionButtonDrawable(Color.parseColor("#101010"), strokeColor = Color.parseColor("#252525"))
+            setPadding(dp(10), dp(10), dp(10), dp(10))
+            minLines = 10
+            maxLines = 18
+            inputType = InputType.TYPE_CLASS_TEXT or
+                InputType.TYPE_TEXT_FLAG_MULTI_LINE or
+                InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+        }
+        AlertDialog.Builder(context)
+            .setTitle("导入传统脚本")
+            .setView(
+                ScrollView(context).apply {
+                    addView(
+                        sourceInput,
+                        ViewGroup.LayoutParams(
+                            ViewGroup.LayoutParams.MATCH_PARENT,
+                            ViewGroup.LayoutParams.WRAP_CONTENT,
+                        ),
+                    )
+                },
+            )
+            .setNegativeButton("取消", null)
+            .setPositiveButton("继续") { _, _ ->
+                editUserScript(
+                    script = null,
+                    initialCode = sourceInput.text?.toString().orEmpty().trim(),
+                    onSaved = onSaved,
+                )
+            }
+            .show()
+    }
+
+    private fun editUserScript(
+        script: NativeBrowserStoredUserScript?,
+        initialCode: String,
+        onSaved: () -> Unit,
+    ) {
+        val nameInput = EditText(context).apply {
+            setText(script?.name ?: "新建传统脚本")
+            setTextColor(Color.WHITE)
+            setHintTextColor(Color.parseColor("#7C7C7C"))
+            hint = "脚本名称"
+            background = actionButtonDrawable(Color.parseColor("#101010"), strokeColor = Color.parseColor("#252525"))
+            setPadding(dp(10), dp(10), dp(10), dp(10))
+            setSingleLine(true)
+        }
+        val descriptionInput = EditText(context).apply {
+            setText(script?.description.orEmpty())
+            setTextColor(Color.WHITE)
+            setHintTextColor(Color.parseColor("#7C7C7C"))
+            hint = "用途简介"
+            background = actionButtonDrawable(Color.parseColor("#101010"), strokeColor = Color.parseColor("#252525"))
+            setPadding(dp(10), dp(10), dp(10), dp(10))
+            setSingleLine(true)
+        }
+        val matchesInput = EditText(context).apply {
+            setText(script?.matches?.joinToString("\n") ?: "*://*/*")
+            setTextColor(Color.WHITE)
+            setHintTextColor(Color.parseColor("#7C7C7C"))
+            hint = "匹配规则（每行一条）"
+            background = actionButtonDrawable(Color.parseColor("#101010"), strokeColor = Color.parseColor("#252525"))
+            setPadding(dp(10), dp(10), dp(10), dp(10))
+            minLines = 2
+            maxLines = 4
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE
+        }
+        val codeInput = EditText(context).apply {
+            setText(script?.code ?: initialCode)
+            setTextColor(Color.WHITE)
+            setHintTextColor(Color.parseColor("#7C7C7C"))
+            hint = "JavaScript 源码"
+            background = actionButtonDrawable(Color.parseColor("#101010"), strokeColor = Color.parseColor("#252525"))
+            setPadding(dp(10), dp(10), dp(10), dp(10))
+            minLines = 10
+            maxLines = 18
+            typeface = Typeface.MONOSPACE
+            inputType = InputType.TYPE_CLASS_TEXT or
+                InputType.TYPE_TEXT_FLAG_MULTI_LINE or
+                InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+        }
+        val form = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(18), dp(10), dp(18), 0)
+            addView(nameInput)
+            addView(descriptionInput, spacedLayoutParams())
+            addView(matchesInput, spacedLayoutParams())
+            addView(
+                ScrollView(context).apply {
+                    addView(
+                        codeInput,
+                        ViewGroup.LayoutParams(
+                            ViewGroup.LayoutParams.MATCH_PARENT,
+                            ViewGroup.LayoutParams.WRAP_CONTENT,
+                        ),
+                    )
+                },
+                spacedLayoutParams(),
+            )
+        }
+        AlertDialog.Builder(context)
+            .setTitle(if (script == null) "新增传统脚本" else "编辑传统脚本")
+            .setView(form)
+            .setNegativeButton("取消", null)
+            .setPositiveButton("保存") { _, _ ->
+                val scripts = loadStoredUserScripts().toMutableList()
+                val now = java.time.Instant.now().toString()
+                val normalizedMatches = matchesInput.text?.toString().orEmpty()
+                    .split(Regex("\\r?\\n"))
+                    .map { it.trim() }
+                    .filter { it.isNotEmpty() }
+                    .distinct()
+                val next = NativeBrowserStoredUserScript(
+                    id = script?.id ?: java.util.UUID.randomUUID().toString(),
+                    name = nameInput.text?.toString().orEmpty().trim().ifEmpty { "新建传统脚本" },
+                    description = descriptionInput.text?.toString().orEmpty().trim(),
+                    code = codeInput.text?.toString().orEmpty().trim(),
+                    matches = normalizedMatches,
+                    createdAt = script?.createdAt ?: now,
+                    updatedAt = now,
+                )
+                if (next.code.isBlank()) {
+                    showToast("源码不能为空")
+                    return@setPositiveButton
+                }
+                val index = scripts.indexOfFirst { it.id == next.id }
+                if (index >= 0) {
+                    scripts[index] = next
+                } else {
+                    scripts += next
+                }
+                writeStoredUserScripts(scripts)
+                showToast(if (script == null) "传统脚本已保存" else "传统脚本已更新")
+                onSaved()
+            }
+            .show()
+    }
+
+    private fun runUserScript(script: NativeBrowserStoredUserScript) {
+        AlertDialog.Builder(context)
+            .setTitle("运行传统脚本")
+            .setMessage("将在当前页面执行“${script.name}”。请仅运行已审阅、可信的源码。")
+            .setNegativeButton("取消", null)
+            .setPositiveButton("运行") { _, _ ->
+                executeAction("eval", mapOf("script" to script.code)) { result ->
+                    showToast(
+                        if (result["ok"] == false) {
+                            result["message"]?.toString() ?: "脚本运行失败"
+                        } else {
+                            "传统脚本已在当前页运行"
+                        },
+                    )
+                }
+            }
+            .show()
+    }
+
+    private fun deleteStoredUserScript(
+        script: NativeBrowserStoredUserScript,
+        onDeleted: () -> Unit,
+    ) {
+        AlertDialog.Builder(context)
+            .setTitle("删除传统脚本")
+            .setMessage("确定删除 ${script.name}？")
+            .setNegativeButton("取消", null)
+            .setPositiveButton("删除") { _, _ ->
+                writeStoredUserScripts(loadStoredUserScripts().filterNot { it.id == script.id })
+                showToast("传统脚本已删除")
+                onDeleted()
+            }
             .show()
     }
 
@@ -1580,10 +1964,86 @@ class NativeCodexBrowserView(
                 description = item.optString("description").trim(),
                 code = code,
                 matches = (item.optJSONArray("matches") ?: JSONArray()).toStringList(),
+                createdAt = item.optString("createdAt").trim(),
                 updatedAt = item.optString("updatedAt").trim(),
             )
         }
         return scripts.sortedByDescending { it.updatedAt }
+    }
+
+    private fun saveStoredAutomationScript(
+        fileName: String,
+        description: String,
+        steps: List<NativeBrowserStoredScriptStep>,
+        variables: List<String>,
+        sourceUrl: String,
+        sourceTitle: String,
+    ) {
+        val scripts = loadStoredAutomationScripts().toMutableList()
+        val now = java.time.Instant.now().toString()
+        scripts += NativeBrowserStoredScript(
+            id = java.util.UUID.randomUUID().toString(),
+            fileName = normalizeStoredScriptFileName(fileName),
+            description = description.trim(),
+            steps = steps,
+            variables = variables,
+            sourceUrl = sourceUrl.trim(),
+            sourceTitle = sourceTitle.trim(),
+            updatedAt = now,
+            lastRunAt = "",
+            runCount = 0,
+        )
+        writeStoredAutomationScripts(scripts)
+    }
+
+    private fun writeStoredAutomationScripts(scripts: List<NativeBrowserStoredScript>) {
+        val payload = JSONArray()
+        scripts.sortedByDescending { it.updatedAt }.forEach { script ->
+            payload.put(
+                JSONObject().apply {
+                    put("id", script.id)
+                    put("fileName", normalizeStoredScriptFileName(script.fileName))
+                    put("description", script.description)
+                    put("steps", JSONArray().apply {
+                        script.steps.forEach { step ->
+                            put(
+                                JSONObject().apply {
+                                    put("action", step.action)
+                                    put("payload", JSONObject(step.payload))
+                                    put("note", step.note)
+                                },
+                            )
+                        }
+                    })
+                    put("variables", JSONArray(script.variables))
+                    put("sourceUrl", script.sourceUrl)
+                    put("sourceTitle", script.sourceTitle)
+                    put("createdAt", script.updatedAt)
+                    put("updatedAt", script.updatedAt)
+                    put("lastRunAt", if (script.lastRunAt.isEmpty()) JSONObject.NULL else script.lastRunAt)
+                    put("runCount", script.runCount)
+                },
+            )
+        }
+        flutterPrefs().edit().putString(PREF_AUTOMATION_SCRIPTS, payload.toString()).apply()
+    }
+
+    private fun writeStoredUserScripts(scripts: List<NativeBrowserStoredUserScript>) {
+        val payload = JSONArray()
+        scripts.sortedByDescending { it.updatedAt }.forEach { script ->
+            payload.put(
+                JSONObject().apply {
+                    put("id", script.id)
+                    put("name", script.name)
+                    put("description", script.description)
+                    put("code", script.code)
+                    put("matches", JSONArray(script.matches))
+                    put("createdAt", script.createdAt.ifEmpty { script.updatedAt })
+                    put("updatedAt", script.updatedAt)
+                },
+            )
+        }
+        flutterPrefs().edit().putString(PREF_USER_SCRIPTS, payload.toString()).apply()
     }
 
     private fun persistStoredScriptRun(scriptId: String) {
@@ -1634,6 +2094,46 @@ class NativeCodexBrowserView(
             local.hour,
             local.minute,
         )
+    }
+
+    private fun normalizeStoredScriptFileName(value: String): String {
+        var normalized = value.trim()
+        if (normalized.isEmpty()) {
+            normalized = "browser-script"
+        }
+        normalized = normalized
+            .replace(Regex("[\\\\/:*?\"<>|\\r\\n]+"), "_")
+            .replace(Regex("\\s+"), "-")
+        if (normalized.length > 80) {
+            normalized = normalized.substring(0, 80)
+        }
+        if (!normalized.endsWith(".json")) {
+            normalized = "$normalized.browser.json"
+        }
+        return normalized
+    }
+
+    private fun defaultScriptFileName(): String {
+        val now = java.time.ZonedDateTime.now()
+        return "browser-%04d%02d%02d-%02d%02d.browser.json".format(
+            now.year,
+            now.monthValue,
+            now.dayOfMonth,
+            now.hour,
+            now.minute,
+        )
+    }
+
+    private fun spacedLayoutParams() =
+        LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+        ).apply {
+            topMargin = dp(10)
+        }
+
+    private fun showToast(message: String) {
+        Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
     }
 
     private fun createTab(

@@ -2,8 +2,10 @@
 
 ## Priority Now
 - Device-smoke the 2026-07-17 native Codex pager UI stabilization on Android: verify top safe-area spacing, terminal shortcut-bar lift with IME, browser icon-button rendering, recent-actions toggle, and inspector cards before any new cloud build.
+- Device-smoke the 2026-07-17 Codex space/script-parity follow-up on Android: confirm ordinary CLI terminals really kept the compact toolbar style, Codex pager chrome no longer steals too much viewport height, and the native script library add/import/edit/run/delete flows all work on-device.
 - Device-smoke the native Codex pager on Android before any new cloud build: terminal full-scrollback IME open/close smoothness, horizontal page switching, native browser address-bar/form input, and `browser_*` tool actions against the new native `WebView`.
 - Decide whether the current native browser parity is sufficient to replace the old Flutter browser sidecar for Codex, or whether the script assistant / inspector UI also needs a native port before push/build.
+- Decide whether native support also needs a bridge for Flutter-side pending-save drafts (`browser_script_stage`), or whether that remaining gap is acceptable before the next build.
 - Push the native terminal activity follow-up to GitHub `main`, watch the next arm64 release build, and record the resulting post-`172` provenance before any further terminal IME work.
 - Device-smoke the new native terminal activity on Android: full-screen terminal scrollback, repeated IME open/close, bottom shortcut bar position, session reopen persistence, and close-vs-back behavior. Confirm it is materially smoother than the old Flutter `TerminalScreen` path.
 - Device-smoke the latest published `CiYuanXia-v4.4-163-arm64-v8a.apk` on Android: first-run bootstrap, installer/app version `4.4`, update compatibility, terminal IME prompt visibility, native shortcut-bar co-movement/feedback, browser address-bar/input lift, compact-sidecar reconnect, browser tabs/UA, and browser-script workflow.
