@@ -438,18 +438,16 @@ jobs:
           path: artifacts/*.apk
           retention-days: 30
 
-      - name: Mirror APK to Gitee Release
+      - name: Upload APK parts to Gitee transfer branch
         env:
           GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+          GITEE_OWNER: cds-y-code
+          GITEE_REPO: openclaw-termux-zh
+          ARTIFACT_DIR: artifacts
+          GITEE_TRANSFER_BRANCH: apk-transfer-${{ github.run_id }}
         run: |
           set -euo pipefail
-          python3 scripts/mirror-apk-to-gitee.py \
-            --owner cds-y-code \
-            --repo openclaw-termux-zh \
-            --tag "v${APP_VERSION_NAME}" \
-            --name "次元虾 v${APP_VERSION_NAME}" \
-            --body "GitHub Actions ${GITHUB_RUN_ID} mirror for ${GITHUB_SHA}." \
-            --artifact-dir artifacts
+          scripts/upload-apk-parts-to-gitee-branch.sh
 
       - name: Comment on PR
         if: github.event_name == 'pull_request'
