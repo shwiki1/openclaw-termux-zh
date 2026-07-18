@@ -13,7 +13,7 @@ ARCH="arm64"
 MIRROR=""
 USE_DOCKER=0
 NO_DOCKER=0
-PACKAGES=(ca-certificates git python3 make g++ curl wget lsof)
+PACKAGES=(ca-certificates git python3 python3-pip make g++ curl wget lsof)
 NODE_VERSION="${NODE_VERSION:-24.15.0}"
 OPENCLAW_VERSION="${OPENCLAW_VERSION:-latest}"
 QQBOT_PACKAGE="${QQBOT_PACKAGE:-@tencent-connect/openclaw-qqbot@latest}"
@@ -951,6 +951,17 @@ NODE
 install_openclaw_plugin "$QQBOT_PACKAGE" "@tencent-connect/openclaw-qqbot"
 repair_qqbot_plugin_runtime
 install_openclaw_plugin "$WEIXIN_PACKAGE" "@tencent-weixin/openclaw-weixin"
+
+echo "==> Preinstalling api2py Python dependencies"
+run_root mkdir -p "$ROOTFS_DIR/tmp/openclaw-api2py"
+run_root cp "$ROOT_DIR/flutter_app/assets/api2py/requirements.txt" \
+  "$ROOTFS_DIR/tmp/openclaw-api2py/requirements.txt"
+chroot_run bash -lc "python3 -m pip install --break-system-packages --no-cache-dir -r /tmp/openclaw-api2py/requirements.txt || python3 -m pip install --break-system-packages --no-cache-dir --index-url https://pypi.org/simple -r /tmp/openclaw-api2py/requirements.txt"
+chroot_run python3 - <<'PY'
+for module in ('starlette', 'uvicorn', 'httpx', 'aiosqlite'):
+    __import__(module)
+PY
+run_root rm -rf "$ROOTFS_DIR/tmp/openclaw-api2py"
 
 echo "==> Enabling bundled messaging plugins"
 chroot_run node <<'NODE'

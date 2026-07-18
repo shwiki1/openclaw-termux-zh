@@ -33,6 +33,10 @@ if curl -s --max-time 2 "http://127.0.0.1:$PORT/" >/dev/null 2>&1; then
 fi
 
 cd "$DIR"
+if [ ! -f "$DIR/app/__init__.py" ] || [ ! -f "$DIR/app/main.py" ] || [ ! -f "$DIR/app/config.py" ]; then
+  echo "api2py 内置文件不完整：缺少 app/ Python 包，请安装包含完整 api2py 资源目录的新版本。" >&2
+  exit 1
+fi
 rm -f "$PID_FILE"
 rm -f "$LOG_FILE"
 export HOST PORT WORKERS

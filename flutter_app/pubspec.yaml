@@ -43,6 +43,10 @@ flutter:
     - assets/ic_launcher.png
     - assets/bootstrap/openclaw-rootfs-noble-arm64.tar.gz
     - assets/api2py/
+    - assets/api2py/app/
+    - assets/api2py/data/
+    - assets/api2py/public/static/
+    - assets/api2py/scripts/
     - assets/sample_configs/openclaw/
   fonts:
     - family: DejaVuSansMono

@@ -160,5 +160,22 @@ fi
         flush: true,
       );
     }
+    final requiredFiles = <String>[
+      'server.py',
+      'start.sh',
+      'requirements.txt',
+      'app/__init__.py',
+      'app/config.py',
+      'app/main.py',
+      'public/static/index.html',
+    ];
+    final missing = requiredFiles
+        .where((path) => !File('${targetRoot.path}/$path').existsSync())
+        .toList();
+    if (missing.isNotEmpty) {
+      throw StateError(
+        '内置 api2py 文件同步不完整，缺少：${missing.join(', ')}。请安装包含完整 api2py 资源目录的新版本。',
+      );
+    }
   }
 }
