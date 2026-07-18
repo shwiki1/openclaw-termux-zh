@@ -447,7 +447,7 @@ jobs:
           GITEE_TRANSFER_BRANCH: apk-transfer-${{ github.run_id }}
         run: |
           set -euo pipefail
-          scripts/upload-apk-parts-to-gitee-branch.sh
+          bash scripts/upload-apk-parts-to-gitee-branch.sh
 
       - name: Comment on PR
         if: github.event_name == 'pull_request'
