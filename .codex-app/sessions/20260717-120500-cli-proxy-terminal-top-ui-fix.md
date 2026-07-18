@@ -26,18 +26,23 @@ Fix configuration saves not restarting the local Codex proxy and repair the brok
 
 ## Cloud Build
 
-- Target branch: GitHub `codex-terminal-ime-lag-fix`.
-- Expected fresh build: logical `176`, semantic `5.7.0`, display `5.7`, `arm64-v8a` only.
+- Pushed local fix commit `b049ed9` through the GitHub Data API to branch `codex-terminal-ime-lag-fix`, producing remote commit `d15357dd7bd01b656aa90df401814433d87a3705`.
+- GitHub Actions run `29584749891` succeeded: Flutter analysis, Android arm64 packaging, and required PRoot-library verification passed. The release job was intentionally skipped on the feature branch.
+- Built logical `176`, semantic `5.7.0`, display `5.7`, `arm64-v8a` only.
 
 ## Version And Artifacts
 
 - Source anchor remains `2.5.0+143`.
-- No artifact recorded yet; update this handoff after Actions completes.
+- Artifact: `dist/github-run-29584749891/CiYuanXia-v5.7-176-arm64-v8a.apk`, 316,571,991 bytes, SHA-256 `e56d798b98e4581aea04b388a98ec0487d6b21abdbcd608caa98029d29bc0a19`.
+- GitHub artifact ID `8408672413`, ZIP digest `sha256:27319e6e5fb37bf509abe5ed008ce6c3861b5935ce8e2425bf112c12bbb450cc`.
+- ZIP integrity, alignment, package/version metadata, and all required PRoot libraries passed. The APK uses the established release signer SHA-256 `0618eafd1855855749abb7c04d6f44edf9a4b7cb09e26fd882e856d5c994dde6`.
 
 ## Known Risks
 
 - Android device smoke is still required for status-bar spacing, IME behavior, and live proxy replacement.
+- Actions printed a debug-signing fallback message despite the APK carrying the established release certificate; update compatibility is confirmed by certificate equality, but the misleading log/config path should be investigated before public promotion.
 
 ## Next Actions
 
-- Push through the GitHub Data API, watch Actions, download and verify the APK, then device-smoke both fixes.
+- Update-install the verified APK over published `5.4`, then device-smoke both fixes.
+- Any fresh cloud build must use a logical build greater than `176`.

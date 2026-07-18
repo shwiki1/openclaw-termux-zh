@@ -3,6 +3,7 @@ package com.agent.cyx
 import android.content.Context
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
+import android.graphics.drawable.StateListDrawable
 
 internal object NativeUiPalette {
     val background = Color.parseColor("#0A0A0A")
@@ -38,3 +39,40 @@ internal fun Context.nativeCardDrawable(
         setStroke(nativeDp(strokeWidthDp).coerceAtLeast(1), strokeColor)
     }
 
+internal fun Context.nativeRoundedStateDrawable(
+    normalColor: Int,
+    pressedColor: Int,
+    selectedColor: Int = normalColor,
+    selectedPressedColor: Int = pressedColor,
+    strokeColor: Int? = null,
+    selectedStrokeColor: Int? = strokeColor,
+    radiusDp: Int = 8,
+): StateListDrawable =
+    StateListDrawable().apply {
+        addState(
+            intArrayOf(android.R.attr.state_selected, android.R.attr.state_pressed),
+            nativeStateDrawable(selectedPressedColor, selectedStrokeColor, radiusDp),
+        )
+        addState(
+            intArrayOf(android.R.attr.state_pressed),
+            nativeStateDrawable(pressedColor, strokeColor, radiusDp),
+        )
+        addState(
+            intArrayOf(android.R.attr.state_selected),
+            nativeStateDrawable(selectedColor, selectedStrokeColor, radiusDp),
+        )
+        addState(intArrayOf(), nativeStateDrawable(normalColor, strokeColor, radiusDp))
+    }
+
+private fun Context.nativeStateDrawable(
+    fillColor: Int,
+    strokeColor: Int?,
+    radiusDp: Int,
+): GradientDrawable =
+    GradientDrawable().apply {
+        cornerRadius = nativeDp(radiusDp).toFloat()
+        setColor(fillColor)
+        if (strokeColor != null) {
+            setStroke(nativeDp(1).coerceAtLeast(1), strokeColor)
+        }
+    }

@@ -28,17 +28,23 @@ Fix device feedback that a saved API address was not becoming the upstream behin
 
 - Target branch: GitHub `codex-terminal-ime-lag-fix`.
 - Run `29587775641` for logical `177`, semantic `5.8.0`, display `5.8` failed during release Flutter compilation because shell variables in the proxy health-check command were parsed as Dart interpolations.
-- Required retry build: logical `178`, semantic `5.9.0`, display `5.9`, arm64 only.
+- Follow-up commit `34fe5f5` converted the proxy health-check command to a raw multi-line Dart string with explicit path placeholders.
+- API push advanced the GitHub feature branch to `cde66bb40980f685e49c78c748aee1f26e509ad2`.
+- Retry run `29588452989` succeeded and produced logical `177`, semantic `5.8.0`, display `5.8`, arm64 only. The failed predecessor did not upload an APK artifact, so no `178 / 5.9` artifact was needed.
 
 ## Version And Artifacts
 
 - Source anchor remains `2.5.0+143`.
-- No `177` artifact recorded yet.
+- Artifact ZIP: `dist/github-run-29588452989/ciyuanxia-apks.zip`, SHA-256 `29dfc1e1320d8485abf2994ca6b53345b0f2d80125e313c1e24be4803eff9ed9`.
+- APK: `dist/github-run-29588452989/CiYuanXia-v5.8-177-arm64-v8a.apk`, size 316,573,547 bytes, SHA-256 `fe45bafe16761fe3f7151a11f47d7dbeea015430b22f7d49d4e8a23254543e17`.
+- Manifest verification: package `com.agent.cyx`, split `versionCode=2177`, `versionName=5.8`, min SDK 29, target SDK 36.
+- Integrity/signing verification passed: `unzip -t`, `zipalign -c -p -v 4`, `apksigner verify --verbose --print-certs`; signer SHA-256 `0618eafd1855855749abb7c04d6f44edf9a4b7cb09e26fd882e856d5c994dde6` matches the published `5.4` signer.
 
 ## Known Risks
 
-- The follow-up still requires cloud Flutter/Kotlin compilation and Android device verification.
+- Android device verification is still required for the exact save/restart/request path.
+- The Actions log still contains misleading debug-signing fallback script text even though the APK certificate matches the release signer.
 
 ## Next Actions
 
-- Commit only relevant files, API-push, watch Actions, download and verify the APK, then repeat the exact device save/request flow.
+- Install `5.8 / 177` over `5.7 / 176` or published `5.4 / 173`, create or edit the sole shared API, save it, and verify `curl -fsS http://127.0.0.1:8787/health` inside RootFS reports the user-entered upstream before sending a Codex request.

@@ -7,13 +7,17 @@ import android.graphics.Typeface
 import android.os.Bundle
 import android.view.GestureDetector
 import android.view.Gravity
+import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
 import android.view.View
 import android.widget.FrameLayout
 import android.widget.HorizontalScrollView
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.PopupMenu
 import android.widget.TextView
+import androidx.core.content.ContextCompat
+import androidx.core.graphics.drawable.DrawableCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
@@ -25,13 +29,13 @@ class NativeTerminalPagerActivity : Activity() {
     private lateinit var titleView: TextView
     private lateinit var pageHintView: TextView
     private lateinit var sessionBadgeView: TextView
-    private lateinit var sessionSwitcherView: TextView
-    private lateinit var terminalTabButton: TextView
-    private lateinit var browserTabButton: TextView
-    private lateinit var newSessionButton: TextView
-    private lateinit var pasteButton: TextView
-    private lateinit var restartButton: TextView
-    private lateinit var closeSessionButton: TextView
+    private lateinit var sessionSwitcherView: FrameLayout
+    private lateinit var terminalTabButton: FrameLayout
+    private lateinit var browserTabButton: FrameLayout
+    private lateinit var newSessionButton: FrameLayout
+    private lateinit var pasteButton: FrameLayout
+    private lateinit var restartButton: FrameLayout
+    private lateinit var closeSessionButton: FrameLayout
     private lateinit var terminalPage: FrameLayout
     private lateinit var browserPage: FrameLayout
     private lateinit var pagesContainer: FrameLayout
@@ -168,13 +172,13 @@ class NativeTerminalPagerActivity : Activity() {
             )
             visibility = View.GONE
         }
-        sessionSwitcherView = createActionButton("会话") { showSessionMenu(it) }
-        terminalTabButton = createActionButton("终端") { showPage(PAGE_TERMINAL) }
-        browserTabButton = createActionButton("浏览器") { showPage(PAGE_BROWSER) }
-        newSessionButton = createActionButton("新建") { openNewSession() }
-        pasteButton = createActionButton("粘贴") { activeTerminalView?.paste() }
-        restartButton = createActionButton("重开") { activeTerminalView?.restart() }
-        closeSessionButton = createActionButton("关闭会话") { closeCurrentSession() }
+        sessionSwitcherView = createIconActionButton(R.drawable.lucide_layout_list, "切换会话") { showSessionMenu(it) }
+        terminalTabButton = createIconActionButton(R.drawable.lucide_audio_waveform, "终端") { showPage(PAGE_TERMINAL) }
+        browserTabButton = createIconActionButton(R.drawable.lucide_panel_top_open, "浏览器") { showPage(PAGE_BROWSER) }
+        newSessionButton = createIconActionButton(R.drawable.lucide_plus, "新建会话") { openNewSession() }
+        pasteButton = createIconActionButton(R.drawable.lucide_clipboard_paste, "粘贴") { activeTerminalView?.paste() }
+        restartButton = createIconActionButton(R.drawable.lucide_refresh_cw, "重开会话") { activeTerminalView?.restart() }
+        closeSessionButton = createIconActionButton(R.drawable.lucide_x, "关闭会话") { closeCurrentSession() }
 
         terminalContainer = FrameLayout(this)
         browserView = NativeCodexBrowserView(this)
@@ -262,7 +266,7 @@ class NativeTerminalPagerActivity : Activity() {
                 radiusDp = 10,
             )
             setPadding(dp(10), dp(10), dp(10), dp(8))
-            addView(createActionButton("返回") { finish() })
+            addView(createIconActionButton(R.drawable.lucide_chevron_left, "返回") { finish() })
             addView(
                 LinearLayout(this@NativeTerminalPagerActivity).apply {
                     orientation = LinearLayout.VERTICAL
@@ -275,7 +279,7 @@ class NativeTerminalPagerActivity : Activity() {
                 },
             )
             addView(sessionBadgeView)
-            addView(createActionButton("退出") {
+            addView(createIconActionButton(R.drawable.lucide_panel_top_close, "退出") {
                 // Keep sessions alive for reopen; only the explicit close-session path tears them down.
                 finish()
             })
@@ -325,22 +329,38 @@ class NativeTerminalPagerActivity : Activity() {
         }
     }
 
-    private fun createActionButton(label: String, onClick: (View) -> Unit): TextView {
-        return TextView(this).apply {
-            text = label
-            gravity = Gravity.CENTER
-            setTextColor(NativeUiPalette.textPrimary)
-            textSize = 12f
-            typeface = Typeface.MONOSPACE
-            minimumWidth = dp(48)
-            minHeight = dp(34)
-            setPadding(dp(10), dp(6), dp(10), dp(6))
+    private fun createIconActionButton(
+        iconRes: Int,
+        description: String,
+        onClick: (View) -> Unit,
+    ): FrameLayout {
+        return FrameLayout(this).apply {
+            contentDescription = description
+            minimumWidth = dp(38)
+            minimumHeight = dp(34)
+            isClickable = true
+            isFocusable = true
+            isHapticFeedbackEnabled = true
             background = actionButtonDrawable(NativeUiPalette.surfaceRaised)
-            setOnClickListener { onClick(it) }
+            val iconDrawable = ContextCompat.getDrawable(this@NativeTerminalPagerActivity, iconRes)?.mutate()
+            if (iconDrawable != null) {
+                DrawableCompat.setTint(iconDrawable, NativeUiPalette.textPrimary)
+            }
+            addView(
+                ImageView(this@NativeTerminalPagerActivity).apply {
+                    setImageDrawable(iconDrawable)
+                    this.contentDescription = description
+                },
+                FrameLayout.LayoutParams(dp(17), dp(17), Gravity.CENTER),
+            )
+            setOnClickListener {
+                performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                onClick(it)
+            }
         }.also { button ->
             button.layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT,
+                dp(38),
+                dp(34),
             ).apply {
                 marginEnd = dp(4)
             }
@@ -348,7 +368,15 @@ class NativeTerminalPagerActivity : Activity() {
     }
 
     private fun actionButtonDrawable(color: Int) =
-        nativeCardDrawable(fillColor = color, strokeColor = color, radiusDp = 0)
+        nativeRoundedStateDrawable(
+            normalColor = color,
+            pressedColor = NativeUiPalette.borderStrong,
+            selectedColor = NativeUiPalette.accentSoft,
+            selectedPressedColor = NativeUiPalette.accentPressed,
+            strokeColor = NativeUiPalette.border,
+            selectedStrokeColor = NativeUiPalette.accent,
+            radiusDp = 8,
+        )
 
     private fun showSession(index: Int, restart: Boolean = false) {
         if (index !in sessions.indices) {
@@ -476,18 +504,8 @@ class NativeTerminalPagerActivity : Activity() {
         activePageIndex = if (index == PAGE_BROWSER) PAGE_BROWSER else PAGE_TERMINAL
         terminalPage.visibility = if (activePageIndex == PAGE_TERMINAL) View.VISIBLE else View.GONE
         browserPage.visibility = if (activePageIndex == PAGE_BROWSER) View.VISIBLE else View.GONE
-        terminalTabButton.background = actionButtonDrawable(
-            if (activePageIndex == PAGE_TERMINAL) NativeUiPalette.accentSoft else NativeUiPalette.surfaceRaised,
-        )
-        terminalTabButton.setTextColor(
-            if (activePageIndex == PAGE_TERMINAL) NativeUiPalette.accent else NativeUiPalette.textPrimary,
-        )
-        browserTabButton.background = actionButtonDrawable(
-            if (activePageIndex == PAGE_BROWSER) NativeUiPalette.accentSoft else NativeUiPalette.surfaceRaised,
-        )
-        browserTabButton.setTextColor(
-            if (activePageIndex == PAGE_BROWSER) NativeUiPalette.accent else NativeUiPalette.textPrimary,
-        )
+        terminalTabButton.isSelected = activePageIndex == PAGE_TERMINAL
+        browserTabButton.isSelected = activePageIndex == PAGE_BROWSER
         val terminalControlsVisible = if (activePageIndex == PAGE_TERMINAL) View.VISIBLE else View.GONE
         sessionSwitcherView.visibility = terminalControlsVisible
         newSessionButton.visibility = terminalControlsVisible

@@ -1,7 +1,16 @@
 # Backlog
 
 ## Priority Now
-- Build and device-smoke `5.9 / 178`: create or edit the sole shared API, save it, confirm Codex automatically binds it, and verify the 8787 `/health` response reports that exact upstream before sending a Codex request.
+- Device-smoke the unreleased local Codex pager multi-session controls and updated dual-workspace native script assistant after the next installable build; include pending draft stage/save/discard, saved automation run/rename/copy/delete, and traditional script add/import/edit/run/delete/copy. Do not cloud-build until the user asks.
+- Device-smoke the Codex pager/browser rounded icon-button pass after the next installable build: verify terminal header controls, browser nav/open/UA/more controls, inspector toggles, script-library tabs/actions, haptic feedback, and pressed/selected background changes on device.
+- Governance checkpoint (2026-07-18): project memory now reflects the successful cloud build `6.6 / 185`; stop feature churn until the installed `6.6 / 185` is device-smoked and promotion/signing decisions are recorded.
+- Device-smoke `6.6 / 185` from GitHub Actions run `29640675284` / APK `CiYuanXia-v6.6-185-arm64-v8a.apk`: user reported it is already downloaded and installed; save the intended API config, confirm the embedded proxy starts/reuses only `127.0.0.1:8787`, confirm `/health` reports the saved upstream, confirm Codex no longer fails with address-in-use or stale-provider fallback, and verify the Gitee timeout/non-blocking transfer workflow did not affect APK behavior.
+- Previous verified local candidate remains `6.5 / 184` at `dist/gitee-run-29623644999/CiYuanXia-v6.5-184-arm64-v8a.apk` for fallback comparison if needed.
+- Device-smoke `6.4 / 183` from run `29616280314`: save API config, confirm Codex opens even when `127.0.0.1:8787` is already occupied, and verify the wrapper can release stale port holders using `/proc/net/tcp` scanning if the existing service is unhealthy or mismatched.
+- Device-smoke `6.3 / 182` from run `29614695636`: after saving an API profile, open Codex repeatedly while the embedded proxy is already running and confirm it reuses healthy `127.0.0.1:8787` instead of failing with address-in-use.
+- Device-smoke `6.2 / 181` from run `29612968011`: save a Codex/shared API profile, confirm generated Codex config points at `127.0.0.1:8787`, confirm `/health` reports the saved upstream, and confirm Codex fails visibly instead of using stale provider config if the embedded proxy cannot start.
+- Download and device-smoke `CiYuanXia-v6.2-181-arm64-v8a.apk` from GitHub Actions artifact `8418581492` / run `29610280469`; this is the latest successful build after the RootFS EACCES fix and Gitee mirror hardening.
+- Device-smoke `5.8 / 177`: create or edit the sole shared API, save it, confirm Codex automatically binds it, and verify the 8787 `/health` response reports that exact upstream before sending a Codex request.
 - Device-smoke the locally verified `5.7 / 176` feature build: update-install it over published `5.4`, save a changed Codex API profile and verify the running local proxy uses it without reopening Codex; then open each non-Codex CLI and verify its title/actions sit below the status bar and remain usable through IME open/close.
 - Device-smoke the locally verified `5.6 / 175` feature candidate on Android 10+ arm64, including update install from published `5.4`, native terminal IME open/close, shortcut-bar position, pager navigation, browser form/address IME, script-library actions, and `browser_*` automation.
 - Resolve the signing provenance discrepancy: run `29551560421` reported missing `KEYSTORE_BASE64`, but the downloaded APK uses the established signer SHA-256 `0618eafd1855855749abb7c04d6f44edf9a4b7cb09e26fd882e856d5c994dde6`.
@@ -10,8 +19,8 @@
 - Device-smoke the 2026-07-17 Codex space/script-parity follow-up on Android: confirm ordinary CLI terminals really kept the compact toolbar style, Codex pager chrome no longer steals too much viewport height, and the native script library add/import/edit/run/delete flows all work on-device.
 - Device-smoke the native Codex pager on Android before any new cloud build: terminal full-scrollback IME open/close smoothness, horizontal page switching, native browser address-bar/form input, and `browser_*` tool actions against the new native `WebView`.
 - Decide whether the current native browser parity is sufficient to replace the old Flutter browser sidecar for Codex, or whether the script assistant / inspector UI also needs a native port before push/build.
-- Decide whether native support also needs a bridge for Flutter-side pending-save drafts (`browser_script_stage`), or whether that remaining gap is acceptable before the next build.
-- Promote the native Codex pager only after device smoke and branch/signing decisions; any fresh cloud build must use a logical build greater than `176`.
+- If old Flutter fallback panel and native pager must share pending drafts live, design an explicit cross-controller draft bridge. Native pager now handles its own `browser_script_stage` pending drafts, but the two in-memory controllers are not automatically shared.
+- Promote the native Codex pager only after device smoke and branch/signing decisions; any fresh cloud build must use a logical build greater than `185`.
 - Device-smoke the new native terminal activity on Android: full-screen terminal scrollback, repeated IME open/close, bottom shortcut bar position, session reopen persistence, and close-vs-back behavior. Confirm it is materially smoother than the old Flutter `TerminalScreen` path.
 - Device-smoke the current `CiYuanXia-v5.6-175-arm64-v8a.apk` candidate on Android; use published `5.4 / 173` as the update-install baseline.
 - If lag somehow remains on the new native activity path, inspect the shared `NativeTerminalSessionView` render/update path first. Do not revert to more Flutter/platform-view IME compensation work unless the native path is disproven by device smoke.
@@ -39,17 +48,20 @@
 - Local Termux environment does not have `flutter`, so Flutter analyze/test/build are blocked locally.
 
 ## Deferred
+- Revisit faster China-side APK distribution with a host that accepts files over 316MB, or add a separate release-storage flow. Gitee Release attachments are not viable for current APKs because the hard limit is 100MB.
 - Add device/emulator smoke checklist for first run, setup with local/remote resources, gateway start/stop, Web dashboard, backup/restore, terminal, and update install.
 - Reconcile privacy policy/data-safety notes with broad Android permissions and actual logs/config storage behavior.
 - Implement or clearly hide/label Canvas capability if it remains an unavailable placeholder.
 - Add migration/backward-compatibility notes if config, snapshot, backup, or shared preference schemas change.
 
 ## Do Not Forget
+- For faster local APK delivery, the fixed required path is GitHub Actions runner -> temporary Gitee split-parts branch -> local clone/reassemble into `/storage/emulated/0/ZeroTermux/开发/openclaw-termux-zh-5.5/dist/gitee-run-<run-id>/` -> SHA verify -> delete temporary Gitee branch. Do not describe or use a GitHub artifact downloaded locally first as a Gitee acceleration path.
+- Gitee token is configured as a GitHub Actions secret, but Gitee Release cannot host the current APK because the file exceeds the 100MB attachment limit. Do not retry direct APK Release upload without shrinking/splitting/changing storage.
 - Device testing showed `5.7 / 176` can leave Codex unbound when the first and only shared API is created; use `5.8 / 177` or later for validating the configuration-save fix.
 - Keep app version/build number updated before every new cloud build.
 - The latest local terminal redesign is not another `TerminalScreen` compensation tweak; it changes the active CLI launch path to `NativeTerminalActivity`. Future agents should not assume the old Flutter terminal route is still the production path for CLI tools.
-- Source metadata remains `2.5.0+143`; the latest published GitHub Release is `CiYuanXia-v5.4-173-arm64-v8a.apk` (Actions `29538124523`), while `CiYuanXia-v5.7-176-arm64-v8a.apk` (Actions `29584749891`) is the latest unreleased feature candidate.
-- The next fresh cloud build must use a new logical build greater than `176`; do not reuse withdrawn builds `154` or `155`, or failed/reserved historical build numbers.
+- Source metadata remains `2.5.0+143`; the latest published GitHub Release is `CiYuanXia-v5.4-173-arm64-v8a.apk` (Actions `29538124523`), while the latest unreleased cloud candidate is `CiYuanXia-v6.6-185-arm64-v8a.apk` (Actions `29640675284`, artifact ID `8428690154`, user already downloaded/installed it).
+- The next fresh cloud build must use a new logical build greater than `185`; do not reuse withdrawn builds `154` or `155`, or failed/reserved historical build numbers.
 - The current APK workflow is green without running `flutter test`; keep that gap visible until CI or a dedicated SDK environment closes it.
 - Keep Node.js `24.15.0` for arm64/x86_64 and `22.22.3` for armv7 aligned across constants, RootFS scripts, setup l10n copy, docs, bootstrap resource names, license/source notices, legacy installer URLs, and `lib/test.js` unless a future task upgrades the runtime asset set.
 - `inspect_app_project.py` only auto-detects the root Node shell here; manually verify Flutter/Kotlin facts from `flutter_app/` before editing or reporting architecture.

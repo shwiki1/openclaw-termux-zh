@@ -458,15 +458,9 @@ class NativeTerminalSessionView(
     }
 
     private fun toolbarButtonDrawable(color: Int): GradientDrawable {
-        return if (config.useCodexChrome) {
-            GradientDrawable().apply {
-                setColor(color)
-            }
-        } else {
-            GradientDrawable().apply {
-                cornerRadius = dpToPx(6).toFloat()
-                setColor(color)
-            }
+        return GradientDrawable().apply {
+            cornerRadius = dpToPx(if (config.useCodexChrome) 8 else 6).toFloat()
+            setColor(color)
         }
     }
 

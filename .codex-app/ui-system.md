@@ -16,7 +16,8 @@ Operational Android utility app for managing an OpenClaw runtime. Existing scree
 
 ## Components
 - `NativeTerminalPagerActivity` multi-session controls should stay parity with ordinary `NativeTerminalActivity` and the old Flutter terminal: always expose `新建`, a session switcher/menu, and `关闭会话`, plus a title badge when more than one Codex terminal session exists.
-- Native browser script assistant should present two workspaces like the old Flutter sheet: `Codex 自动化` and `传统脚本`, with top actions for `保存最近流程` / `新增传统脚本` / `导入`, not a single mixed scroll list.
+- Native Codex pager/browser action controls should be icon-only rounded buttons using existing Lucide-style PNG drawables, with `contentDescription`, selected/pressed rounded state backgrounds, and `HapticFeedbackConstants.KEYBOARD_TAP` on tap. Do not regress these dense action controls back to text-only buttons.
+- Native browser script assistant should present two workspaces like the old Flutter sheet: `Codex 自动化` and `传统脚本`, with top actions for `保存最近流程` / `新增传统脚本` / `导入`, not a single mixed scroll list. The dialog should feel like a dense dark workbench: icon header, workspace counts, selected tab states, pending-draft card, compact icon action buttons, and high-contrast empty states.
 - `NativeTerminalActivity` owns the ordinary CLI top chrome and must apply system-bar/IME insets at the activity root. Its title and action rows use compact native cards; this is separate from Codex pager chrome and must not change the ordinary terminal shortcut strip into Codex styling.
 - `StatusCard`: repeated navigation/status card with icon, title, subtitle, optional trailing, optional tap.
 - `GatewayControls`, `NodeControls`: operational controls tied to gateway/node lifecycle.
@@ -27,12 +28,13 @@ Operational Android utility app for managing an OpenClaw runtime. Existing scree
 - `CliApiConfigDialog` / `CliApiProfilesDialog`: configuration dialogs.
 - `TerminalBrowserPanel` now includes a horizontal tab strip, add/close tab controls, a dedicated full-width address-bar row, a separate high-contrast navigation/tool row, a UA switch button, and a more menu for low-frequency tools. The script assistant remains available from the more menu and opens a bottom-sheet script directory with a pending-save draft card, save/edit pending draft, save-from-recent, run, rename, copy command/prompt, delete, loading, empty, and error states.
 - `NativeCodexBrowserView` should mirror the same information hierarchy on the native pager path: status row, horizontal tab strip, icon-based nav/tool row, dedicated address row, optional recent-actions strip, and optional inspector panel. Keep the native browser dense and operational rather than falling back to plain text-button scaffolding once the screen carries more than one control row.
-- The native browser script library should keep near-parity with the old Flutter script assistant for saved content: save recent flow, automation run/rename/copy/delete, and traditional script add/import/edit/run/delete/copy actions. The one acknowledged parity gap is Flutter-side pending-save draft state from `browser_script_stage`, which is still not exposed natively.
+- The native browser script library should keep near-parity with the old Flutter script assistant for saved content: native `browser_script_stage` pending drafts, save/edit pending draft, save recent flow, automation run/rename/copy/delete, and traditional script add/import/edit/run/delete/copy actions. Old Flutter fallback-panel in-memory drafts remain separate unless a future explicit cross-controller bridge is designed.
 
 ## Icon Strategy
 - Flutter/Dart UI currently uses Material `Icons`.
 - Android native floating file manager uses Lucide-style PNG assets in `flutter_app/android/app/src/main/res/drawable-nodpi/`.
 - Native Codex pager/browser controls should reuse those existing Lucide-style PNG assets where possible instead of regressing to text-only controls once the surface becomes native.
+- For native Codex browser/script-library actions, button labels may remain as accessibility descriptions and source labels, but the visible compact control should prefer the mapped Lucide icon: save, plus, import, run/check, edit, list-checks, copy, trash, eye/eye-off, share, open, star, and close.
 - When adding Flutter UI, prefer existing Material icon style unless the project migrates to a shared icon package intentionally.
 
 ## App Icon Pipeline

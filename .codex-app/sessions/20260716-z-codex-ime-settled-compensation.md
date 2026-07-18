@@ -26,12 +26,13 @@ Find and fix the remaining multi-second stall when closing the Android input met
 
 ## Cloud Build
 
-- Build requested for this local follow-up: GitHub `shwiki/main`, arm64-v8a only, logical build `163`, semantic version `4.4.0`, and install-visible version `4.4`.
-- The current published release remains `v4.3.0 / 4.3 / 162`, arm64-v8a only.
+- GitHub Actions run `29479840309` completed successfully at remote commit `c44deeb4da325d44d0e171fcf3d06ae6490a2f53`.
+- GitHub Release `v4.4.0` published `CiYuanXia-v4.4-163-arm64-v8a.apk`, arm64-v8a only, with install-visible version `4.4`.
 
 ## Known Risks
 
 - Android device smoke is required because the behavior depends on real IME animation timing and a native platform view.
+- Local GitHub asset download is retried with resumable HTTP because direct asset/API/artifact requests were interrupted by the current network connection.
 
 ## Next Actions
 
