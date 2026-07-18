@@ -5,15 +5,17 @@ import 'package:flutter/material.dart';
 import '../app.dart';
 import '../models/cli_api_config.dart';
 import '../models/cli_tool.dart';
+import '../services/browser_automation_service.dart';
 import '../services/cli_api_config_service.dart';
 import '../services/cli_tool_service.dart';
-import '../services/browser_automation_service.dart';
+import '../services/local_api_proxy_service.dart';
 import '../services/native_bridge.dart';
 import '../services/native_browser_automation_delegate.dart';
 import '../services/terminal_service.dart';
 import '../widgets/cli_api_config_dialog.dart';
 import '../widgets/cli_api_profiles_dialog.dart';
 import 'cli_tool_install_screen.dart';
+import 'local_api_proxy_browser_screen.dart';
 
 class CliToolsScreen extends StatefulWidget {
   const CliToolsScreen({super.key});
@@ -177,6 +179,23 @@ class _CliToolsScreenState extends State<CliToolsScreen> {
     }
   }
 
+  Future<void> _showLocalApiProxyDialog() async {
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => _LocalApiProxyDialog(
+        onOpenManager: () {
+          Navigator.of(dialogContext).pop();
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => const LocalApiProxyBrowserScreen(),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   CliToolStatus? _statusForTool(String toolId) {
     for (final status in _statuses) {
       if (status.tool.id == toolId) {
@@ -256,8 +275,8 @@ class _CliToolsScreenState extends State<CliToolsScreen> {
     final configuredCount =
         _sharedProfiles.where((profile) => profile.isConfigured).length;
     final summary = _sharedProfiles.isEmpty
-        ? '还没有共享 API。先在这里添加 API 地址与 Key，再到各 CLI 工具里选择并配置模型。'
-        : '已维护 ${_sharedProfiles.length} 个共享 API，其中 ${configuredCount} 个已填写连接信息。';
+        ? '推荐先启动本地中转代理，在代理管理页维护上游 API、模型映射和访问 Token。旧共享 API 入口仍保留用于兼容已配置工具。'
+        : '本地中转代理可统一接管 API 转发；旧共享 API 中还有 ${_sharedProfiles.length} 个配置，其中 ${configuredCount} 个已填写连接信息。';
 
     return Card(
       child: Padding(
@@ -269,18 +288,27 @@ class _CliToolsScreenState extends State<CliToolsScreen> {
               children: [
                 Expanded(
                   child: Text(
-                    '统一 API 配置',
+                    'API 接入',
                     style: theme.textTheme.titleMedium?.copyWith(
                       fontWeight: FontWeight.w700,
                     ),
                   ),
                 ),
-                FilledButton.icon(
+                OutlinedButton.icon(
                   onPressed: _loading ? null : _manageSharedApis,
                   icon: const Icon(Icons.settings_input_component),
                   label: const Text('管理 API'),
                 ),
               ],
+            ),
+            const SizedBox(height: 10),
+            Align(
+              alignment: Alignment.centerRight,
+              child: FilledButton.icon(
+                onPressed: _loading ? null : _showLocalApiProxyDialog,
+                icon: const Icon(Icons.hub_outlined),
+                label: const Text('中转代理'),
+              ),
             ),
             const SizedBox(height: 10),
             Text(
@@ -439,6 +467,135 @@ class _CliToolsScreenState extends State<CliToolsScreen> {
               color: theme.colorScheme.onSurfaceVariant,
             ),
           ),
+        ),
+      ],
+    );
+  }
+}
+
+class _LocalApiProxyDialog extends StatefulWidget {
+  const _LocalApiProxyDialog({required this.onOpenManager});
+
+  final VoidCallback onOpenManager;
+
+  @override
+  State<_LocalApiProxyDialog> createState() => _LocalApiProxyDialogState();
+}
+
+class _LocalApiProxyDialogState extends State<_LocalApiProxyDialog> {
+  bool _starting = false;
+  String _status = '';
+
+  Future<void> _startService() async {
+    setState(() {
+      _starting = true;
+      _status = '正在同步内置服务并重启代理...';
+    });
+    try {
+      final output = await LocalApiProxyService.restart();
+      if (!mounted) return;
+      setState(() {
+        _status = output.trim().isEmpty
+            ? '代理已重启：${LocalApiProxyService.url}'
+            : output.trim();
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _status = '启动失败：$error';
+      });
+    } finally {
+      if (mounted) {
+        setState(() => _starting = false);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return AlertDialog(
+      title: const Text('本地中转代理'),
+      content: SizedBox(
+        width: 520,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: FilledButton.icon(
+                      onPressed: _starting ? null : _startService,
+                      icon: _starting
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.play_arrow),
+                      label: Text(_starting ? '重启中' : '重启代理'),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: widget.onOpenManager,
+                      icon: const Icon(Icons.open_in_browser_outlined),
+                      label: const Text('API 管理'),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              Text(
+                '内置 api2py 会在 Ubuntu RootFS 中运行一个本地 OpenAI/Responses/Anthropic 兼容中转服务。',
+                style: theme.textTheme.bodyMedium,
+              ),
+              const SizedBox(height: 10),
+              SelectableText(
+                '代理地址：${LocalApiProxyService.url}\n'
+                '健康检查：${LocalApiProxyService.healthUrl}\n'
+                'RootFS 路径：${LocalApiProxyService.guestDir}',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                  fontFamily: 'monospace',
+                ),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                '软件打开后会自动启动代理。需要刷新进程时点“重启代理”，再点“API 管理”直接进入管理页。原有“管理 API”里保存的提供商和模型会同步写入这个中转代理，各 CLI 工具统一使用 http://127.0.0.1:9999/v1。',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+              if (_status.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: theme.colorScheme.outlineVariant),
+                  ),
+                  child: SelectableText(
+                    _status,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      fontFamily: 'monospace',
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _starting ? null : () => Navigator.of(context).pop(),
+          child: const Text('关闭'),
         ),
       ],
     );

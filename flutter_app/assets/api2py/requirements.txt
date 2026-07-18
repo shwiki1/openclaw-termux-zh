@@ -1,0 +1,5 @@
+fastapi>=0.110; platform_system!="Android"
+starlette>=0.37
+uvicorn>=0.27
+httpx>=0.27
+aiosqlite>=0.20

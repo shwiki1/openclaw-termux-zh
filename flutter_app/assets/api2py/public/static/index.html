@@ -1,0 +1,2477 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="h-full">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>AI API Switch</title>
+<script src="/static/lib/tailwind.js"></script>
+<script src="/static/lib/lucide.js"></script>
+<script>
+tailwind.config = {
+  darkMode: 'class',
+  theme: {
+    extend: {
+      fontFamily: {
+        serif: ['"Noto Serif SC"', '"Source Serif 4"', '"Noto Serif"', 'Georgia', '"Times New Roman"', 'serif'],
+        mono: ['"JetBrains Mono"', '"Fira Code"', 'Consolas', 'monospace'],
+      },
+      colors: {
+        surface: { DEFAULT: '#111827', 2: '#1a2235', 3: '#1e293b' },
+        ink: { DEFAULT: '#e2e8f0', 2: '#94a3b8', 3: '#64748b' },
+        accent: { DEFAULT: '#3b82f6', light: '#60a5fa', dark: '#2563eb' },
+      },
+    },
+  },
+}
+</script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600;700&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;0,8..60,700;1,8..60,400&display=swap');
+
+  * { -webkit-tap-highlight-color: transparent; }
+  html, body { overscroll-behavior: none; }
+  body { font-family: 'Noto Serif SC', 'Source Serif 4', Georgia, serif; }
+
+  /* scrollbar */
+  ::-webkit-scrollbar { width: 4px; height: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #334155; border-radius: 2px; }
+
+  /* sidebar overlay */
+  .sidebar-overlay {
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .25s ease;
+  }
+  .sidebar-overlay.open { opacity: 1; pointer-events: auto; }
+
+  .sidebar-panel {
+    transform: translateX(-100%);
+    transition: transform .3s cubic-bezier(.4,0,.2,1);
+  }
+  .sidebar-panel.open { transform: translateX(0); }
+
+  .app-main { min-width: 0; }
+  @media (min-width: 1024px) {
+    .sidebar-panel {
+      transform: none;
+      position: fixed;
+    }
+    .app-main { margin-left: 16rem; }
+  }
+
+  /* page transitions */
+  .page { display: none; animation: fadeUp .3s ease; }
+  .page.active { display: block; }
+  @keyframes fadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+  /* cards */
+  .card {
+    background: #111827;
+    border: 1px solid #1e293b;
+    border-radius: 12px;
+    transition: border-color .2s, box-shadow .2s;
+  }
+  .card:hover { border-color: #334155; }
+
+  /* switch */
+  .switch-track {
+    width: 40px; height: 22px; border-radius: 11px;
+    background: #334155; position: relative; cursor: pointer;
+    transition: background .2s;
+  }
+  .switch-track.on { background: #22c55e; }
+  .switch-track::after {
+    content: ''; position: absolute;
+    width: 16px; height: 16px; border-radius: 50%;
+    background: white; top: 3px; left: 3px;
+    transition: transform .2s;
+  }
+  .switch-track.on::after { transform: translateX(18px); }
+
+  /* toast */
+  .toast {
+    position: fixed; top: 20px; right: 20px; z-index: 9999;
+    padding: 12px 20px; border-radius: 10px; font-size: 14px;
+    animation: slideIn .3s ease;
+    backdrop-filter: blur(8px);
+  }
+  @keyframes slideIn { from { transform: translateX(120%); opacity: 0; } }
+
+  /* chat bubbles */
+  .bubble-user {
+    background: linear-gradient(135deg, #2563eb, #3b82f6);
+    color: white; border-radius: 16px 16px 4px 16px;
+  }
+  .bubble-assistant {
+    background: #1e293b; border: 1px solid #334155;
+    border-radius: 16px 16px 16px 4px;
+  }
+
+  /* table */
+  .data-table th {
+    text-align: left; padding: 10px 14px;
+    border-bottom: 1px solid #1e293b;
+    color: #94a3b8; font-size: 11px;
+    text-transform: uppercase; letter-spacing: .5px;
+    font-weight: 500;
+  }
+  .data-table td {
+    padding: 10px 14px; border-bottom: 1px solid rgba(30,41,59,.5);
+    font-size: 13px;
+  }
+  .data-table tr:hover td { background: rgba(59,130,246,.04); }
+
+  /* mapping row */
+  .mapping-card {
+    background:
+      linear-gradient(180deg, rgba(59,130,246,.06), transparent 120px),
+      #111827;
+  }
+  .mapping-scroll {
+    overflow: auto;
+    max-height: min(62vh, 620px);
+    scrollbar-gutter: stable;
+  }
+  .mapping-scroll::-webkit-scrollbar { width: 8px; height: 8px; }
+  .mapping-scroll::-webkit-scrollbar-thumb { background: #475569; border-radius: 999px; border: 2px solid #111827; }
+  .mapping-scroll::-webkit-scrollbar-track { background: #0a0e17; }
+  .mapping-table {
+    min-width: 980px;
+    border-collapse: separate;
+    border-spacing: 0;
+  }
+  .mapping-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: #111827;
+    box-shadow: inset 0 -1px 0 #1e293b;
+  }
+  .mapping-table tbody tr:last-child td { border-bottom: 0; }
+  .mapping-row td { vertical-align: middle; }
+  .mapping-row input, .mapping-row select {
+    background: #0a0e17; border: 1px solid #1e293b;
+    border-radius: 10px; padding: 9px 11px; color: #e2e8f0;
+    font-size: 13px; font-family: inherit; width: 100%;
+    min-height: 38px;
+    transition: border-color .2s, box-shadow .2s, background .2s;
+  }
+  .mapping-row input { font-family: "JetBrains Mono", "Fira Code", Consolas, monospace; }
+  .mapping-row input:focus, .mapping-row select:focus {
+    outline: none; border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,.12); background: #0d1320;
+  }
+  .mapping-row .m-protocol { color: #bfdbfe; }
+  .mapping-delete {
+    width: 34px; height: 34px; display: inline-flex; align-items: center; justify-content: center;
+    border-radius: 10px; border: 1px solid transparent;
+  }
+  .mapping-delete:hover { border-color: rgba(239,68,68,.25); background: rgba(239,68,68,.08); }
+  .pricing-scroll {
+    overflow: auto;
+    max-height: min(66vh, 680px);
+    scrollbar-gutter: stable;
+  }
+  .pricing-scroll::-webkit-scrollbar { width: 8px; height: 8px; }
+  .pricing-scroll::-webkit-scrollbar-thumb { background: #475569; border-radius: 999px; border: 2px solid #111827; }
+  .pricing-scroll::-webkit-scrollbar-track { background: #0a0e17; }
+  .pricing-table {
+    min-width: 1320px;
+    border-collapse: separate;
+    border-spacing: 0;
+  }
+  .pricing-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: #111827;
+    box-shadow: inset 0 -1px 0 #1e293b;
+  }
+  .pricing-table tbody tr:last-child td { border-bottom: 0; }
+  .pricing-row td { vertical-align: middle; }
+  .pricing-row input {
+    background: #0a0e17; border: 1px solid #1e293b;
+    border-radius: 10px; padding: 9px 11px; color: #e2e8f0;
+    font-size: 13px; font-family: inherit; width: 100%;
+    min-height: 38px;
+    transition: border-color .2s, box-shadow .2s, background .2s;
+  }
+  .pricing-row input[type="number"], .pricing-row .p-model { font-family: "JetBrains Mono", "Fira Code", Consolas, monospace; }
+  .pricing-row input:focus {
+    outline: none; border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,.12); background: #0d1320;
+  }
+  .provider-card-header { min-width: 0; }
+  .provider-card-meta { min-width: 0; }
+  .provider-actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .provider-actions button { min-width: 0; }
+  .provider-actions .icon-action { grid-column: span 1; }
+  @media (min-width: 1536px) {
+    .provider-actions { grid-template-columns: repeat(5, minmax(0, auto)); }
+    .provider-actions .primary-action { white-space: nowrap; }
+  }
+  @media (max-width: 640px) {
+    .mapping-table { min-width: 900px; }
+    .mapping-scroll { max-height: 58vh; }
+  }
+
+  /* ── modal ── */
+  .modal-overlay {
+    position: fixed; inset: 0; z-index: 150;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(0,0,0,.82); backdrop-filter: blur(10px);
+    opacity: 0; pointer-events: none;
+    transition: opacity .2s ease;
+    padding: 16px;
+  }
+  .modal-overlay.open { opacity: 1; pointer-events: auto; }
+  .modal-panel {
+    background: #05070b; border: 1px solid #263244;
+    color: #e2e8f0;
+    font-family: 'Noto Serif SC', 'Source Serif 4', Georgia, 'Times New Roman', serif;
+    border-radius: 12px; width: 100%; max-width: 760px; max-height: min(88vh, 800px);
+    display: flex; flex-direction: column; overflow: hidden;
+    box-shadow: 0 30px 80px rgba(0,0,0,.68), inset 0 1px 0 rgba(255,255,255,.06);
+    transform: translateY(16px) scale(.97);
+    transition: transform .25s cubic-bezier(.4,0,.2,1);
+  }
+  .modal-overlay.open .modal-panel {
+    transform: translateY(0) scale(1);
+  }
+  .modal-header {
+    padding: 20px 24px 14px;
+    display: flex; align-items: flex-start; gap: 12px;
+    border-bottom: 1px solid #1e293b;
+  }
+  .modal-panel h3 { color: #f8fafc; }
+  .modal-panel p,
+  .modal-body { color: #cbd5e1; }
+  .modal-body label { color: #94a3b8; }
+  .modal-icon {
+    width: 40px; height: 40px; border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .modal-body { padding: 16px 24px; overflow-y: auto; }
+  .modal-footer {
+    padding: 14px 24px 20px;
+    display: flex; justify-content: flex-end; gap: 10px; flex-wrap: wrap;
+    border-top: 1px solid #1e293b;
+    background: #05070b;
+  }
+  .modal-input {
+    width: 100%; background: #0a0e17; border: 1px solid #263244;
+    border-radius: 8px; padding: 10px 14px; color: #f8fafc;
+    font-size: 14px; font-family: inherit;
+    transition: border-color .2s, box-shadow .2s, background .2s;
+  }
+  .modal-input:focus { outline: none; border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,.14); background: #0d1320; }
+  .modal-input::placeholder { color: #64748b; }
+  .modal-message {
+    color: #cbd5e1;
+    font-size: 14px;
+    line-height: 1.7;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .modal-btn {
+    min-height: 38px;
+    display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+    border-radius: 8px; padding: 8px 14px;
+    font-size: 13px; font-weight: 600;
+    border: 1px solid transparent;
+    transition: background .2s, border-color .2s, color .2s, box-shadow .2s;
+  }
+  .modal-btn:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(59,130,246,.2); }
+  .modal-btn-secondary { background: #0a0e17; border-color: #263244; color: #cbd5e1; }
+  .modal-btn-secondary:hover { border-color: #475569; color: #f8fafc; }
+  .modal-btn-primary { background: #2563eb; color: #fff; }
+  .modal-btn-primary:hover { background: #1d4ed8; }
+  .modal-btn-danger { background: #dc2626; color: #fff; }
+  .modal-btn-danger:hover { background: #b91c1c; }
+  #modal,
+  #modal * {
+    font-family: 'Noto Serif SC', 'Source Serif 4', Georgia, 'Times New Roman', serif !important;
+  }
+  .modal-choice-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 8px;
+  }
+  .modal-choice {
+    min-height: 42px;
+    border: 1px solid #263244;
+    background: #0a0e17;
+    color: #e2e8f0;
+    border-radius: 8px;
+    padding: 9px 11px;
+    text-align: left;
+    font-size: 13px;
+    transition: border-color .2s, background .2s, box-shadow .2s;
+  }
+  .modal-choice:hover { border-color: #475569; background: #111827; }
+  .modal-choice.active {
+    border-color: #3b82f6;
+    background: #07111f;
+    box-shadow: 0 0 0 3px rgba(59,130,246,.14);
+  }
+  .dark-select { position: relative; min-width: 0; }
+  .dark-select-value { display: none; }
+  .dark-select-button {
+    width: 100%; min-height: 38px;
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    background: #0a0e17; border: 1px solid #263244; border-radius: 8px;
+    padding: 9px 11px; color: #e2e8f0;
+    font-family: 'Noto Serif SC', 'Source Serif 4', Georgia, 'Times New Roman', serif;
+    font-size: 13px; text-align: left;
+  }
+  .dark-select-button::after { content: '⌄'; color: #94a3b8; font-size: 12px; }
+  .dark-select-menu {
+    position: absolute; left: 0; right: 0; top: calc(100% + 6px); z-index: 80;
+    display: none; max-height: 240px; overflow-y: auto;
+    background: #05070b; border: 1px solid #263244; border-radius: 8px;
+    box-shadow: 0 18px 50px rgba(0,0,0,.65);
+    padding: 6px;
+  }
+  .dark-select.open .dark-select-menu { display: block; }
+  .dark-select-option {
+    width: 100%; min-height: 34px;
+    display: flex; align-items: center;
+    background: transparent; color: #e2e8f0; border: 0; border-radius: 6px;
+    padding: 8px 9px; text-align: left; font-size: 13px;
+    font-family: 'Noto Serif SC', 'Source Serif 4', Georgia, 'Times New Roman', serif;
+  }
+  .dark-select-option:hover,
+  .dark-select-option.active { background: #111827; color: #f8fafc; }
+</style>
+</head>
+<body class="h-full overflow-x-hidden bg-[#0a0e17] text-ink antialiased dark">
+
+<!-- ─── Mobile sidebar overlay ─── -->
+<div id="sidebar-overlay" class="sidebar-overlay fixed inset-0 z-40 bg-black/50 lg:hidden" onclick="closeSidebar()"></div>
+
+<!-- ─── Modal ─── -->
+<div id="modal" class="modal-overlay" onclick="if(event.target===this)modalResolve(null)">
+  <div id="modal-panel" class="modal-panel">
+    <div class="modal-header">
+      <div id="modal-icon" class="modal-icon"></div>
+      <div>
+        <h3 id="modal-title" class="text-[15px] font-semibold text-ink leading-tight"></h3>
+        <p id="modal-desc" class="text-xs text-ink-3 mt-0.5"></p>
+      </div>
+    </div>
+    <div id="modal-body" class="modal-body"></div>
+    <div id="modal-footer" class="modal-footer"></div>
+  </div>
+</div>
+
+<!-- ─── Sidebar ─── -->
+<aside id="sidebar" class="sidebar-panel fixed left-0 top-0 z-50 h-full w-64 bg-surface border-r border-surface-3 flex flex-col lg:z-40">
+
+  <!-- Logo -->
+  <div class="px-6 py-5 border-b border-surface-3">
+    <div class="flex items-center gap-2.5">
+      <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-accent to-purple-500 flex items-center justify-center">
+        <i data-lucide="zap" class="w-4 h-4 text-white"></i>
+      </div>
+      <div>
+        <div class="font-semibold text-ink text-[15px] tracking-tight">AI Switch</div>
+        <div class="text-[11px] text-ink-3">本地 API 转换代理</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Nav -->
+  <nav class="flex-1 py-3 px-3 space-y-0.5 overflow-y-auto" id="nav">
+    <button data-page="dashboard" class="nav-btn active w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors text-left">
+      <i data-lucide="layout-dashboard" class="w-[18px] h-[18px]"></i>
+      <span>仪表盘</span>
+    </button>
+    <button data-page="providers" class="nav-btn w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors text-left">
+      <i data-lucide="server" class="w-[18px] h-[18px]"></i>
+      <span>提供商</span>
+    </button>
+    <button data-page="mappings" class="nav-btn w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors text-left">
+      <i data-lucide="git-compare-arrows" class="w-[18px] h-[18px]"></i>
+      <span>模型映射</span>
+    </button>
+    <button data-page="chat" class="nav-btn w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors text-left">
+      <i data-lucide="message-square" class="w-[18px] h-[18px]"></i>
+      <span>测试对话</span>
+    </button>
+    <button data-page="pricing" class="nav-btn w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors text-left">
+      <i data-lucide="badge-dollar-sign" class="w-[18px] h-[18px]"></i>
+      <span>模型价格</span>
+    </button>
+    <button data-page="logs" class="nav-btn w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors text-left">
+      <i data-lucide="scroll-text" class="w-[18px] h-[18px]"></i>
+      <span>请求日志</span>
+    </button>
+    <button data-page="settings" class="nav-btn w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors text-left">
+      <i data-lucide="settings" class="w-[18px] h-[18px]"></i>
+      <span>设置</span>
+    </button>
+  </nav>
+
+  <!-- Footer -->
+  <div id="sidebar-footer" class="px-4 py-4 border-t border-surface-3 space-y-3">
+    <div class="text-[11px] text-ink-3 flex items-center gap-1.5">
+      <i data-lucide="circle-dot" class="w-3 h-3 text-green-400"></i>
+      <span>服务运行中</span>
+    </div>
+  </div>
+</aside>
+
+<!-- ─── Main ─── -->
+<div class="app-main min-h-full flex flex-col">
+
+  <!-- Top bar (mobile) -->
+  <header class="lg:hidden sticky top-0 z-30 bg-[#0a0e17]/90 backdrop-blur-md border-b border-surface-3 px-4 py-3 flex items-center justify-between">
+    <button onclick="openSidebar()" class="p-1.5 -ml-1.5 rounded-lg hover:bg-surface-2">
+      <i data-lucide="menu" class="w-5 h-5 text-ink-2"></i>
+    </button>
+    <div class="font-semibold text-sm text-ink">AI Switch</div>
+    <div class="w-8"></div>
+  </header>
+
+  <main class="flex-1 min-w-0 p-4 sm:p-6 lg:p-8 max-w-[1600px] w-full mx-auto">
+
+    <!-- ═══════ DASHBOARD ═══════ -->
+    <div id="page-dashboard" class="page active">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
+        <h2 class="text-xl font-semibold tracking-tight">仪表盘</h2>
+        <div class="flex gap-1 bg-surface rounded-lg p-1 border border-surface-3 self-start" id="range-selector">
+          <button data-range="1h"  class="range-btn px-3 py-1.5 rounded-md text-xs font-medium text-ink-2 hover:text-ink transition">1小时</button>
+          <button data-range="24h" class="range-btn active px-3 py-1.5 rounded-md text-xs font-medium transition">24小时</button>
+          <button data-range="7d"  class="range-btn px-3 py-1.5 rounded-md text-xs font-medium text-ink-2 hover:text-ink transition">7天</button>
+          <button data-range="30d" class="range-btn px-3 py-1.5 rounded-md text-xs font-medium text-ink-2 hover:text-ink transition">30天</button>
+          <button data-range="all" class="range-btn px-3 py-1.5 rounded-md text-xs font-medium text-ink-2 hover:text-ink transition">全部</button>
+        </div>
+      </div>
+
+      <!-- Stats cards -->
+      <div class="grid grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-3 mb-6" id="stats-overview"></div>
+
+      <!-- Charts -->
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+        <div class="card p-5 lg:col-span-2">
+          <div class="flex items-center gap-2 text-xs text-ink-3 uppercase tracking-wider mb-4">
+            <i data-lucide="trending-up" class="w-3.5 h-3.5"></i> 请求趋势
+          </div>
+          <div class="relative h-48"><canvas id="chart-trend"></canvas></div>
+        </div>
+        <div class="card p-5">
+          <div class="flex items-center gap-2 text-xs text-ink-3 uppercase tracking-wider mb-4">
+            <i data-lucide="pie-chart" class="w-3.5 h-3.5"></i> 提供商分布
+          </div>
+          <div class="relative h-48"><canvas id="chart-provider"></canvas></div>
+        </div>
+      </div>
+
+      <!-- Model table -->
+      <div class="card overflow-hidden mb-6">
+        <div class="px-5 py-3 border-b border-surface-3 flex items-center justify-between">
+          <div class="flex items-center gap-2 text-xs text-ink-3 uppercase tracking-wider">
+            <i data-lucide="database" class="w-3.5 h-3.5"></i> 模型用量明细
+          </div>
+          <button onclick="clearStats()" class="inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] text-ink-3 hover:text-red-400 rounded transition">
+            <i data-lucide="trash-2" class="w-3 h-3"></i> 清除
+          </button>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="data-table w-full">
+            <thead><tr><th>模型</th><th>提供商</th><th>请求数</th><th>输入 Token</th><th>输出 Token</th><th>总 Token</th><th>费用</th><th>平均延迟</th><th>价格状态</th></tr></thead>
+            <tbody id="model-stats"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Recent table -->
+      <div class="card overflow-hidden">
+        <div class="px-5 py-3 border-b border-surface-3 flex items-center gap-2 text-xs text-ink-3 uppercase tracking-wider">
+          <i data-lucide="clock" class="w-3.5 h-3.5"></i> 最近请求
+        </div>
+        <div class="overflow-x-auto">
+          <table class="data-table w-full">
+            <thead><tr><th>时间</th><th>提供商</th><th>模型</th><th>Token</th><th>延迟</th><th>状态</th></tr></thead>
+            <tbody id="recent-requests"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════ PROVIDERS ═══════ -->
+    <div id="page-providers" class="page">
+      <div class="flex flex-col lg:flex-row lg:items-end justify-between gap-4 mb-6">
+        <h2 class="text-xl font-semibold tracking-tight">提供商管理</h2>
+        <div class="flex flex-wrap items-center gap-2">
+          <input id="provider-search" type="search" placeholder="搜索名称 / ID / URL" class="bg-surface border border-surface-3 rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:border-accent min-w-[220px]">
+          <select id="provider-sort" class="bg-surface border border-surface-3 rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:border-accent">
+            <option value="latest">最新添加</option>
+            <option value="calls">调用最多</option>
+            <option value="name">名称</option>
+            <option value="enabled">启用优先</option>
+          </select>
+          <button onclick="showAddProvider()" class="inline-flex items-center gap-2 px-4 py-2 bg-accent hover:bg-accent-dark text-white text-sm font-medium rounded-lg transition">
+            <i data-lucide="plus" class="w-4 h-4"></i> 添加提供商
+          </button>
+        </div>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4" id="providers-list"></div>
+    </div>
+
+    <!-- ═══════ MAPPINGS ═══════ -->
+    <div id="page-mappings" class="page">
+      <div class="flex flex-col lg:flex-row lg:items-end justify-between gap-4 mb-6">
+        <div>
+          <h2 class="text-xl font-semibold tracking-tight">模型映射</h2>
+          <p class="mt-1 text-xs text-ink-3">按调用别名精确路由；对外协议与调用端点严格匹配，不一致时返回 400。</p>
+          <div class="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-ink-3">
+            <span><span class="text-ink-2">OpenAI</span> /v1/chat/completions</span>
+            <span><span class="text-ink-2">Codex</span> /v1/responses</span>
+            <span><span class="text-ink-2">Anthropic</span> /v1/messages</span>
+          </div>
+        </div>
+        <div class="flex flex-wrap gap-2">
+          <button onclick="addMappingRow()" class="inline-flex items-center gap-2 px-4 py-2 bg-surface border border-surface-3 hover:border-accent text-ink text-sm font-medium rounded-lg transition">
+            <i data-lucide="plus" class="w-4 h-4"></i> 添加映射
+          </button>
+          <button onclick="saveMappings()" class="inline-flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-500 text-white text-sm font-medium rounded-lg transition">
+            <i data-lucide="save" class="w-4 h-4"></i> 保存
+          </button>
+        </div>
+      </div>
+
+      <div class="card mapping-card overflow-hidden mb-6">
+        <div class="px-5 py-3 border-b border-surface-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div class="flex items-center gap-2 text-xs text-ink-3 uppercase tracking-wider">
+            <i data-lucide="route" class="w-3.5 h-3.5"></i> 路由表
+            <span id="mappings-count" class="normal-case tracking-normal text-ink-2"></span>
+          </div>
+          <div class="flex items-center gap-1.5 text-[11px] text-ink-3">
+            <i data-lucide="move-horizontal" class="w-3.5 h-3.5"></i>
+            <span>横向滑动编辑全部字段</span>
+          </div>
+        </div>
+        <div class="mapping-scroll">
+          <table class="data-table mapping-table">
+            <thead><tr><th style="width: 230px;">调用名</th><th style="width: 230px;">目标提供商</th><th style="width: 260px;">实际模型名</th><th style="width: 190px;">对外协议</th><th style="width: 70px;">操作</th></tr></thead>
+            <tbody id="mappings-body"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card p-5">
+        <div class="flex flex-col lg:flex-row lg:items-center gap-5">
+          <div>
+            <div class="flex items-center gap-2 text-xs text-ink-3 uppercase tracking-wider mb-3">
+              <i data-lucide="target" class="w-3.5 h-3.5"></i> 默认提供商
+            </div>
+            <select id="default-provider" onchange="updateDefaultProvider()"
+              class="w-full min-w-[220px] bg-[#0a0e17] border border-surface-3 rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:border-accent transition">
+            </select>
+          </div>
+          <div class="flex items-center justify-between gap-4 flex-1 rounded-xl border border-surface-3 bg-[#0a0e17] px-4 py-3">
+            <div>
+              <div class="text-sm text-ink">只走默认提供商</div>
+              <p class="text-xs text-ink-3 mt-1">开启后所有请求都发往当前默认提供商，只保留指向默认提供商的模型别名。</p>
+            </div>
+            <div id="force-default-provider" class="switch-track" onclick="updateForceDefaultProvider(this)"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════ CHAT ═══════ -->
+    <div id="page-chat" class="page">
+      <h2 class="text-xl font-semibold tracking-tight mb-6">测试对话</h2>
+      <div class="card p-5">
+        <div class="grid grid-cols-2 gap-3 mb-4">
+          <div>
+            <label class="block text-xs text-ink-3 uppercase tracking-wider mb-1.5">选择模型</label>
+            <div id="chat-model" class="dark-select"></div>
+          </div>
+          <div>
+            <label class="block text-xs text-ink-3 uppercase tracking-wider mb-1.5">流式输出</label>
+            <div id="chat-stream" class="dark-select">
+              <input class="dark-select-value" type="hidden" value="true">
+              <button type="button" class="dark-select-button"><span>开启</span></button>
+              <div class="dark-select-menu">
+                <button type="button" class="dark-select-option active" data-value="true">开启</button>
+                <button type="button" class="dark-select-option" data-value="false">关闭</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Chat box -->
+        <div id="chat-box" class="h-80 sm:h-96 overflow-y-auto p-4 bg-[#0a0e17] border border-surface-3 rounded-xl mb-4 space-y-3"></div>
+
+        <!-- Input -->
+        <div class="flex gap-2">
+          <input id="chat-input" type="text" placeholder="输入消息..." onkeydown="if(event.key==='Enter')sendMessage()"
+            class="flex-1 bg-[#0a0e17] border border-surface-3 rounded-xl px-4 py-2.5 text-sm text-ink placeholder-ink-3 focus:outline-none focus:border-accent transition">
+          <button onclick="sendMessage()" class="px-5 py-2.5 bg-accent hover:bg-accent-dark text-white rounded-xl text-sm font-medium transition flex items-center gap-2">
+            <i data-lucide="send" class="w-4 h-4"></i>
+            <span class="hidden sm:inline">发送</span>
+          </button>
+          <button onclick="clearChat()" class="px-3 py-2.5 bg-surface border border-surface-3 hover:border-ink-3 text-ink-2 rounded-xl text-sm transition">
+            <i data-lucide="trash-2" class="w-4 h-4"></i>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════ PRICING ═══════ -->
+    <div id="page-pricing" class="page">
+      <div class="flex flex-col lg:flex-row lg:items-end justify-between gap-4 mb-6">
+        <div>
+          <h2 class="text-xl font-semibold tracking-tight">模型价格</h2>
+          <p class="mt-1 text-xs text-ink-3">按模型单独维护输入 / 输出价格，用于费用统计与调用成本核算。</p>
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
+          <input id="pricing-search" type="search" placeholder="搜索模型 / 来源 / 提供商" class="bg-surface border border-surface-3 rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:border-accent min-w-[220px]">
+          <div id="pricing-sort" class="dark-select min-w-[150px]">
+            <input class="dark-select-value" type="hidden" value="latest">
+            <button type="button" class="dark-select-button"><span>最新更新</span></button>
+            <div class="dark-select-menu">
+              <button type="button" class="dark-select-option active" data-value="latest">最新更新</button>
+              <button type="button" class="dark-select-option" data-value="cost_desc">费用高到低</button>
+              <button type="button" class="dark-select-option" data-value="cost_asc">费用低到高</button>
+              <button type="button" class="dark-select-option" data-value="name">模型名</button>
+            </div>
+          </div>
+          <button onclick="savePricing()" class="inline-flex items-center gap-2 px-4 py-2 bg-accent hover:bg-accent-dark text-white text-sm font-medium rounded-lg transition">
+            <i data-lucide="save" class="w-4 h-4"></i> 保存价格
+          </button>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6" id="pricing-overview"></div>
+
+      <div class="card overflow-hidden">
+        <div class="px-5 py-3 border-b border-surface-3 flex items-center justify-between gap-2">
+          <div class="flex items-center gap-2 text-xs text-ink-3 uppercase tracking-wider">
+            <i data-lucide="badge-dollar-sign" class="w-3.5 h-3.5"></i> 价格预设表
+          </div>
+          <div class="flex items-center gap-1.5 text-[11px] text-ink-3">
+            <i data-lucide="move-horizontal" class="w-3.5 h-3.5"></i>
+            <span>横向滑动编辑全部字段</span>
+          </div>
+        </div>
+        <div class="pricing-scroll">
+          <table class="data-table pricing-table">
+            <thead><tr><th style="width: 150px;">提供商</th><th style="width: 260px;">模型</th><th style="width: 110px;">币种</th><th style="width: 150px;">输入价</th><th style="width: 150px;">输出价</th><th style="width: 320px;">来源</th><th style="width: 150px;">更新时间</th><th style="width: 130px;">状态</th></tr></thead>
+            <tbody id="pricing-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════ SETTINGS ═══════ -->
+    <div id="page-settings" class="page">
+      <h2 class="text-xl font-semibold tracking-tight mb-6">设置</h2>
+
+      <div class="card p-5 mb-4">
+        <div class="flex items-center gap-2 text-xs text-ink-3 uppercase tracking-wider mb-4">
+          <i data-lucide="globe" class="w-3.5 h-3.5"></i> 服务配置
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+          <div>
+            <label class="block text-xs text-ink-3 mb-1.5">监听地址</label>
+            <input id="cfg-host" value="0.0.0.0" class="w-full bg-[#0a0e17] border border-surface-3 rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:border-accent">
+          </div>
+          <div>
+            <label class="block text-xs text-ink-3 mb-1.5">端口</label>
+            <input id="cfg-port" type="number" value="8765" class="w-full bg-[#0a0e17] border border-surface-3 rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:border-accent">
+          </div>
+        </div>
+        <div class="mb-4">
+          <label class="block text-xs text-ink-3 mb-1.5">认证 Token（每行一个，留空则不验证）</label>
+          <textarea id="cfg-tokens" rows="3" placeholder="sk-xxx&#10;sk-yyy" class="w-full bg-[#0a0e17] border border-surface-3 rounded-lg px-3 py-2 text-sm text-ink font-mono focus:outline-none focus:border-accent"></textarea>
+        </div>
+        <div class="mb-4">
+          <label class="block text-xs text-ink-3 mb-1.5">管理 Token（每行一个；远程访问管理面板必填）</label>
+          <textarea id="cfg-admin-tokens" rows="2" placeholder="admin-xxx" class="w-full bg-[#0a0e17] border border-surface-3 rounded-lg px-3 py-2 text-sm text-ink font-mono focus:outline-none focus:border-accent"></textarea>
+          <p class="mt-1.5 text-[11px] text-ink-3">Token 仅保存在服务端；当前浏览器会在会话期间保存输入的第一个新 Token。</p>
+        </div>
+        <button onclick="saveSettings()" class="inline-flex items-center gap-2 px-4 py-2 bg-accent hover:bg-accent-dark text-white text-sm font-medium rounded-lg transition">
+          <i data-lucide="save" class="w-4 h-4"></i> 保存设置
+        </button>
+      </div>
+
+      <div class="card p-5 mb-4">
+        <div class="flex items-center gap-2 text-xs text-ink-3 uppercase tracking-wider mb-4">
+          <i data-lucide="book-open" class="w-3.5 h-3.5"></i> 使用说明
+        </div>
+        <div class="text-sm text-ink-2 leading-relaxed space-y-2">
+          <p><b class="text-ink">接口地址：</b><code class="bg-surface px-1.5 py-0.5 rounded text-accent-light font-mono text-xs">http://localhost:{端口}/v1/chat/completions</code></p>
+          <p><b class="text-ink">模型列表：</b><code class="bg-surface px-1.5 py-0.5 rounded text-accent-light font-mono text-xs">http://localhost:{端口}/v1/models</code></p>
+          <p><b class="text-ink">认证方式：</b>Header <code class="bg-surface px-1.5 py-0.5 rounded text-accent-light font-mono text-xs">Authorization: Bearer {token}</code></p>
+          <p class="text-ink-3 text-xs mt-3 pt-3 border-t border-surface-3">将此地址配置到任何支持 OpenAI API 的工具中即可使用。模型名使用映射表中的"调用名"。</p>
+        </div>
+      </div>
+
+      <!-- 配置导入导出 -->
+      <div class="card p-5">
+        <div class="flex items-center gap-2 text-xs text-ink-3 uppercase tracking-wider mb-4">
+          <i data-lucide="arrow-left-right" class="w-3.5 h-3.5"></i> 配置导入 / 导出
+        </div>
+        <div class="flex flex-wrap gap-2">
+          <button onclick="exportConfig()" class="inline-flex items-center gap-2 px-4 py-2 bg-surface border border-surface-3 hover:border-accent text-ink text-sm font-medium rounded-lg transition">
+            <i data-lucide="download" class="w-4 h-4"></i> 导出配置
+          </button>
+          <button onclick="importConfig()" class="inline-flex items-center gap-2 px-4 py-2 bg-surface border border-surface-3 hover:border-accent text-ink text-sm font-medium rounded-lg transition">
+            <i data-lucide="upload" class="w-4 h-4"></i> 导入配置
+          </button>
+        </div>
+        <input type="file" id="import-file" accept=".json" class="hidden" onchange="handleImportFile(event)">
+      </div>
+    </div>
+
+    <!-- ═══════ LOGS ═══════ -->
+    <div id="page-logs" class="page">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
+        <h2 class="text-xl font-semibold tracking-tight">请求日志</h2>
+        <div class="flex flex-wrap items-center gap-2">
+          <select id="log-filter-provider" onchange="loadLogs(1)" class="bg-surface border border-surface-3 rounded-lg px-3 py-1.5 text-xs text-ink focus:outline-none focus:border-accent">
+            <option value="">全部提供商</option>
+          </select>
+          <select id="log-filter-status" onchange="loadLogs(1)" class="bg-surface border border-surface-3 rounded-lg px-3 py-1.5 text-xs text-ink focus:outline-none focus:border-accent">
+            <option value="">全部状态</option>
+            <option value="success">成功</option>
+            <option value="error">失败</option>
+          </select>
+          <button onclick="clearLogs()" class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs text-ink-3 hover:text-red-400 border border-surface-3 hover:border-red-500/30 rounded-lg transition">
+            <i data-lucide="trash-2" class="w-3.5 h-3.5"></i> 清除
+          </button>
+        </div>
+      </div>
+
+      <div class="card overflow-hidden">
+        <div class="overflow-x-auto">
+          <table class="data-table w-full">
+            <thead><tr>
+              <th>时间</th><th>模型</th><th>提供商</th><th>状态</th><th>模式</th><th>延迟</th><th>详情</th>
+            </tr></thead>
+            <tbody id="logs-body"></tbody>
+          </table>
+        </div>
+        <div class="px-5 py-3 border-t border-surface-3 flex flex-wrap items-center justify-between gap-3 text-xs text-ink-3">
+          <span id="logs-info"></span>
+          <div class="flex gap-1" id="logs-pagination"></div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<script>
+// ── 全局状态 ──
+let config = {};
+let currentStats = null;
+let appStarted = false;
+let currentPricing = [];
+
+// ── 工具函数 ──
+async function api(path, opts = {}) {
+  const { headers: optionHeaders = {}, ...fetchOptions } = opts;
+  const headers = { 'Content-Type': 'application/json', ...optionHeaders };
+  const r = await fetch(path, { credentials: 'same-origin', ...fetchOptions, headers });
+  if (!r.ok) {
+    const data = await r.json().catch(() => ({}));
+    throw new Error(data.error?.message || data.message || `请求失败 (${r.status})`);
+  }
+  return r.json();
+}
+
+async function apiMaybe(path, opts = {}) {
+  try {
+    return { ok: true, data: await api(path, opts) };
+  } catch (error) {
+    return { ok: false, error };
+  }
+}
+
+function renderAuth(installed, message = '') {
+  const existing = document.getElementById('auth-screen');
+  if (existing) existing.remove();
+  const setup = !installed;
+  const title = setup ? '初始化管理后台' : '管理员登录';
+  const subtitle = setup ? '首次使用，请创建管理员账号和密码。' : '登录后即可管理提供商、模型和统计数据。';
+  const submit = setup ? '创建并进入后台' : '登录后台';
+  const confirmField = setup ? '<label class="block text-sm text-ink-2 mb-2">确认密码<input id="auth-confirm-password" type="password" autocomplete="new-password" required class="mt-1 w-full bg-surface border border-surface-3 rounded-lg px-3 py-2.5 text-ink focus:outline-none focus:border-accent"></label>' : '';
+  document.body.insertAdjacentHTML('beforeend', `
+    <div id="auth-screen" class="fixed inset-0 z-[200] flex items-center justify-center bg-[#070b12]/95 backdrop-blur-sm p-5">
+      <form id="auth-form" class="w-full max-w-md card p-7 shadow-2xl border border-surface-3">
+        <div class="w-11 h-11 rounded-xl bg-accent/15 text-accent-light flex items-center justify-center mb-5"><i data-lucide="${setup ? 'settings' : 'lock-keyhole'}" class="w-5 h-5"></i></div>
+        <h1 class="text-xl font-semibold text-ink">${title}</h1>
+        <p class="mt-2 text-sm text-ink-3">${subtitle}</p>
+        <div id="auth-error" class="${message ? '' : 'hidden'} mt-4 rounded-lg bg-red-500/10 border border-red-500/20 px-3 py-2 text-sm text-red-300">${escHtml(message)}</div>
+        <div class="mt-6 space-y-4">
+          <label class="block text-sm text-ink-2">用户名<input id="auth-username" type="text" autocomplete="username" minlength="3" maxlength="32" required autofocus class="mt-1 w-full bg-surface border border-surface-3 rounded-lg px-3 py-2.5 text-ink focus:outline-none focus:border-accent"></label>
+          <label class="block text-sm text-ink-2">密码<input id="auth-password" type="password" autocomplete="${setup ? 'new-password' : 'current-password'}" minlength="8" required class="mt-1 w-full bg-surface border border-surface-3 rounded-lg px-3 py-2.5 text-ink focus:outline-none focus:border-accent"></label>
+          ${confirmField}
+        </div>
+        <button id="auth-submit" type="submit" class="mt-6 w-full rounded-lg bg-accent hover:bg-blue-500 px-4 py-2.5 text-sm font-medium text-white transition">${submit}</button>
+        <p class="mt-4 text-xs text-ink-3">${setup ? '密码只保存为安全哈希，无法找回。' : '登录状态仅保存在当前浏览器会话中。'}</p>
+      </form>
+    </div>`);
+  document.getElementById('auth-form').addEventListener('submit', async event => {
+    event.preventDefault();
+    const username = document.getElementById('auth-username').value.trim();
+    const password = document.getElementById('auth-password').value;
+    const confirm = document.getElementById('auth-confirm-password');
+    const error = document.getElementById('auth-error');
+    if (confirm && password !== confirm.value) {
+      error.textContent = '两次输入的密码不一致。'; error.classList.remove('hidden'); return;
+    }
+    const button = document.getElementById('auth-submit');
+    button.disabled = true; button.textContent = '处理中…';
+    try {
+      const response = await fetch(setup ? '/api/setup' : '/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password }) });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error?.message || result.message || '操作失败');
+      document.getElementById('auth-screen').remove();
+      await startApplication();
+    } catch (err) {
+      error.textContent = err.message; error.classList.remove('hidden');
+      button.disabled = false; button.textContent = submit;
+    }
+  });
+  lucide.createIcons();
+}
+
+function addLogoutButton(username) {
+  if (document.getElementById('logout-button')) return;
+  const footer = document.getElementById('sidebar-footer');
+  if (!footer) return;
+  footer.insertAdjacentHTML('beforeend', `<button id="logout-button" title="退出 ${escAttr(username)}" class="w-full inline-flex items-center justify-center gap-2 rounded-lg border border-surface-3 bg-[#0a0e17] px-3 py-2 text-xs text-ink-2 hover:text-ink hover:border-accent transition"><i data-lucide="log-out" class="w-3.5 h-3.5"></i>退出登录</button>`);
+  document.getElementById('logout-button').addEventListener('click', async () => {
+    await fetch('/api/logout', { method: 'POST', headers: { 'Content-Type': 'application/json' } });
+    appStarted = false;
+    document.getElementById('logout-button').remove();
+    renderAuth(true);
+  });
+  lucide.createIcons();
+}
+
+async function startApplication() {
+  if (appStarted) return;
+  appStarted = true;
+  try {
+    config = await api('/api/config');
+    loadStats();
+    loadSettings();
+    lucide.createIcons();
+  } catch (error) {
+    appStarted = false;
+    throw error;
+  }
+}
+
+async function bootApplication() {
+  try {
+    await startApplication();
+  } catch (error) {
+    appStarted = false;
+    await showAlert({ title: '无法连接到服务', message: '请确认本地中转代理已启动。', icon: 'circle-alert', iconBg: 'red' });
+  }
+}
+
+async function toggleSecretInput(inputId, button, providerId = '') {
+  const input = document.getElementById(inputId);
+  if (!input) return;
+  const visible = input.type === 'text';
+  if (visible) {
+    input.type = 'password';
+    if (button) button.textContent = '显示';
+    return;
+  }
+  if (providerId && input.value.includes('*')) {
+    try {
+      const result = await api(`/api/providers/${encodeURIComponent(providerId)}/secret`);
+      input.value = result.api_key || '';
+      if (config.providers?.[providerId]) config.providers[providerId].api_key = input.value;
+    } catch (error) {
+      await showAlert({ title: '无法读取 API Key', message: error.message, icon: 'key-round', iconBg: 'red' });
+      return;
+    }
+  }
+  input.type = 'text';
+  if (button) button.textContent = '隐藏';
+}
+
+function secretInput(id, value = '', placeholder = '', providerId = '') {
+  const providerArg = providerId ? `, '${providerId}'` : '';
+  return `<div class="relative">
+    <input id="${id}" type="password" value="${escAttr(value)}" placeholder="${escAttr(placeholder)}" class="modal-input pr-16">
+    <button type="button" onclick="toggleSecretInput('${id}', this${providerArg})" class="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-ink-3 hover:text-ink">显示</button>
+  </div>`;
+}
+
+function escAttr(value) {
+  return String(value ?? '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function toast(msg, type = 'success') {
+  const d = document.createElement('div');
+  d.className = `toast ${type === 'error' ? 'bg-red-500/90 text-white' : 'bg-green-500/90 text-white'}`;
+  d.textContent = msg;
+  document.body.appendChild(d);
+  setTimeout(() => d.remove(), 3000);
+}
+
+function fmtNum(n) {
+  if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M';
+  if (n >= 1e3) return (n / 1e3).toFixed(1) + 'K';
+  return String(n);
+}
+
+function fmtTime(ts) {
+  if (!ts) return '-';
+  const date = new Date(ts);
+  return Number.isNaN(date.getTime()) ? '-' : date.toLocaleString('zh-CN', { hour12: false, month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+}
+
+function formatUsd(v) {
+  const n = Number(v || 0);
+  return n > 0 ? `$${n.toFixed(n < 1 ? 4 : 2)}` : '$0';
+}
+
+function formatRate(v) {
+  const n = Number(v || 0);
+  if (!Number.isFinite(n)) return '$0';
+  if (n === 0) return '$0';
+  return n < 0.01 ? `$${n.toFixed(4)}` : `$${n.toFixed(2)}`;
+}
+
+function formatMoney(v, currency = 'USD') {
+  const n = Number(v || 0);
+  const cur = String(currency || 'USD').toUpperCase();
+  const symbol = cur === 'CNY' ? '¥' : cur === 'USD' ? '$' : `${cur} `;
+  if (!Number.isFinite(n) || n <= 0) return `${symbol}0`;
+  return `${symbol}${n.toFixed(n < 1 ? 4 : 2)}`;
+}
+
+function normalizeModelKey(v) {
+  return String(v || '').trim().toLowerCase().replace(/[^a-z0-9._-]+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+}
+
+function darkSelect({ id = '', className = '', options = [], value = '', attrs = '' }) {
+  const current = options.find(o => o.value === value) || options[0] || { value: '', label: '-' };
+  const inputId = id ? `id="${escAttr(id)}"` : '';
+  return `<div class="dark-select ${escAttr(className)}" ${attrs}>
+    <input ${inputId} class="dark-select-value ${escAttr(className)}" type="hidden" value="${escAttr(current.value)}">
+    <button type="button" class="dark-select-button"><span>${escHtml(current.label)}</span></button>
+    <div class="dark-select-menu">
+      ${options.map(o => `<button type="button" class="dark-select-option ${o.value === current.value ? 'active' : ''}" data-value="${escAttr(o.value)}">${escHtml(o.label)}</button>`).join('')}
+    </div>
+  </div>`;
+}
+
+// ── Modal 引擎 ──
+let _modalResolve = null;
+const modalEl = () => document.getElementById('modal');
+
+function modalResolve(val) {
+  modalEl().classList.remove('open');
+  if (_modalResolve) { _modalResolve(val); _modalResolve = null; }
+}
+
+function openModal({ icon, iconBg, title, desc, body, buttons }) {
+  document.getElementById('modal-icon').innerHTML = icon
+    ? `<i data-lucide="${icon}" class="w-5 h-5 ${iconBg === 'red' ? 'text-red-400' : iconBg === 'amber' ? 'text-amber-400' : 'text-blue-400'}"></i>`
+    : '';
+  document.getElementById('modal-icon').className = `modal-icon ${iconBg === 'red' ? 'bg-red-500/10' : iconBg === 'amber' ? 'bg-amber-500/10' : 'bg-blue-500/10'}`;
+  document.getElementById('modal-title').textContent = title || '';
+  document.getElementById('modal-desc').textContent = desc || '';
+  document.getElementById('modal-desc').style.display = desc ? '' : 'none';
+  document.getElementById('modal-body').innerHTML = body || '';
+  document.getElementById('modal-footer').innerHTML = buttons || '';
+  lucide.createIcons();
+  modalEl().classList.add('open');
+  setTimeout(() => {
+    const primary = document.querySelector('#modal [data-modal-primary]') || document.querySelector('#modal button:last-child') || document.querySelector('#modal input');
+    primary?.focus?.();
+  }, 0);
+  return new Promise(r => { _modalResolve = r; });
+}
+
+function closeModal(value = null) {
+  modalResolve(value);
+}
+
+function modalButton({ text, value, variant = 'secondary', primary = false, icon = '' }) {
+  const variantClass = variant === 'danger' ? 'modal-btn-danger' : variant === 'primary' ? 'modal-btn-primary' : 'modal-btn-secondary';
+  const attrs = primary ? ' data-modal-primary="true"' : '';
+  const iconHtml = icon ? `<i data-lucide="${icon}" class="w-3.5 h-3.5"></i>` : '';
+  return `<button type="button" onclick="closeModal(${JSON.stringify(value)})" class="modal-btn ${variantClass}"${attrs}>${iconHtml}${escHtml(text)}</button>`;
+}
+
+/** 信息弹窗 — 替代系统 alert，返回 Promise<void> */
+function showAlert({ title = '提示', message = '', desc = '', icon = 'info', iconBg = 'blue', buttonText = '知道了' } = {}) {
+  return openModal({
+    icon, iconBg, title, desc,
+    body: `<div class="modal-message">${escHtml(message || desc || '')}</div>`,
+    buttons: modalButton({ text: buttonText, value: true, variant: 'primary', primary: true }),
+  }).then(() => undefined);
+}
+
+/** 确认弹窗 — 返回 true / false */
+function showConfirm({ title, desc, icon = 'alert-triangle', iconBg = 'amber', confirmText = '确认', cancelText = '取消', danger = false }) {
+  return openModal({
+    icon, iconBg, title, desc,
+    body: '',
+    buttons: `
+      ${modalButton({ text: cancelText, value: false })}
+      ${modalButton({ text: confirmText, value: true, variant: danger ? 'danger' : 'primary', primary: true, icon: danger ? 'trash-2' : 'check' })}
+    `,
+  });
+}
+
+/** 输入弹窗 — 替代系统 prompt，返回字符串或 null */
+function showPrompt({ title = '输入', desc = '', value = '', placeholder = '', inputType = 'text', icon = 'pencil', iconBg = 'blue', submitText = '确认' } = {}) {
+  const inputId = 'modal-prompt-input';
+  return openModal({
+    icon, iconBg, title, desc,
+    body: `<input id="${inputId}" type="${escAttr(inputType)}" value="${escAttr(value)}" placeholder="${escAttr(placeholder)}" class="modal-input">`,
+    buttons: `
+      ${modalButton({ text: '取消', value: null })}
+      <button type="button" id="modal-prompt-submit" class="modal-btn modal-btn-primary" data-modal-primary="true"><i data-lucide="check" class="w-3.5 h-3.5"></i>${escHtml(submitText)}</button>
+    `,
+  }).then(val => {
+    if (val === null) return null;
+    const el = document.getElementById(inputId);
+    return el ? el.value : '';
+  });
+}
+
+/** 表单弹窗 — fields: [{label, id, type, value, placeholder, options}] — 返回填写的 {id: value} 或 null */
+function showForm({ title, desc, icon = 'plus-circle', iconBg = 'blue', fields, submitText = '确认' }) {
+  const body = fields.map(f => {
+    const label = `<label class="block text-xs text-ink-3 mb-1.5">${f.label}</label>`;
+    if (f.type === 'select') {
+      const current = f.value || f.options?.[0]?.value || '';
+      const opts = f.options.map(o => `
+        <button type="button" class="modal-choice ${o.value === current ? 'active' : ''}" data-choice-field="mf-${f.id}" data-choice-value="${escAttr(o.value)}">${escHtml(o.label)}</button>
+      `).join('');
+      return `<div class="mb-3">${label}<input id="mf-${f.id}" type="hidden" value="${escAttr(current)}"><div class="modal-choice-grid">${opts}</div></div>`;
+    }
+    if (f.type === 'password') {
+      return `<div class="mb-3">${label}${secretInput(`mf-${f.id}`, f.value, f.placeholder, f.secretProvider)}</div>`;
+    }
+    return `<div class="mb-3">${label}<input id="mf-${f.id}" type="${f.type || 'text'}" value="${escAttr(f.value)}" placeholder="${escAttr(f.placeholder)}" class="modal-input"></div>`;
+  }).join('');
+
+  return openModal({
+    icon, iconBg, title, desc, body,
+    buttons: `
+      ${modalButton({ text: '取消', value: null })}
+      <button id="modal-submit-btn" class="modal-btn modal-btn-primary" data-modal-primary="true">${submitText}</button>
+    `,
+  }).then(val => {
+    if (val === null) return null;
+    const result = {};
+    fields.forEach(f => {
+      const el = document.getElementById(`mf-${f.id}`);
+      result[f.id] = el ? el.value : '';
+    });
+    return result;
+  });
+}
+
+// submit 按钮收集表单值并关闭
+document.addEventListener('click', e => {
+  const darkButton = e.target.closest('.dark-select-button');
+  if (darkButton) {
+    const root = darkButton.closest('.dark-select');
+    document.querySelectorAll('.dark-select.open').forEach(el => { if (el !== root) el.classList.remove('open'); });
+    root?.classList.toggle('open');
+    return;
+  }
+  const darkOption = e.target.closest('.dark-select-option');
+  if (darkOption) {
+    const root = darkOption.closest('.dark-select');
+    const input = root?.querySelector('.dark-select-value');
+    const label = root?.querySelector('.dark-select-button span');
+    if (input) {
+      input.value = darkOption.dataset.value || '';
+      if (darkOption.dataset.protocol) input.dataset.protocol = darkOption.dataset.protocol;
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+    if (label) label.textContent = darkOption.textContent || '';
+    root?.querySelectorAll('.dark-select-option').forEach(btn => btn.classList.remove('active'));
+    darkOption.classList.add('active');
+    root?.classList.remove('open');
+    return;
+  }
+  if (!e.target.closest('.dark-select')) document.querySelectorAll('.dark-select.open').forEach(el => el.classList.remove('open'));
+  const choice = e.target.closest('[data-choice-field]');
+  if (choice) {
+    const input = document.getElementById(choice.dataset.choiceField);
+    if (input) input.value = choice.dataset.choiceValue || '';
+    document.querySelectorAll(`[data-choice-field="${choice.dataset.choiceField}"]`).forEach(btn => btn.classList.remove('active'));
+    choice.classList.add('active');
+    return;
+  }
+  if (e.target.id === 'modal-submit-btn') {
+    // 收集由 showForm 内的 .then 处理，这里传特殊标记
+    closeModal(true);
+  }
+  if (e.target.id === 'modal-prompt-submit') {
+    closeModal(true);
+  }
+});
+
+// Esc 关闭
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && modalEl().classList.contains('open')) closeModal(null);
+  if (e.key === 'Enter' && modalEl().classList.contains('open')) {
+    const active = document.activeElement;
+    if (active?.tagName === 'TEXTAREA') return;
+    const primary = document.querySelector('#modal [data-modal-primary]');
+    if (primary) {
+      e.preventDefault();
+      primary.click();
+    }
+  }
+});
+
+// ── 侧栏手势 ──
+let touchStartX = 0, touchStartY = 0, swiping = false;
+
+document.addEventListener('touchstart', e => {
+  touchStartX = e.touches[0].clientX;
+  touchStartY = e.touches[0].clientY;
+  swiping = false;
+}, { passive: true });
+
+document.addEventListener('touchmove', e => {
+  const dx = e.touches[0].clientX - touchStartX;
+  const dy = Math.abs(e.touches[0].clientY - touchStartY);
+  if (dy > 30) return;
+  if (Math.abs(dx) > 15) swiping = true;
+}, { passive: true });
+
+document.addEventListener('touchend', e => {
+  if (!swiping) return;
+  const dx = e.changedTouches[0].clientX - touchStartX;
+  if (dx > 60 && touchStartX < 40) openSidebar();
+  if (dx < -60) closeSidebar();
+}, { passive: true });
+
+function openSidebar() {
+  document.getElementById('sidebar').classList.add('open');
+  document.getElementById('sidebar-overlay').classList.add('open');
+}
+function closeSidebar() {
+  document.getElementById('sidebar').classList.remove('open');
+  document.getElementById('sidebar-overlay').classList.remove('open');
+}
+
+// ── 导航 ──
+document.querySelectorAll('.nav-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const page = btn.dataset.page;
+    switchPage(page);
+    closeSidebar();
+  });
+});
+
+function switchPage(name) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(n => {
+    n.classList.remove('bg-surface-2', 'text-accent-light');
+    n.classList.add('text-ink-2');
+  });
+  const page = document.getElementById(`page-${name}`);
+  if (page) page.classList.add('active');
+  const btn = document.querySelector(`.nav-btn[data-page="${name}"]`);
+  if (btn) {
+    btn.classList.add('bg-surface-2', 'text-accent-light');
+    btn.classList.remove('text-ink-2');
+  }
+  if (name === 'dashboard') loadStats();
+  if (name === 'providers') renderProviders();
+  if (name === 'mappings') renderMappings();
+  if (name === 'chat') loadChatModels();
+  if (name === 'pricing') renderPricing();
+  if (name === 'logs') loadLogs();
+}
+
+async function refreshCurrentPage() {
+  const active = document.querySelector('.page.active')?.id || '';
+  if (active === 'page-dashboard') await loadStats();
+  if (active === 'page-providers') await renderProviders();
+  if (active === 'page-mappings') await renderMappings();
+  if (active === 'page-chat') await loadChatModels();
+  if (active === 'page-pricing') await renderPricing();
+  if (active === 'page-logs') await loadLogs(logsPage);
+}
+
+// ── Range 按钮样式 ──
+const rangeStyle = {
+  active: 'bg-accent text-white shadow-sm',
+  inactive: 'text-ink-2 hover:text-ink',
+};
+
+document.getElementById('range-selector').addEventListener('click', e => {
+  const btn = e.target.closest('.range-btn');
+  if (!btn) return;
+  document.querySelectorAll('.range-btn').forEach(b => {
+    b.className = `range-btn px-3 py-1.5 rounded-md text-xs font-medium transition ${rangeStyle.inactive}`;
+  });
+  btn.className = `range-btn px-3 py-1.5 rounded-md text-xs font-medium transition ${rangeStyle.active}`;
+  loadStats(btn.dataset.range);
+});
+
+// ── Nav 初始状态 ──
+document.querySelector('.nav-btn[data-page="dashboard"]').classList.add('bg-surface-2', 'text-accent-light');
+document.querySelector('.nav-btn[data-page="dashboard"]').classList.remove('text-ink-2');
+
+// ═══════════════════════════════════════════════
+//  仪表盘
+// ═══════════════════════════════════════════════
+
+async function loadStats(range = '24h') {
+  try {
+    currentStats = await api(`/api/stats?range=${range}`);
+    renderStatsOverview();
+    renderModelStats();
+    renderRecentRequests();
+    drawTrendChart();
+    drawProviderChart();
+  } catch (e) {
+    await showAlert({ title: '加载统计数据失败', message: e.message || '请稍后重试', icon: 'chart-no-axes-column', iconBg: 'red' });
+  }
+}
+
+function renderStatsOverview() {
+  const s = currentStats?.summary || {};
+  const cost = Number(s.total_cost || 0);
+  const requests = Number(s.total_requests || 0);
+  const inputTokens = Number(s.total_input || 0);
+  const outputTokens = Number(s.total_output || 0);
+  const cards = [
+    { label: '总请求数', value: fmtNum(requests), color: 'text-blue-400', icon: 'activity' },
+    { label: '总 Token', value: fmtNum(Number(s.total_tokens || 0)), color: 'text-green-400', icon: 'coins' },
+    { label: '输入 Token', value: fmtNum(inputTokens), color: 'text-ink', icon: 'arrow-down-circle' },
+    { label: '输出 Token', value: fmtNum(outputTokens), color: 'text-ink', icon: 'arrow-up-circle' },
+    { label: '总费用', value: formatUsd(cost), color: 'text-rose-400', icon: 'receipt' },
+    { label: '单次均费', value: requests ? formatUsd(cost / requests) : '$0', color: 'text-fuchsia-400', icon: 'banknote' },
+    { label: '平均延迟', value: `${Math.round(Number(s.avg_latency || 0))}ms`, color: 'text-amber-400', icon: 'timer' },
+    { label: '成功率', value: requests ? `${((Number(s.ok_count || 0) / requests) * 100).toFixed(1)}%` : '0%', color: 'text-purple-400', icon: 'shield-check' },
+  ];
+  document.getElementById('stats-overview').innerHTML = cards.map(c => `
+    <div class="card p-4">
+      <div class="flex items-center gap-2 text-[11px] text-ink-3 uppercase tracking-wider mb-1">
+        <i data-lucide="${c.icon}" class="w-3.5 h-3.5"></i>
+        ${c.label}
+      </div>
+      <div class="text-2xl font-bold ${c.color}">${c.value}</div>
+    </div>
+  `).join('');
+  lucide.createIcons();
+}
+
+function renderModelStats() {
+  const pricing = Object.fromEntries((currentStats?.pricing || []).map(p => [normalizeModelKey(p.model), p]));
+  const rows = (currentStats?.by_model || []).map(m => {
+    const p = pricing[normalizeModelKey(m.model)] || m.pricing || {};
+    const hasPricing = Number(p.input || 0) > 0 || Number(p.output || 0) > 0;
+    const review = p.needs_review ? '需要确认' : '已确认';
+    const currency = String(p.currency || 'USD').toUpperCase();
+    const estInput = Number(p.input || 0);
+    const estOutput = Number(p.output || 0);
+    const estCost = ((Number(m.input_tokens || 0) * estInput) + (Number(m.output_tokens || 0) * estOutput)) / 1_000_000;
+    return `
+    <tr>
+      <td class="font-mono text-xs">${escHtml(m.model)}</td>
+      <td><span class="inline-block px-2 py-0.5 rounded-full text-[10px] font-medium bg-blue-500/10 text-blue-400">${escHtml(m.provider)}</span></td>
+      <td>${fmtNum(m.count)}</td>
+      <td class="font-mono text-xs">${fmtNum(m.input_tokens)}</td>
+      <td class="font-mono text-xs">${fmtNum(m.output_tokens)}</td>
+      <td class="font-mono text-xs font-semibold">${fmtNum(m.total_tokens)}</td>
+      <td class="text-rose-400 text-xs">${formatUsd(m.total_cost || 0)}</td>
+      <td class="text-xs">${Number.isFinite(Number(m.avg_latency)) ? `${Math.round(Number(m.avg_latency))}ms` : '-'}</td>
+      <td class="text-xs">${hasPricing ? `${formatMoney(estCost, currency)} / ${review}` : '未配置'}</td>
+    </tr>
+  `;}).join('');
+  document.getElementById('model-stats').innerHTML = rows || '<tr><td colspan="9" class="text-center text-ink-3 py-8">暂无数据</td></tr>';
+}
+
+function renderRecentRequests() {
+  document.getElementById('recent-requests').innerHTML = currentStats.recent.map(r => `
+    <tr>
+      <td class="text-xs text-ink-2">${fmtTime(r.timestamp)}</td>
+      <td>${escHtml(r.provider)}</td>
+      <td class="font-mono text-xs">${escHtml(r.model)}</td>
+      <td class="font-mono">${fmtNum(r.total_tokens)}</td>
+      <td>${r.latency_ms}ms</td>
+      <td>
+        <span class="inline-block px-2 py-0.5 rounded-full text-[10px] font-medium ${r.status === 'ok' ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'}">
+          ${r.status}
+        </span>
+      </td>
+    </tr>
+  `).join('') || '<tr><td colspan="6" class="text-center text-ink-3 py-8">暂无数据</td></tr>';
+}
+
+// ── 图表 ──
+function drawTrendChart() {
+  const canvas = document.getElementById('chart-trend');
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.parentElement.getBoundingClientRect();
+  canvas.width = rect.width * dpr;
+  canvas.height = rect.height * dpr;
+  canvas.style.width = rect.width + 'px';
+  canvas.style.height = rect.height + 'px';
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const W = rect.width, H = rect.height;
+
+  const data = currentStats?.by_hour || [];
+  ctx.clearRect(0, 0, W, H);
+
+  if (!data.length) {
+    ctx.fillStyle = '#64748b'; ctx.font = '14px serif'; ctx.textAlign = 'center';
+    ctx.fillText('暂无数据', W / 2, H / 2);
+    return;
+  }
+
+  const maxVal = Math.max(...data.map(d => Number(d.tokens || 0)), 1);
+  const pad = { t: 16, b: 28, l: 46, r: 12 };
+  const w = W - pad.l - pad.r, h = H - pad.t - pad.b;
+  const stepX = w / Math.max(data.length - 1, 1);
+
+  // grid
+  ctx.strokeStyle = '#1e293b'; ctx.lineWidth = 1;
+  for (let i = 0; i <= 4; i++) {
+    const y = pad.t + (h / 4) * i;
+    ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(W - pad.r, y); ctx.stroke();
+    ctx.fillStyle = '#64748b'; ctx.font = '10px serif'; ctx.textAlign = 'right';
+    ctx.fillText(fmtNum(Math.round(maxVal * (1 - i / 4))), pad.l - 6, y + 3);
+  }
+
+  // area fill
+  const grad = ctx.createLinearGradient(0, pad.t, 0, pad.t + h);
+  grad.addColorStop(0, 'rgba(59,130,246,0.25)');
+  grad.addColorStop(1, 'rgba(59,130,246,0)');
+  ctx.beginPath();
+  ctx.moveTo(pad.l, pad.t + h);
+  data.forEach((d, i) => ctx.lineTo(pad.l + i * stepX, pad.t + h - (d.tokens / maxVal) * h));
+  ctx.lineTo(pad.l + (data.length - 1) * stepX, pad.t + h);
+  ctx.fillStyle = grad; ctx.fill();
+
+  // line
+  ctx.beginPath(); ctx.strokeStyle = '#3b82f6'; ctx.lineWidth = 2; ctx.lineJoin = 'round';
+  data.forEach((d, i) => {
+    const x = pad.l + i * stepX, y = pad.t + h - (d.tokens / maxVal) * h;
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  });
+  ctx.stroke();
+
+  // request bars
+  const maxCount = Math.max(...data.map(d => Number(d.count || 0)), 1);
+  const barW = Math.max(stepX * 0.35, 3);
+  data.forEach((d, i) => {
+    const x = pad.l + i * stepX - barW / 2;
+    const barH = (d.count / maxCount) * h * 0.25;
+    ctx.fillStyle = 'rgba(168,85,247,0.35)';
+    ctx.fillRect(x, pad.t + h - barH, barW, barH);
+  });
+}
+
+function drawProviderChart() {
+  const canvas = document.getElementById('chart-provider');
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.parentElement.getBoundingClientRect();
+  canvas.width = rect.width * dpr;
+  canvas.height = rect.height * dpr;
+  canvas.style.width = rect.width + 'px';
+  canvas.style.height = rect.height + 'px';
+  ctx.scale(dpr, dpr);
+  const W = rect.width, H = rect.height;
+  ctx.clearRect(0, 0, W, H);
+
+  const data = currentStats?.by_provider || [];
+  if (!data.length) {
+    ctx.fillStyle = '#64748b'; ctx.font = '14px serif'; ctx.textAlign = 'center';
+    ctx.fillText('暂无数据', W / 2, H / 2);
+    return;
+  }
+
+  const total = data.reduce((s, d) => s + d.tokens, 0) || 1;
+  const colors = ['#3b82f6', '#22c55e', '#f59e0b', '#ef4444', '#a855f7', '#06b6d4'];
+  const cx = W * 0.4, cy = H / 2, r = Math.min(cx, cy) - 16;
+  let angle = -Math.PI / 2;
+
+  data.forEach((d, i) => {
+    const slice = (d.tokens / total) * Math.PI * 2;
+    ctx.beginPath(); ctx.moveTo(cx, cy);
+    ctx.arc(cx, cy, r, angle, angle + slice);
+    ctx.fillStyle = colors[i % colors.length]; ctx.fill();
+    angle += slice;
+  });
+
+  ctx.beginPath(); ctx.arc(cx, cy, r * 0.55, 0, Math.PI * 2);
+  ctx.fillStyle = '#111827'; ctx.fill();
+
+  // legend
+  let ly = 16;
+  ctx.font = '11px serif';
+  data.forEach((d, i) => {
+    ctx.fillStyle = colors[i % colors.length];
+    ctx.beginPath(); ctx.roundRect(W - 110, ly, 8, 8, 2); ctx.fill();
+    ctx.fillStyle = '#e2e8f0'; ctx.textAlign = 'left';
+    ctx.fillText(`${d.provider} ${fmtNum(d.tokens)}`, W - 96, ly + 8);
+    ly += 20;
+  });
+}
+
+// ═══════════════════════════════════════════════
+//  提供商管理
+// ═══════════════════════════════════════════════
+
+async function renderProviders() {
+  config = await api('/api/config');
+  const grid = document.getElementById('providers-list');
+  const providers = config.providers || {};
+  const providerStats = Object.fromEntries((currentStats?.by_provider || []).map(p => [p.provider, p]));
+  const query = (document.getElementById('provider-search')?.value || '').trim().toLowerCase();
+  const sortMode = document.getElementById('provider-sort')?.value || 'latest';
+  const entries = Object.entries(providers).map(([id, p], index) => ({ id, p, index }));
+  const filtered = entries.filter(({ id, p }) => {
+    if (!query) return true;
+    const hay = [id, p.name, p.base_url, p.type].join(' ').toLowerCase();
+    return hay.includes(query);
+  });
+  filtered.sort((a, b) => {
+    const aCalls = Number((providerStats[a.id] || {}).count || a.p.call_count || a.p.calls || 0);
+    const bCalls = Number((providerStats[b.id] || {}).count || b.p.call_count || b.p.calls || 0);
+    const aEnabled = a.p.enabled ? 1 : 0;
+    const bEnabled = b.p.enabled ? 1 : 0;
+    if (sortMode === 'calls') return bCalls - aCalls || (b.index - a.index);
+    if (sortMode === 'name') return String(a.p.name || a.id).localeCompare(String(b.p.name || b.id), 'zh-Hans-CN');
+    if (sortMode === 'enabled') return bEnabled - aEnabled || (b.index - a.index);
+    return b.index - a.index;
+  });
+
+  grid.innerHTML = filtered.map(({ id, p }) => `
+    <div class="card p-5 min-w-0">
+      <div class="provider-card-header flex items-start justify-between gap-3 mb-4">
+        <div class="provider-card-meta">
+          <div class="font-semibold text-[15px] flex items-center gap-2">
+            <span>${escHtml(p.name)}</span>
+            <span class="text-[10px] px-2 py-0.5 rounded-full ${p.enabled ? 'bg-green-500/10 text-green-400' : 'bg-surface-2 text-ink-3'}">${p.enabled ? '启用' : '停用'}</span>
+          </div>
+          <div class="text-xs text-ink-3 mt-0.5 flex flex-wrap items-center gap-1.5">
+            <span class="inline-block px-1.5 py-0.5 rounded bg-surface-2 text-[10px] font-mono">${escHtml(p.type)}</span>
+            <span class="truncate block">${escHtml(p.base_url)}</span>
+          </div>
+        </div>
+        <div class="switch-track flex-shrink-0 ${p.enabled ? 'on' : ''}" onclick="toggleProvider('${id}', this)"></div>
+      </div>
+      <div class="mb-3">
+        <label class="block text-xs text-ink-3 mb-1">API Key</label>
+        <div class="relative">
+          <input type="password" id="pk-${id}" value="${escAttr(p.api_key)}" placeholder="sk-..."
+            class="w-full bg-[#0a0e17] border border-surface-3 rounded-lg px-3 py-2 pr-16 text-sm text-ink font-mono focus:outline-none focus:border-accent transition"
+            onchange="saveProviderKey('${id}', false)">
+          <button type="button" onclick="toggleSecretInput('pk-${id}', this, '${id}')" class="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-ink-3 hover:text-ink">显示</button>
+        </div>
+      </div>
+      <div class="mb-3 flex items-center justify-between text-xs text-ink-3">
+        <span>调用次数</span>
+        <span class="font-semibold text-ink-2">${fmtNum(Number(p.call_count || p.calls || 0))}</span>
+      </div>
+      <div class="provider-actions gap-2">
+        <button onclick="saveProviderKey('${id}')" class="primary-action inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-accent/10 border border-accent/30 hover:bg-accent/20 text-accent-light text-xs font-medium rounded-lg transition">
+          <i data-lucide="save" class="w-3.5 h-3.5"></i> 保存 Key
+        </button>
+        <button onclick="editProvider('${id}')" class="primary-action inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-surface border border-surface-3 hover:border-accent text-ink-2 text-xs font-medium rounded-lg transition">
+          <i data-lucide="pencil" class="w-3.5 h-3.5"></i> 编辑
+        </button>
+        <button onclick="testProvider('${id}')" class="primary-action inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-surface border border-surface-3 hover:border-accent text-ink-2 text-xs font-medium rounded-lg transition">
+          <i data-lucide="plug" class="w-3.5 h-3.5"></i> 测试
+        </button>
+        <button onclick="discoverModels('${id}')" title="发现模型" class="icon-action inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-surface border border-surface-3 hover:border-purple-500/50 text-purple-400 text-xs font-medium rounded-lg transition">
+          <i data-lucide="radar" class="w-3.5 h-3.5"></i>
+        </button>
+        <button onclick="deleteProvider('${id}')" title="删除提供商" class="icon-action inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-surface border border-red-500/20 hover:border-red-500/50 text-red-400 text-xs font-medium rounded-lg transition">
+          <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+        </button>
+      </div>
+      <div id="test-${id}" class="mt-2 text-xs"></div>
+      <div id="discover-${id}" class="mt-1 text-xs"></div>
+    </div>
+  `).join('') + `
+    <button onclick="showAddProvider()" class="card p-5 border-dashed flex flex-col items-center justify-center gap-2 opacity-50 hover:opacity-100 hover:border-accent transition min-h-[180px]">
+      <i data-lucide="plus-circle" class="w-8 h-8 text-ink-3"></i>
+      <span class="text-sm text-ink-3">添加新提供商</span>
+    </button>
+  `;
+  bindProviderControls();
+  lucide.createIcons();
+}
+
+function bindProviderControls() {
+  const search = document.getElementById('provider-search');
+  const sort = document.getElementById('provider-sort');
+  if (search && !search.dataset.bound) {
+    search.dataset.bound = '1';
+    search.addEventListener('input', () => renderProviders());
+  }
+  if (sort && !sort.dataset.bound) {
+    sort.dataset.bound = '1';
+    sort.addEventListener('change', () => renderProviders());
+  }
+}
+
+function providerFormFields(provider = {}, id = '') {
+  return [
+    { id: 'id', label: '提供商 ID', value: id, placeholder: 'openai-main' },
+    { id: 'name', label: '名称', value: provider.name || '', placeholder: 'OpenAI Main' },
+    { id: 'type', label: '协议', type: 'select', value: provider.type || 'openai', options: [
+      { value: 'openai', label: 'OpenAI 兼容' },
+      { value: 'responses', label: 'Codex Responses' },
+      { value: 'anthropic', label: 'Anthropic Messages' },
+      { value: 'ollama', label: 'Ollama' },
+    ] },
+    { id: 'base_url', label: 'Base URL', value: provider.base_url || '', placeholder: 'https://api.openai.com/v1' },
+    { id: 'api_key', label: 'API Key', type: 'password', value: provider.api_key || '', placeholder: 'sk-...', secretProvider: id },
+  ];
+}
+
+function providerPayload(values, existing = {}) {
+  return {
+    name: values.name || values.id,
+    type: values.type || 'openai',
+    base_url: values.base_url || '',
+    api_key: values.api_key || '',
+    enabled: existing.enabled ?? true,
+    call_count: Number(existing.call_count || existing.calls || 0),
+  };
+}
+
+async function showAddProvider() {
+  const values = await showForm({
+    title: '添加提供商',
+    desc: '配置上游 API 服务',
+    icon: 'server',
+    fields: providerFormFields(),
+    submitText: '添加',
+  });
+  if (!values) return;
+  const id = normalizeModelKey(values.id || values.name || 'provider');
+  if (!id) return showAlert({ title: '提供商 ID 不能为空', message: '请填写一个由字母、数字、点、下划线或短横线组成的 ID。', icon: 'circle-alert', iconBg: 'amber' });
+  if (config.providers?.[id]) return showAlert({ title: '提供商 ID 已存在', message: id, icon: 'copy-x', iconBg: 'amber' });
+  if (!values.base_url) return showAlert({ title: 'Base URL 不能为空', message: '请填写上游服务地址，例如 https://api.openai.com/v1。', icon: 'link', iconBg: 'amber' });
+  try {
+    await api(`/api/providers/${encodeURIComponent(id)}`, { method: 'POST', body: JSON.stringify(providerPayload(values)) });
+    toast('提供商已添加');
+    await refreshCurrentPage();
+  } catch (error) {
+    await showAlert({ title: '添加失败', message: error.message, icon: 'server-crash', iconBg: 'red' });
+  }
+}
+
+async function editProvider(id) {
+  const provider = config.providers?.[id];
+  if (!provider) return showAlert({ title: '提供商不存在', message: id, icon: 'circle-alert', iconBg: 'red' });
+  const values = await showForm({
+    title: '编辑提供商',
+    desc: id,
+    icon: 'pencil',
+    fields: providerFormFields(provider, id),
+    submitText: '保存',
+  });
+  if (!values) return;
+  const nextId = normalizeModelKey(values.id || id);
+  if (!nextId) return showAlert({ title: '提供商 ID 不能为空', message: '请填写一个由字母、数字、点、下划线或短横线组成的 ID。', icon: 'circle-alert', iconBg: 'amber' });
+  if (!values.base_url) return showAlert({ title: 'Base URL 不能为空', message: '请填写上游服务地址。', icon: 'link', iconBg: 'amber' });
+  try {
+    await api(`/api/providers/${encodeURIComponent(nextId)}`, { method: 'POST', body: JSON.stringify(providerPayload(values, provider)) });
+    if (nextId !== id) await api(`/api/providers/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    toast('提供商已保存');
+    await refreshCurrentPage();
+  } catch (error) {
+    await showAlert({ title: '保存失败', message: error.message, icon: 'save-off', iconBg: 'red' });
+  }
+}
+
+async function toggleProvider(id, el) {
+  const provider = config.providers?.[id];
+  if (!provider) return;
+  provider.enabled = !provider.enabled;
+  el.classList.toggle('on', provider.enabled);
+  try {
+    await api(`/api/providers/${encodeURIComponent(id)}`, { method: 'POST', body: JSON.stringify(provider) });
+    toast(provider.enabled ? '提供商已启用' : '提供商已停用');
+    await refreshCurrentPage();
+  } catch (error) {
+    provider.enabled = !provider.enabled;
+    el.classList.toggle('on', provider.enabled);
+    await showAlert({ title: '切换失败', message: error.message, icon: 'toggle-left', iconBg: 'red' });
+  }
+}
+
+async function deleteProvider(id) {
+  const ok = await showConfirm({ title: '删除提供商', desc: id, icon: 'trash-2', iconBg: 'red', danger: true, confirmText: '删除' });
+  if (!ok) return;
+  try {
+    await api(`/api/providers/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    toast('提供商已删除');
+    await refreshCurrentPage();
+  } catch (error) {
+    await showAlert({ title: '删除失败', message: error.message, icon: 'trash-2', iconBg: 'red' });
+  }
+}
+
+async function testProvider(id) {
+  const el = document.getElementById(`test-${id}`);
+  if (el) el.innerHTML = '<span class="inline-flex items-center gap-1 text-ink-3"><i data-lucide="loader-2" class="w-3.5 h-3.5 animate-spin"></i>测试中...</span>';
+  lucide.createIcons();
+  try {
+    const keyInput = document.getElementById(`pk-${id}`);
+    if (keyInput) await saveProviderKey(id, false);
+    const r = await api('/api/test', { method: 'POST', body: JSON.stringify({ provider_id: id }) });
+    if (!el) return;
+    el.innerHTML = r.ok
+      ? `<span class="inline-flex items-center gap-1 text-green-400"><i data-lucide="check-circle" class="w-3.5 h-3.5"></i>连接成功 (${r.status})</span>`
+      : `<span class="inline-flex items-center gap-1 text-red-400"><i data-lucide="x-circle" class="w-3.5 h-3.5"></i>连接失败: ${escHtml(r.message || `HTTP ${r.status || 0}`)}</span>`;
+  } catch (error) {
+    if (el) el.innerHTML = `<span class="inline-flex items-center gap-1 text-red-400"><i data-lucide="x-circle" class="w-3.5 h-3.5"></i>测试失败: ${escHtml(error.message)}</span>`;
+  }
+  lucide.createIcons();
+}
+
+async function saveProviderKey(id, notify = true) {
+  const keyInput = document.getElementById(`pk-${id}`);
+  const provider = config.providers?.[id];
+  if (!keyInput || !provider) return;
+  provider.api_key = keyInput.value;
+  try {
+    await api(`/api/providers/${encodeURIComponent(id)}`, { method: 'POST', body: JSON.stringify(provider) });
+    if (notify) toast('API Key 已保存');
+  } catch (error) {
+    await showAlert({ title: '保存失败', message: error.message, icon: 'key-round', iconBg: 'red' });
+    throw error;
+  }
+}
+
+// ═══════════════════════════════════════════════
+//  模型映射
+// ═══════════════════════════════════════════════
+
+function protocolOptions(value = 'openai') {
+  const protocols = [
+    { value: 'openai', label: 'OpenAI 兼容' },
+    { value: 'responses', label: 'Codex Responses' },
+    { value: 'anthropic', label: 'Anthropic Messages' },
+  ];
+  return protocols.map(p => `<option value="${p.value}" ${p.value === value ? 'selected' : ''}>${escHtml(p.label)}</option>`).join('');
+}
+
+function protocolSelectOptions() {
+  return [
+    { value: 'openai', label: 'OpenAI 兼容' },
+    { value: 'responses', label: 'Codex Responses' },
+    { value: 'anthropic', label: 'Anthropic Messages' },
+  ];
+}
+
+async function renderMappings() {
+  config = await api('/api/config');
+  const tbody = document.getElementById('mappings-body');
+  const mappings = config.model_mappings || {};
+  const providers = config.providers || {};
+  const providerOptions = Object.entries(providers).map(([id, p]) => ({ value: id, label: p.name || id }));
+
+  tbody.innerHTML = Object.entries(mappings).map(([alias, m]) => `
+    <tr class="mapping-row">
+      <td class="p-2"><input class="m-alias" value="${escAttr(alias)}" title="${escAttr(alias)}" placeholder="client-model"></td>
+      <td class="p-2">${darkSelect({ className: 'm-provider', options: providerOptions, value: m.provider || '' })}</td>
+      <td class="p-2"><input class="m-model" value="${escAttr(m.model || '')}" title="${escAttr(m.model || '')}" placeholder="upstream-model"></td>
+      <td class="p-2">${darkSelect({ className: 'm-protocol', options: protocolSelectOptions(), value: m.protocol || 'openai' })}</td>
+      <td class="p-2 text-center"><button onclick="this.closest('tr').remove(); updateMappingsCount()" class="mapping-delete text-ink-3 hover:text-red-400 transition" title="删除映射"><i data-lucide="trash-2" class="w-4 h-4"></i></button></td>
+    </tr>
+  `).join('');
+  updateMappingsCount();
+  lucide.createIcons();
+
+  const sel = document.getElementById('default-provider');
+  sel.innerHTML = Object.entries(providers).map(([id, p]) =>
+    `<option value="${escAttr(id)}" ${id === config.default_provider ? 'selected' : ''}>${escHtml(p.name)}</option>`
+  ).join('');
+  document.getElementById('force-default-provider').classList.toggle('on', !!config.force_default_provider);
+}
+
+function addMappingRow() {
+  const providers = config.providers || {};
+  const providerOptions = Object.entries(providers).map(([id, p]) => ({ value: id, label: p.name || id }));
+  const tbody = document.getElementById('mappings-body');
+  const tr = document.createElement('tr');
+  tr.className = 'mapping-row';
+  tr.innerHTML = `
+    <td class="p-2"><input class="m-alias" placeholder="my-model"></td>
+    <td class="p-2">${darkSelect({ className: 'm-provider', options: providerOptions })}</td>
+    <td class="p-2"><input class="m-model" placeholder="实际模型名"></td>
+    <td class="p-2">${darkSelect({ className: 'm-protocol', options: protocolSelectOptions(), value: 'openai' })}</td>
+    <td class="p-2 text-center"><button onclick="this.closest('tr').remove(); updateMappingsCount()" class="mapping-delete text-ink-3 hover:text-red-400 transition" title="删除映射"><i data-lucide="trash-2" class="w-4 h-4"></i></button></td>
+  `;
+  tbody.appendChild(tr);
+  updateMappingsCount();
+  tr.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  tr.querySelector('.m-alias')?.focus();
+  lucide.createIcons();
+}
+
+function updateMappingsCount() {
+  const count = document.querySelectorAll('#mappings-body tr').length;
+  const el = document.getElementById('mappings-count');
+  if (el) el.textContent = `${count} 条`;
+}
+
+async function saveMappings() {
+  const rows = document.querySelectorAll('#mappings-body tr');
+  const mappings = {};
+  rows.forEach(row => {
+    const alias = row.querySelector('.m-alias')?.value.trim();
+    const provider = row.querySelector('.m-provider .dark-select-value')?.value || row.querySelector('.m-provider')?.value;
+    const model = row.querySelector('.m-model')?.value.trim();
+    const protocol = row.querySelector('.m-protocol .dark-select-value')?.value || row.querySelector('.m-protocol')?.value || 'openai';
+    if (alias && provider && model) mappings[alias] = { provider, model, protocol };
+  });
+  config.model_mappings = mappings;
+  try {
+    await api('/api/config', { method: 'POST', body: JSON.stringify(config) });
+    toast('映射已保存');
+  } catch (error) {
+    await showAlert({ title: '保存失败', message: error.message, icon: 'save-off', iconBg: 'red' });
+  }
+}
+
+async function updateDefaultProvider() {
+  config.default_provider = document.getElementById('default-provider').value;
+  try {
+    await api('/api/config', { method: 'POST', body: JSON.stringify(config) });
+  } catch (error) {
+    await showAlert({ title: '保存失败', message: error.message, icon: 'save-off', iconBg: 'red' });
+  }
+}
+
+async function updateForceDefaultProvider(el) {
+  config.force_default_provider = !config.force_default_provider;
+  el.classList.toggle('on', config.force_default_provider);
+  try {
+    const result = await api('/api/config', { method: 'POST', body: JSON.stringify(config) });
+    if (result.warnings?.length) toast(result.warnings[0], 'error');
+    toast(config.force_default_provider ? '已开启只走默认提供商' : '已关闭只走默认提供商');
+  } catch (error) {
+    config.force_default_provider = !config.force_default_provider;
+    el.classList.toggle('on', config.force_default_provider);
+    await showAlert({ title: '保存失败', message: error.message, icon: 'save-off', iconBg: 'red' });
+  }
+}
+
+// ═══════════════════════════════════════════════
+//  模型价格
+// ═══════════════════════════════════════════════
+
+async function renderPricing() {
+  config = await api('/api/config');
+  currentPricing = Object.entries(config.pricing || {}).map(([model, price]) => ({ model, ...price }));
+  const query = (document.getElementById('pricing-search')?.value || '').trim().toLowerCase();
+  const sortEl = document.getElementById('pricing-sort');
+  const sortMode = sortEl?.querySelector('.dark-select-value')?.value || sortEl?.value || 'latest';
+  const byStats = Object.fromEntries((currentStats?.by_model || []).map(m => [normalizeModelKey(m.model), m]));
+
+  const filtered = currentPricing.filter(row => {
+    if (!query) return true;
+    const hay = [row.model, row.source, row.updated, row.provider || ''].join(' ').toLowerCase();
+    return hay.includes(query);
+  });
+
+  filtered.sort((a, b) => {
+    const aStat = byStats[normalizeModelKey(a.model)] || {};
+    const bStat = byStats[normalizeModelKey(b.model)] || {};
+    const aCost = Number(a.input || 0) + Number(a.output || 0);
+    const bCost = Number(b.input || 0) + Number(b.output || 0);
+    if (sortMode === 'cost_desc') return bCost - aCost || String(a.model).localeCompare(String(b.model), 'zh-Hans-CN');
+    if (sortMode === 'cost_asc') return aCost - bCost || String(a.model).localeCompare(String(b.model), 'zh-Hans-CN');
+    if (sortMode === 'name') return String(a.model).localeCompare(String(b.model), 'zh-Hans-CN');
+    return String(b.updated || '').localeCompare(String(a.updated || '')) || (Number(bStat.count || 0) - Number(aStat.count || 0));
+  });
+
+  const overview = document.getElementById('pricing-overview');
+  const priced = currentPricing.filter(p => Number(p.input || 0) > 0 || Number(p.output || 0) > 0);
+  const reviewCount = currentPricing.filter(p => p.needs_review).length;
+  const totalStatsCost = Number(currentStats?.summary?.total_cost || 0);
+  overview.innerHTML = [
+    { label: '模型总数', value: fmtNum(currentPricing.length), icon: 'database' },
+    { label: '已定价', value: fmtNum(priced.length), icon: 'badge-check' },
+    { label: '待确认', value: fmtNum(reviewCount), icon: 'alert-triangle' },
+    { label: '统计费用', value: formatUsd(totalStatsCost), icon: 'receipt' },
+  ].map(card => `
+    <div class="card p-4">
+      <div class="flex items-center gap-2 text-[11px] text-ink-3 uppercase tracking-wider mb-1">
+        <i data-lucide="${card.icon}" class="w-3.5 h-3.5"></i>
+        ${card.label}
+      </div>
+      <div class="text-2xl font-bold text-ink">${card.value}</div>
+    </div>
+  `).join('');
+
+  document.getElementById('pricing-body').innerHTML = filtered.map(row => {
+    const stat = byStats[normalizeModelKey(row.model)] || {};
+    const total = Number(row.input || 0) + Number(row.output || 0);
+    const state = row.needs_review ? '待确认' : (total > 0 ? '已定价' : '未配置');
+    const statusClass = row.needs_review ? 'bg-amber-500/10 text-amber-400' : total > 0 ? 'bg-green-500/10 text-green-400' : 'bg-surface-2 text-ink-3';
+    return `
+      <tr class="pricing-row">
+        <td><input data-price-field="provider" data-model="${escAttr(row.model)}" type="text" value="${escAttr(row.provider || '')}" placeholder="OpenAI" class="p-provider"></td>
+        <td class="p-model text-xs">${escHtml(row.model)}</td>
+        <td><input data-price-field="currency" data-model="${escAttr(row.model)}" type="text" value="${escAttr(String(row.currency || 'USD').toUpperCase())}" placeholder="USD"></td>
+        <td><input data-price-field="input" data-model="${escAttr(row.model)}" type="number" step="0.0001" min="0" value="${escAttr(row.input ?? 0)}"></td>
+        <td><input data-price-field="output" data-model="${escAttr(row.model)}" type="number" step="0.0001" min="0" value="${escAttr(row.output ?? 0)}"></td>
+        <td><input data-price-field="source" data-model="${escAttr(row.model)}" type="text" value="${escAttr(row.source || '')}"></td>
+        <td><input data-price-field="updated" data-model="${escAttr(row.model)}" type="text" value="${escAttr(row.updated || '')}"></td>
+        <td>
+          <span class="inline-block px-2 py-0.5 rounded-full text-[10px] font-medium ${statusClass}">${state}</span>
+          <div class="mt-1 text-[10px] text-ink-3">${stat.count ? `${fmtNum(stat.count)} 次调用` : '无调用记录'}</div>
+        </td>
+      </tr>
+    `;
+  }).join('') || '<tr><td colspan="8" class="text-center text-ink-3 py-8">暂无价格项</td></tr>';
+
+  lucide.createIcons();
+  bindPricingControls();
+}
+
+function bindPricingControls() {
+  const search = document.getElementById('pricing-search');
+  const sort = document.getElementById('pricing-sort');
+  if (search && !search.dataset.bound) {
+    search.dataset.bound = '1';
+    search.addEventListener('input', () => renderPricing());
+  }
+  if (sort && !sort.dataset.bound) {
+    sort.dataset.bound = '1';
+    sort.addEventListener('change', () => renderPricing());
+  }
+}
+
+async function savePricing() {
+  const next = { ...(config.pricing || {}) };
+  const rows = document.querySelectorAll('#pricing-body tr');
+  rows.forEach(row => {
+    const model = row.querySelector('[data-price-field="input"]')?.dataset.model;
+    if (!model) return;
+    const provider = row.querySelector('[data-price-field="provider"]')?.value || '';
+    const currency = (row.querySelector('[data-price-field="currency"]')?.value || 'USD').trim().toUpperCase() || 'USD';
+    const input = Number.parseFloat(row.querySelector('[data-price-field="input"]')?.value || '0');
+    const output = Number.parseFloat(row.querySelector('[data-price-field="output"]')?.value || '0');
+    const source = row.querySelector('[data-price-field="source"]')?.value || '';
+    const updated = row.querySelector('[data-price-field="updated"]')?.value || '';
+    const prev = config.pricing?.[model] || {};
+    next[model] = {
+      provider,
+      currency,
+      input: Number.isFinite(input) ? input : 0,
+      output: Number.isFinite(output) ? output : 0,
+      source,
+      updated,
+      needs_review: prev.needs_review ?? !(Number.isFinite(input) || Number.isFinite(output)),
+    };
+  });
+  config.pricing = next;
+  try {
+    const result = await api('/api/config', { method: 'POST', body: JSON.stringify(config) });
+    if (result.warnings?.length) toast(result.warnings[0], 'error');
+    toast('价格已保存');
+    await refreshCurrentPage();
+  } catch (error) {
+    await showAlert({ title: '保存失败', message: error.message, icon: 'save-off', iconBg: 'red' });
+  }
+}
+
+// ═══════════════════════════════════════════════
+//  测试对话
+// ═══════════════════════════════════════════════
+
+async function loadChatModels() {
+  try {
+    const r = await api('/v1/models');
+    const models = r.data || [];
+    const current = models[0] || { id: '', protocol: 'openai', provider_name: '无模型' };
+    document.getElementById('chat-model').innerHTML = `
+      <input class="dark-select-value" type="hidden" value="${escAttr(current.id)}" data-protocol="${escAttr(current.protocol || 'openai')}">
+      <button type="button" class="dark-select-button"><span>${escHtml(current.provider_name || current.owned_by || '')} · ${escHtml(current.id || '无模型')} · ${escHtml(current.protocol || 'openai')}</span></button>
+      <div class="dark-select-menu">
+        ${models.map((m, index) => `<button type="button" class="dark-select-option ${index === 0 ? 'active' : ''}" data-value="${escAttr(m.id)}" data-protocol="${escAttr(m.protocol || 'openai')}">${escHtml(m.provider_name || m.owned_by)} · ${escHtml(m.id)} · ${escHtml(m.protocol || 'openai')}</button>`).join('')}
+      </div>
+    `;
+  } catch {
+    document.getElementById('chat-model').innerHTML = `
+      <input class="dark-select-value" type="hidden" value="">
+      <button type="button" class="dark-select-button"><span>无法加载</span></button>
+      <div class="dark-select-menu"></div>
+    `;
+  }
+}
+
+function addChatMsg(role, content) {
+  const box = document.getElementById('chat-box');
+  const div = document.createElement('div');
+  div.className = `flex ${role === 'user' ? 'justify-end' : 'justify-start'} group`;
+  const icon = role === 'user' ? 'user' : 'bot';
+  const copyBtn = role === 'assistant'
+    ? `<button onclick="copyBubble(this)" class="absolute -bottom-3 right-1 opacity-0 group-hover:opacity-100 p-1 rounded bg-surface-2 border border-surface-3 text-ink-3 hover:text-accent-light transition" title="复制">
+         <i data-lucide="copy" class="w-3 h-3"></i>
+       </button>`
+    : '';
+  div.innerHTML = `
+    <div class="max-w-[80%] flex gap-2 ${role === 'user' ? 'flex-row-reverse' : ''}">
+      <div class="w-7 h-7 rounded-full bg-surface-2 flex items-center justify-center flex-shrink-0 mt-1">
+        <i data-lucide="${icon}" class="w-3.5 h-3.5 text-ink-3"></i>
+      </div>
+      <div class="relative">
+        <div class="${role === 'user' ? 'bubble-user' : 'bubble-assistant'} px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap">${escHtml(content)}</div>
+        ${copyBtn}
+        <div class="meta text-[10px] text-ink-3 mt-1 ${role === 'user' ? 'text-right' : ''}"></div>
+      </div>
+    </div>
+  `;
+  box.appendChild(div);
+  box.scrollTop = box.scrollHeight;
+  lucide.createIcons();
+  return div;
+}
+
+function copyBubble(btn) {
+  const bubble = btn.closest('div.relative').querySelector('div:first-child');
+  const text = bubble?.textContent || '';
+  navigator.clipboard.writeText(text).then(() => {
+    const icon = btn.querySelector('[data-lucide]');
+    if (icon) { icon.setAttribute('data-lucide', 'check'); lucide.createIcons(); }
+    setTimeout(() => { if (icon) { icon.setAttribute('data-lucide', 'copy'); lucide.createIcons(); } }, 1500);
+  });
+}
+
+function extractText(value) {
+  if (typeof value === 'string') return value;
+  if (Array.isArray(value)) return value.map(extractText).join('');
+  if (value && typeof value === 'object') {
+    return extractText(value.text || value.content || value.value || '');
+  }
+  return '';
+}
+
+function extractStreamText(chunk) {
+  if (!chunk || typeof chunk !== 'object') return '';
+  // OpenAI Responses SSE: { type: "response.output_text.delta", delta: "text" }
+  if (chunk.type === 'response.output_text.delta') {
+    if (typeof chunk.delta === 'string') return chunk.delta;
+    return extractText(chunk.delta || '');
+  }
+  // Anthropic SSE text delta
+  if (chunk.type === 'content_block_delta') {
+    const d = chunk.delta || {};
+    if (typeof d === 'string') return d;
+    return extractText(d.text || d.partial_json || d.content || '');
+  }
+  // Completed Responses object may arrive as a final event
+  if (chunk.type === 'response.completed' && chunk.response) {
+    return extractResponseText(chunk.response);
+  }
+  if (chunk.type === 'message_delta' || chunk.type === 'message_start') {
+    return '';
+  }
+  // raw string delta fallback
+  if (typeof chunk.delta === 'string') return chunk.delta;
+  const delta = chunk.choices?.[0]?.delta
+    || (chunk.delta && typeof chunk.delta === 'object' ? chunk.delta : null)
+    || chunk.content_block?.delta
+    || {};
+  return extractText(
+    delta.content
+    || delta.text
+    || delta.reasoning_content
+    || delta.reasoning
+    || chunk.text
+    || chunk.content_block?.text
+    || chunk.output_text
+    || ''
+  );
+}
+
+function extractResponseText(data) {
+  if (!data || typeof data !== 'object') return '';
+  if (typeof data.output_text === 'string' && data.output_text) return data.output_text;
+  // OpenAI Responses non-stream: { output: [ { type: "message", content: [ { type: "output_text", text } ] } ] }
+  if (Array.isArray(data.output)) {
+    let text = '';
+    for (const item of data.output) {
+      if (!item || typeof item !== 'object') continue;
+      if (item.type === 'message' || item.role === 'assistant') {
+        text += extractText(item.content);
+      } else if (item.type === 'output_text' || item.text) {
+        text += extractText(item.text || item);
+      } else {
+        text += extractText(item.content || item);
+      }
+    }
+    if (text) return text;
+  }
+  // Anthropic Messages: { type: "message", content: [ { type: "text", text } ] }
+  if (data.type === 'message' && data.content != null) {
+    const text = extractText(data.content);
+    if (text) return text;
+  }
+  const message = data.choices?.[0]?.message || data.message || {};
+  return extractText(
+    message.content
+    || message.text
+    || message.reasoning_content
+    || message.reasoning
+    || data.content
+    || data.text
+    || data.output_text
+    || data.output
+    || ''
+  );
+}
+
+async function sendMessage() {
+  const input = document.getElementById('chat-input');
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = '';
+
+  const modelSelect = document.getElementById('chat-model');
+  const model = modelSelect.querySelector('.dark-select-value')?.value || '';
+  const modelLabel = modelSelect.querySelector('.dark-select-button span')?.textContent || model;
+  const protocol = modelSelect.querySelector('.dark-select-value')?.dataset.protocol || 'openai';
+  const stream = document.getElementById('chat-stream').querySelector('.dark-select-value')?.value === 'true';
+
+  addChatMsg('user', text);
+  const assistantDiv = addChatMsg('assistant', '');
+  const bubble = assistantDiv.querySelector('div > div > div');
+  const meta = assistantDiv.querySelector('.meta');
+  bubble.innerHTML = '<span class="text-ink-3 animate-pulse">请求中...</span>';
+
+  const start = Date.now();
+  let fullText = '';
+  let usage = {};
+  let statusCode = 0;
+
+  try {
+    let endpoint = '/v1/chat/completions';
+    let requestBody = { model, messages: [{ role: 'user', content: text }], stream, max_tokens: 1024 };
+    if (protocol === 'responses') {
+      endpoint = '/v1/responses';
+      requestBody = { model, input: text, stream, max_output_tokens: 1024 };
+    } else if (protocol === 'anthropic') {
+      endpoint = '/v1/messages';
+      requestBody = { model, messages: [{ role: 'user', content: text }], stream, max_tokens: 1024 };
+    }
+    const headers = { 'Content-Type': 'application/json' };
+    if (protocol === 'anthropic') headers['anthropic-version'] = '2023-06-01';
+    // 管理后台登录后的 Cookie 会话需要随请求发送，才能通过 /v1/* 鉴权
+    const resp = await fetch(endpoint, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers,
+      body: JSON.stringify(requestBody),
+    });
+    statusCode = resp.status;
+
+    if (!resp.ok) {
+      const errText = await resp.text();
+      let errMsg = errText;
+      try {
+        const parsed = JSON.parse(errText);
+        errMsg = parsed.error?.message
+          || parsed.error?.error?.message
+          || (parsed.type === 'error' && parsed.error && (parsed.error.message || parsed.error.type))
+          || parsed.message
+          || errText;
+      } catch {}
+      if (statusCode === 401 || statusCode === 403) {
+        errMsg = (errMsg || '未授权') + '（请先登录管理后台，或配置 auth_tokens）';
+      }
+      bubble.innerHTML = `<div class="text-red-400 text-xs font-mono whitespace-pre-wrap">${escHtml(String(errMsg).slice(0, 300))}</div>`;
+      meta.textContent = `${modelLabel} · HTTP ${statusCode} · ${Date.now() - start}ms`;
+      return;
+    }
+
+    if (stream) {
+      const reader = resp.body.getReader();
+      const decoder = new TextDecoder();
+      bubble.textContent = '';
+      let buffer = '';
+      let reasoningText = '';
+
+      const readLine = line => {
+        const eventLine = line.trim();
+        if (!eventLine || eventLine.startsWith('event:') || eventLine.startsWith(':')) return;
+        if (!eventLine.startsWith('data:') || eventLine === 'data: [DONE]') return;
+        try {
+          const chunk = JSON.parse(eventLine.slice(5).trim());
+          if (chunk.usage) usage = chunk.usage;
+          if (chunk.response?.usage) usage = chunk.response.usage;
+          if (chunk.message?.usage) usage = chunk.message.usage;
+          // final completed payload may contain full text only once
+          if (chunk.type === 'error' || chunk.error) {
+            const err = chunk.error?.message || chunk.message || '上游流式响应失败';
+            if (!fullText) bubble.innerHTML = `<div class="text-red-400 text-xs font-mono whitespace-pre-wrap">${escHtml(String(err).slice(0, 300))}</div>`;
+            return;
+          }
+          if ((chunk.type === 'response.completed' || chunk.type === 'response.failed') && chunk.response) {
+            if (chunk.response.usage) usage = chunk.response.usage;
+            if (chunk.type === 'response.completed' && !fullText) {
+              const finalText = extractResponseText(chunk.response);
+              if (finalText) {
+                fullText = finalText;
+                bubble.textContent = fullText;
+              }
+            }
+            if (chunk.type === 'response.failed') {
+              const err = chunk.response?.error?.message || '上游响应失败';
+              if (!fullText) bubble.innerHTML = `<div class="text-red-400 text-xs font-mono whitespace-pre-wrap">${escHtml(String(err).slice(0, 300))}</div>`;
+            }
+            return;
+          }
+          const delta = extractStreamText(chunk);
+          if (delta) {
+            const rawDelta = (chunk.choices?.[0]?.delta && typeof chunk.choices[0].delta === 'object')
+              ? chunk.choices[0].delta
+              : ((chunk.delta && typeof chunk.delta === 'object') ? chunk.delta : {});
+            // avoid double-append when completed event already filled fullText with same content
+            if (rawDelta.reasoning_content || rawDelta.reasoning) reasoningText += delta;
+            else if (!(fullText && delta === fullText)) fullText += delta;
+            bubble.textContent = fullText || reasoningText;
+          }
+        } catch {}
+      };
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop();
+        for (const line of lines) readLine(line);
+        document.getElementById('chat-box').scrollTop = document.getElementById('chat-box').scrollHeight;
+      }
+      if (buffer) readLine(buffer);
+      if (!fullText && !reasoningText) bubble.innerHTML = '<span class="text-ink-3 text-xs italic">模型未返回可显示文本</span>';
+    } else {
+      const data = await resp.json();
+      if (data.error || data.type === 'error') {
+        const errObj = data.error || {};
+        const errMsg = errObj.detail || errObj.message || data.message || JSON.stringify(errObj || data);
+        bubble.innerHTML = `<div class="text-red-400 text-xs font-mono whitespace-pre-wrap">${escHtml(String(errMsg).slice(0, 300))}</div>`;
+        meta.textContent = `${modelLabel} · HTTP ${statusCode} · ${Date.now() - start}ms`;
+        return;
+      }
+      fullText = extractResponseText(data);
+      usage = data.usage || {};
+      if (fullText) {
+        bubble.textContent = fullText;
+      } else {
+        bubble.innerHTML = '<span class="text-ink-3 text-xs italic">模型返回空内容（可能仅输出了推理 tokens）</span>';
+      }
+    }
+  } catch (e) {
+    bubble.innerHTML = `<div class="text-red-400 text-xs">${escHtml(e.message)}</div>`;
+    meta.textContent = `${modelLabel} · 请求异常 · ${Date.now() - start}ms`;
+    return;
+  }
+
+  const elapsed = Date.now() - start;
+  const inTok = usage.prompt_tokens || usage.input_tokens || 0;
+  const outTok = usage.completion_tokens || usage.output_tokens || 0;
+  const parts = [model, `${elapsed}ms`];
+  if (inTok || outTok) parts.push(`${inTok}→${outTok} tokens`);
+  if (fullText) parts.push(`${fullText.length} chars`);
+  meta.textContent = parts.join(' · ');
+}
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function clearChat() { document.getElementById('chat-box').innerHTML = ''; }
+
+// ═══════════════════════════════════════════════
+//  设置
+// ═══════════════════════════════════════════════
+
+async function loadSettings() {
+  config = await api('/api/config');
+  const s = config.server || {};
+  document.getElementById('cfg-host').value = s.host || '0.0.0.0';
+  document.getElementById('cfg-port').value = s.port || 8765;
+  document.getElementById('cfg-tokens').value = (config.auth_tokens || []).join('\n');
+  document.getElementById('cfg-admin-tokens').value = (config.admin_tokens || []).join('\n');
+}
+
+async function saveSettings() {
+  const portRaw = document.getElementById('cfg-port').value.trim();
+  const port = Number.parseInt(portRaw, 10);
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    await showAlert({ title: '端口无效', message: '端口必须是 1 到 65535 的整数。', icon: 'circle-alert', iconBg: 'amber' });
+    return;
+  }
+  config.server = {
+    host: document.getElementById('cfg-host').value,
+    port,
+  };
+  const tokens = document.getElementById('cfg-tokens').value.trim();
+  config.auth_tokens = tokens ? tokens.split('\n').map(t => t.trim()).filter(Boolean) : [];
+  const adminTokens = document.getElementById('cfg-admin-tokens').value.trim();
+  config.admin_tokens = adminTokens ? adminTokens.split('\n').map(t => t.trim()).filter(Boolean) : [];
+  const result = await api('/api/config', { method: 'POST', body: JSON.stringify(config) });
+  if (result.warnings?.length) toast(result.warnings[0], 'error');
+  toast('设置已保存（端口更改需重启服务）');
+}
+
+// ═══════════════════════════════════════════════
+//  请求日志
+// ═══════════════════════════════════════════════
+
+let logsPage = 1;
+let currentLogs = [];
+
+async function loadLogs(page = 1) {
+  logsPage = page;
+  const providerEl = document.getElementById('log-filter-provider');
+  const statusEl = document.getElementById('log-filter-status');
+  const provider = providerEl ? providerEl.value : '';
+  const status = statusEl ? statusEl.value : '';
+  try {
+    const data = await api(`/api/logs?page=${page}&per_page=30&provider=${provider}&status=${status}`);
+    currentLogs = data.items || [];
+
+    // 填充 provider filter
+    const filterSel = document.getElementById('log-filter-provider');
+    if (filterSel.options.length <= 1 && config.providers) {
+      Object.entries(config.providers).forEach(([id, p]) => {
+        const opt = document.createElement('option');
+        opt.value = id; opt.textContent = p.name;
+        filterSel.appendChild(opt);
+      });
+    }
+
+    const tbody = document.getElementById('logs-body');
+    tbody.innerHTML = currentLogs.map((r, index) => `
+      <tr>
+        <td class="text-xs text-ink-2 whitespace-nowrap">${fmtTime(r.timestamp)}</td>
+        <td class="font-mono text-xs">${escHtml(r.model_alias)}</td>
+        <td><span class="inline-block px-2 py-0.5 rounded-full text-[10px] font-medium bg-blue-500/10 text-blue-400">${escHtml(r.provider)}</span></td>
+        <td><span class="inline-block px-2 py-0.5 rounded-full text-[10px] font-medium ${r.status_code < 400 ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'}">${r.status_code}</span></td>
+        <td class="font-mono text-xs">${r.stream ? 'stream' : 'json'}</td>
+        <td>${r.latency_ms}ms</td>
+        <td><button onclick="showLogDetailByIndex(${index})" class="p-1 rounded hover:bg-surface-2 text-ink-3 hover:text-accent-light transition"><i data-lucide="eye" class="w-3.5 h-3.5"></i></button></td>
+      </tr>
+    `).join('') || '<tr><td colspan="7" class="text-center text-ink-3 py-8">暂无日志</td></tr>';
+
+    document.getElementById('logs-info').textContent = `共 ${data.total} 条，第 ${data.page}/${data.pages} 页`;
+    const pagination = document.getElementById('logs-pagination');
+    let btns = '';
+    if (data.page > 1) btns += `<button onclick="loadLogs(${data.page - 1})" class="px-2 py-1 rounded bg-surface border border-surface-3 text-xs hover:border-accent">&laquo;</button>`;
+    for (let i = Math.max(1, data.page - 2); i <= Math.min(data.pages, data.page + 2); i++) {
+      btns += `<button onclick="loadLogs(${i})" class="px-2 py-1 rounded text-xs ${i === data.page ? 'bg-accent text-white' : 'bg-surface border border-surface-3 hover:border-accent'}">${i}</button>`;
+    }
+    if (data.page < data.pages) btns += `<button onclick="loadLogs(${data.page + 1})" class="px-2 py-1 rounded bg-surface border border-surface-3 text-xs hover:border-accent">&raquo;</button>`;
+    pagination.innerHTML = btns;
+
+    lucide.createIcons();
+  } catch (e) {
+    await showAlert({ title: '加载日志失败', message: e.message || '请稍后重试', icon: 'file-warning', iconBg: 'red' });
+  }
+}
+
+function showLogDetailByIndex(index) {
+  const row = currentLogs[index];
+  if (row) showLogDetail(row);
+}
+
+async function showLogDetail(r) {
+  const body = `
+    <div class="space-y-3 text-sm">
+      <div class="grid grid-cols-2 gap-2">
+        <div><span class="text-ink-3 text-xs">时间</span><div>${fmtTime(r.timestamp)}</div></div>
+        <div><span class="text-ink-3 text-xs">状态</span><div>${r.status_code} ${r.status_code < 400 ? '成功' : '失败'}</div></div>
+        <div><span class="text-ink-3 text-xs">模型</span><div class="font-mono text-xs">${escHtml(r.model_alias)} → ${escHtml(r.actual_model)}</div></div>
+        <div><span class="text-ink-3 text-xs">提供商</span><div>${escHtml(r.provider)}</div></div>
+        <div><span class="text-ink-3 text-xs">模式</span><div>${r.stream ? '流式' : '非流式'}</div></div>
+        <div><span class="text-ink-3 text-xs">延迟</span><div>${r.latency_ms}ms</div></div>
+      </div>
+      ${r.req_body ? `<div><span class="text-ink-3 text-xs">请求摘要</span><pre class="mt-1 p-2 bg-[#0a0e17] rounded-lg text-xs overflow-x-auto max-h-32 overflow-y-auto">${escHtml(r.req_body)}</pre></div>` : ''}
+      ${r.resp_body ? `<div><span class="text-ink-3 text-xs">响应摘要</span><pre class="mt-1 p-2 bg-[#0a0e17] rounded-lg text-xs overflow-x-auto max-h-32 overflow-y-auto">${escHtml(r.resp_body)}</pre></div>` : ''}
+      ${r.error ? `<div><span class="text-ink-3 text-xs">错误</span><pre class="mt-1 p-2 bg-red-500/5 border border-red-500/20 rounded-lg text-xs text-red-400 overflow-x-auto max-h-32 overflow-y-auto">${escHtml(r.error)}</pre></div>` : ''}
+    </div>
+  `;
+  openModal({
+    icon: 'file-text', iconBg: 'blue', title: '请求详情', body,
+    buttons: modalButton({ text: '关闭', value: null, variant: 'primary', primary: true }),
+  });
+}
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+async function clearLogs() {
+  const ok = await showConfirm({ title: '清除请求日志', desc: '清除所有请求日志记录', icon: 'trash-2', iconBg: 'red', danger: true, confirmText: '清除' });
+  if (!ok) return;
+  try {
+    await api('/api/logs/clear', { method: 'POST' });
+    loadLogs(1);
+    toast('日志已清除');
+  } catch (error) {
+    await showAlert({ title: '清除失败', message: error.message, icon: 'trash-2', iconBg: 'red' });
+  }
+}
+
+async function clearStats() {
+  const ok = await showConfirm({ title: '清除统计数据', desc: '清除所有 Token 统计和费用记录', icon: 'trash-2', iconBg: 'red', danger: true, confirmText: '清除' });
+  if (!ok) return;
+  try {
+    await api('/api/stats/clear', { method: 'POST' });
+    loadStats();
+    toast('统计已清除');
+  } catch (error) {
+    await showAlert({ title: '清除失败', message: error.message, icon: 'trash-2', iconBg: 'red' });
+  }
+}
+
+// ═══════════════════════════════════════════════
+//  模型自动发现
+// ═══════════════════════════════════════════════
+
+async function discoverModels(providerId) {
+  const el = document.getElementById(`discover-${providerId}`);
+  if (el) el.innerHTML = '<span class="text-ink-3 text-xs">发现中...</span>';
+
+  try {
+    const r = await api(`/api/discover/${encodeURIComponent(providerId)}`, { method: 'POST' });
+    if (!r.ok) {
+      if (el) el.innerHTML = `<span class="text-red-400 text-xs">${escHtml(r.message)}</span>`;
+      return;
+    }
+
+    const models = r.models || [];
+    if (!models.length) {
+      if (el) el.innerHTML = '<span class="text-ink-3 text-xs">未发现模型</span>';
+      return;
+    }
+
+    // 用模态框展示发现的模型，让用户选择要添加到映射的
+    const body = `
+      <div class="text-xs text-ink-3 mb-3">发现 ${models.length} 个模型，勾选要添加到映射表的模型：</div>
+      <div class="max-h-64 overflow-y-auto space-y-1.5">
+        ${models.map(m => `
+          <label class="flex items-center gap-2 px-3 py-2 bg-[#0a0e17] rounded-lg cursor-pointer hover:bg-surface-2 transition">
+            <input type="checkbox" value="${escAttr(m.id)}" class="discover-check accent-blue-500 w-4 h-4">
+            <span class="font-mono text-xs">${escHtml(m.id)}</span>
+          </label>
+        `).join('')}
+      </div>
+    `;
+    const val = await openModal({
+      icon: 'radar', iconBg: 'blue', title: `发现模型 - ${providerId}`, body,
+      buttons: `
+        ${modalButton({ text: '取消', value: null })}
+        <button id="modal-submit-btn" class="modal-btn modal-btn-primary" data-modal-primary="true"><i data-lucide="plus" class="w-3.5 h-3.5"></i>添加选中</button>
+      `,
+    });
+
+    if (val !== null) {
+      const checked = [...document.querySelectorAll('.discover-check:checked')].map(c => c.value);
+      if (checked.length) {
+        let added = 0;
+        checked.forEach(mid => {
+          if (!config.model_mappings[mid]) {
+            const providerType = config.providers?.[providerId]?.type || 'openai';
+            config.model_mappings[mid] = { provider: providerId, model: mid, protocol: providerType === 'anthropic' ? 'anthropic' : 'openai' };
+            added++;
+          }
+        });
+        if (added) {
+          await api('/api/config', { method: 'POST', body: JSON.stringify(config) });
+          toast(`已添加 ${added} 个模型到映射表`);
+          await renderMappings();
+        } else {
+          toast('所选模型已存在于映射表中');
+        }
+      }
+    }
+
+    if (el) el.innerHTML = `<span class="text-green-400 text-xs">发现 ${models.length} 个模型</span>`;
+  } catch (e) {
+    if (el) el.innerHTML = `<span class="text-red-400 text-xs">${escHtml(e.message)}</span>`;
+  }
+}
+
+// ═══════════════════════════════════════════════
+//  配置导入导出
+// ═══════════════════════════════════════════════
+
+async function exportConfig() {
+  try {
+    const data = await api('/api/config/export');
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `ai-switch-config-${new Date().toISOString().slice(0,10)}.json`;
+    a.click(); URL.revokeObjectURL(url);
+    toast('配置已导出');
+  } catch (e) {
+    await showAlert({ title: '导出失败', message: e.message || '无法生成配置文件。', icon: 'download', iconBg: 'red' });
+  }
+}
+
+function importConfig() {
+  document.getElementById('import-file').click();
+}
+
+async function handleImportFile(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  event.target.value = '';
+
+  try {
+    const text = await file.text();
+    const data = JSON.parse(text);
+
+    const ok = await showConfirm({
+      title: '导入配置',
+      desc: `即将导入配置文件：${file.name}。现有 API Key 将被保留。`,
+      icon: 'upload', iconBg: 'blue', confirmText: '导入',
+    });
+    if (!ok) return;
+
+    const r = await api('/api/config/import', { method: 'POST', body: JSON.stringify(data) });
+    if (r.ok) {
+      config = await api('/api/config');
+      toast('配置已导入');
+      await loadSettings();
+      await refreshCurrentPage();
+    } else {
+      await showAlert({ title: '导入失败', message: r.message || '配置文件没有通过服务端校验。', icon: 'upload', iconBg: 'red' });
+    }
+  } catch (e) {
+    await showAlert({ title: '文件解析失败', message: e.message, icon: 'file-x', iconBg: 'red' });
+  }
+}
+
+// ── 初始化 ──
+bootApplication();
+</script>
+</body>
+</html>

@@ -173,8 +173,8 @@ class NativeTerminalPagerActivity : Activity() {
             visibility = View.GONE
         }
         sessionSwitcherView = createIconActionButton(R.drawable.lucide_layout_list, "切换会话") { showSessionMenu(it) }
-        terminalTabButton = createIconActionButton(R.drawable.lucide_audio_waveform, "终端") { showPage(PAGE_TERMINAL) }
-        browserTabButton = createIconActionButton(R.drawable.lucide_panel_top_open, "浏览器") { showPage(PAGE_BROWSER) }
+        terminalTabButton = createIconActionButton(R.drawable.lucide_hard_drive, "终端") { showPage(PAGE_TERMINAL) }
+        browserTabButton = createIconActionButton(R.drawable.lucide_search, "浏览器") { showPage(PAGE_BROWSER) }
         newSessionButton = createIconActionButton(R.drawable.lucide_plus, "新建会话") { openNewSession() }
         pasteButton = createIconActionButton(R.drawable.lucide_clipboard_paste, "粘贴") { activeTerminalView?.paste() }
         restartButton = createIconActionButton(R.drawable.lucide_refresh_cw, "重开会话") { activeTerminalView?.restart() }
@@ -279,7 +279,7 @@ class NativeTerminalPagerActivity : Activity() {
                 },
             )
             addView(sessionBadgeView)
-            addView(createIconActionButton(R.drawable.lucide_panel_top_close, "退出") {
+            addView(createIconActionButton(R.drawable.lucide_x, "退出") {
                 // Keep sessions alive for reopen; only the explicit close-session path tears them down.
                 finish()
             })

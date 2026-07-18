@@ -29,15 +29,14 @@ class CliApiConfigService {
       '$_managedCliBinDir/generic-agent';
   static const _geminiLauncherPath = '$_managedCliBinDir/gemini';
   static const _hermesLauncherPath = '$_managedCliBinDir/hermes';
-  static const _codexProxyPath = '/root/.openclaw/codex-proxy.py';
-  static const _codexProxyJsPath = '/root/.openclaw/codex-proxy.js';
   static const _codexProxyEnvPath = '/root/.openclaw/codex-proxy.env';
-  static const _codexProxyLogPath = '/tmp/openclaw-codex-proxy.log';
   static const _codexTermuxRuntimePath =
       '/root/.openclaw/codex-termux-runtime.sh';
   static const _codexConfigPath = '/root/.codex/config.toml';
   static const _codexAuthPath = '/root/.codex/auth.json';
-  static const _codexProxyBaseUrl = 'http://127.0.0.1:8787/v1';
+  static const _localApiProxyBaseUrl = 'http://127.0.0.1:9999/v1';
+  static const _localApiProxyConfigPath =
+      '/root/.openclaw/api2py/data/config.json';
   static const _codeBuddyModelsPath = '/root/.codebuddy/models.json';
   static const _codeBuddySettingsPath = '/root/.codebuddy/settings.json';
   static const _qwenSettingsPath = '/root/.qwen/settings.json';
@@ -212,8 +211,6 @@ class CliApiConfigService {
     final codex = activeConfigs['codex'] ?? const CliApiConfig(toolId: 'codex');
     final gemini =
         activeConfigs['gemini'] ?? const CliApiConfig(toolId: 'gemini');
-    final codexProxyEnvMode =
-        _shouldManageToolRuntime(codex) ? '0600' : '0000';
 
     Future<void> writeRootfsFile(String path, String content) async {
       final ok = await NativeBridge.writeRootfsFile(path, content);
@@ -226,6 +223,10 @@ class CliApiConfigService {
     await writeRootfsFile(
       _configPath,
       const JsonEncoder.withIndent('  ').convert(allConfigs),
+    );
+    await writeRootfsFile(
+      _localApiProxyConfigPath,
+      _buildLocalApiProxyConfig(allConfigs),
     );
     await writeRootfsFile(_envPath, _buildGlobalEnvFile());
     await writeRootfsFile(
@@ -270,14 +271,9 @@ class CliApiConfigService {
         _buildToolEnvFile(entry.key, entry.value),
       );
     }
-    await writeRootfsFile(_codexProxyPath, _buildCodexProxyPy());
-    await writeRootfsFile(
-      _codexProxyJsPath,
-      _buildCodexProxyJs(),
-    );
     await writeRootfsFile(
       _codexProxyEnvPath,
-      _buildCodexProxyEnv(codex),
+      '# OpenClaw legacy Codex proxy is disabled. Use local api2py relay on 127.0.0.1:9999.\n',
     );
     await writeRootfsFile(
       _codexTermuxRuntimePath,
@@ -353,14 +349,12 @@ class CliApiConfigService {
       '$_managedCliBinDir '
       '/root/.codex /root/.gemini /root/.codebuddy /root/.qwen '
       '/root/.gen-cli /root/.hermes /root/.config 2>/dev/null || true; '
-      'chmod 0755 $_codexProxyPath 2>/dev/null || true; '
-      'chmod 0755 $_codexProxyJsPath 2>/dev/null || true; '
       'chmod 0755 $_codexTermuxRuntimePath 2>/dev/null || true; '
       'chmod 0755 $_browserMcpPath 2>/dev/null || true; '
       'chmod 0755 $_browserScriptLauncherPath 2>/dev/null || true; '
       'chmod 0755 $_codexLauncherPath $_genericAgentLauncherPath '
       '$_geminiLauncherPath $_hermesLauncherPath 2>/dev/null || true; '
-      'chmod $codexProxyEnvMode $_codexProxyEnvPath 2>/dev/null || true; '
+      'chmod 0644 $_codexProxyEnvPath 2>/dev/null || true; '
       'chmod 0600 $_browserBridgeEnvPath 2>/dev/null || true; '
       'chmod 0600 $_codexConfigPath $_codexAuthPath $_codeBuddyModelsPath '
       '$_codeBuddySettingsPath $_qwenSettingsPath $_geminiSettingsPath '
@@ -461,7 +455,7 @@ class CliApiConfigService {
       }
       throw Exception('配置已保存到应用，但同步 Ubuntu RootFS 失败：$error');
     }
-    await _syncCodexProxyProcess();
+    await _stopLegacyCodexProxyProcess();
   }
 
   static Future<bool> _isRootfsReady() async {
@@ -473,8 +467,10 @@ class CliApiConfigService {
     }
   }
 
-  static Future<void> _syncCodexProxyProcess() async {
-    final command = r'''
+  static Future<void> _stopLegacyCodexProxyProcess() async {
+    const command = r'''
+pkill -f "[c]odex-proxy.py" >/dev/null 2>&1 || true
+pkill -f "[c]odex-proxy.js" >/dev/null 2>&1 || true
 openclaw_kill_codex_proxy_port() {
   pkill -f "[c]odex-proxy.py" >/dev/null 2>&1 || true
   pkill -f "[c]odex-proxy.js" >/dev/null 2>&1 || true
@@ -515,59 +511,10 @@ if inodes:
             pass
 PY
 }
-if [ -r __ENV_PATH__ ] && grep -q "^OPENCLAW_CODEX_PROXY_UPSTREAM=" __ENV_PATH__ 2>/dev/null; then
-  set -a
-  . __ENV_PATH__
-  set +a
-  if [ -r /root/.openclaw/codex-termux-runtime.sh ]; then
-    . /root/.openclaw/codex-termux-runtime.sh
-    configure_codex_termux_runtime || true
-  fi
-  proxy_ready=false
-  proxy_health="$(curl -fsS --max-time 1 http://127.0.0.1:8787/health 2>/dev/null || true)"
-  if [ -n "$proxy_health" ] && printf "%s" "$proxy_health" | grep -F -- "$OPENCLAW_CODEX_PROXY_UPSTREAM" >/dev/null 2>&1; then
-    proxy_ready=true
-  else
-    openclaw_kill_codex_proxy_port
-    for attempt in 1 2 3 4 5 6 7 8 9 10; do
-      proxy_health="$(curl -fsS --max-time 1 http://127.0.0.1:8787/health 2>/dev/null || true)"
-      [ -z "$proxy_health" ] && break
-      sleep 0.2
-    done
-    rm -f __LOG_PATH__
-    if command -v python3 >/dev/null 2>&1 && [ -r __PY_PATH__ ]; then
-      nohup python3 __PY_PATH__ </dev/null >__LOG_PATH__ 2>&1 &
-    elif command -v node >/dev/null 2>&1 && [ -r __JS_PATH__ ]; then
-      nohup node __JS_PATH__ </dev/null >__LOG_PATH__ 2>&1 &
-    else
-      echo "Codex proxy runtime is unavailable" >&2
-      exit 1
-    fi
-  fi
-  for attempt in 1 2 3 4 5 6 7 8 9 10; do
-    [ "$proxy_ready" = true ] && break
-    proxy_health="$(curl -fsS --max-time 1 http://127.0.0.1:8787/health 2>/dev/null || true)"
-    if [ -n "$proxy_health" ] && printf "%s" "$proxy_health" | grep -F -- "$OPENCLAW_CODEX_PROXY_UPSTREAM" >/dev/null 2>&1; then
-      proxy_ready=true
-      break
-    fi
-    sleep 0.2
-  done
-  if [ "$proxy_ready" != true ]; then
-    cat __LOG_PATH__ >&2 2>/dev/null || true
-    echo "Codex proxy did not become ready on 127.0.0.1:8787" >&2
-    exit 1
-  fi
-fi
+openclaw_kill_codex_proxy_port
 '''
-        .replaceAll('__ENV_PATH__', _codexProxyEnvPath)
-        .replaceAll('__LOG_PATH__', _codexProxyLogPath)
-        .replaceAll('__PY_PATH__', _codexProxyPath)
-        .replaceAll('__JS_PATH__', _codexProxyJsPath);
-    await NativeBridge.runInProot(
-      command,
-      timeout: 10,
-    );
+;
+    await NativeBridge.runInProot(command, timeout: 10);
   }
 
   static Map<String, dynamic> _emptyConfig() => <String, dynamic>{
@@ -948,6 +895,118 @@ fi
     ].join('\n');
   }
 
+  static String _buildLocalApiProxyConfig(Map<String, dynamic> config) {
+    final sharedProfiles = _sharedProfilesFromConfig(config);
+    final providers = <String, dynamic>{};
+    final providerIdsBySharedId = <String, String>{};
+
+    for (var i = 0; i < sharedProfiles.length; i++) {
+      final profile = sharedProfiles[i];
+      if (profile.baseUrl.trim().isEmpty) {
+        continue;
+      }
+      final providerId = _apiProxyProviderId(profile, index: i);
+      providerIdsBySharedId[profile.sharedProfileId] = providerId;
+      providers[providerId] = <String, dynamic>{
+        'name': profile.profileName.trim().isEmpty
+            ? 'API ${i + 1}'
+            : profile.profileName.trim(),
+        'type': _apiProxyProviderType(profile.effectiveApiProtocol),
+        'base_url': _trimTrailingSlash(profile.baseUrl),
+        'api_key': profile.apiKey.trim(),
+        'enabled': true,
+      };
+    }
+
+    final mappings = <String, dynamic>{};
+    final activeConfigs = {
+      for (final toolId in configurableToolIds)
+        toolId: _resolvedToolConfig(toolId, config),
+    };
+    for (final entry in activeConfigs.entries) {
+      final toolConfig = entry.value;
+      if (toolConfig.baseUrl.trim().isEmpty) {
+        continue;
+      }
+      var providerId = providerIdsBySharedId[toolConfig.sharedProfileId];
+      if (providerId == null || !providers.containsKey(providerId)) {
+        providerId = _apiProxyProviderId(toolConfig, index: providers.length);
+        providers[providerId] = <String, dynamic>{
+          'name': toolConfig.profileName.trim().isEmpty
+              ? entry.key
+              : toolConfig.profileName.trim(),
+          'type': _apiProxyProviderType(toolConfig.effectiveApiProtocol),
+          'base_url': _trimTrailingSlash(toolConfig.baseUrl),
+          'api_key': toolConfig.apiKey.trim(),
+          'enabled': true,
+        };
+      }
+      final alias = toolConfig.effectiveToolModel.trim();
+      final actualModel = toolConfig.model.trim().isNotEmpty
+          ? toolConfig.model.trim()
+          : alias;
+      if (alias.isEmpty || actualModel.isEmpty) {
+        continue;
+      }
+      mappings[alias] = <String, dynamic>{
+        'provider': providerId,
+        'model': actualModel,
+        'protocol': _apiProxyClientProtocol(toolConfig.effectiveApiProtocol),
+      };
+    }
+
+    final defaultProvider = providers.keys.isEmpty ? '' : providers.keys.first;
+    final proxyConfig = <String, dynamic>{
+      'server': <String, dynamic>{'host': '127.0.0.1', 'port': 9999},
+      'providers': providers,
+      'model_mappings': mappings,
+      'prefix_routes': <String, dynamic>{},
+      'default_provider': defaultProvider,
+      'force_default_provider': false,
+      'auth_tokens': const <String>[],
+      'admin_tokens': const <String>[],
+      'pricing': <String, dynamic>{},
+      'log_max': 500,
+      'debug_requests': false,
+      'allow_local_unauthenticated': true,
+      'admin_account': <String, dynamic>{},
+      'concurrency': <String, dynamic>{
+        'max_upstream': 64,
+        'http_max_connections': 100,
+        'http_max_keepalive': 40,
+        'connect_timeout': 10.0,
+        'read_timeout': 300.0,
+        'write_queue_size': 1000,
+        'max_body_bytes': 8000000,
+        'server_limit_concurrency': 96,
+      },
+    };
+    return '${const JsonEncoder.withIndent('  ').convert(proxyConfig)}\n';
+  }
+
+  static String _apiProxyProviderId(CliApiConfig profile, {required int index}) {
+    final source = profile.sharedProfileId.trim().isNotEmpty
+        ? profile.sharedProfileId.trim()
+        : (profile.profileName.trim().isNotEmpty
+            ? profile.profileName.trim()
+            : 'provider-${index + 1}');
+    final normalized = source
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z0-9_.-]+'), '-')
+        .replaceAll(RegExp(r'^-+|-+$'), '');
+    return normalized.isNotEmpty ? normalized : 'provider-${index + 1}';
+  }
+
+  static String _apiProxyProviderType(String protocol) {
+    final normalized = _normalizedProtocol(protocol);
+    return normalized == 'gemini' ? 'openai' : normalized;
+  }
+
+  static String _apiProxyClientProtocol(String protocol) {
+    final normalized = _normalizedProtocol(protocol);
+    return normalized == 'gemini' ? 'openai' : normalized;
+  }
+
   static String _buildTerminalThemeSh() {
     return r'''
 export TERM="${TERM:-xterm-256color}"
@@ -1124,15 +1183,8 @@ configure_codex_termux_runtime() {
   termux_config="${HOME:-/root}/.termux/termux.properties"
   mkdir -p "$(dirname "$codex_config")" "$(dirname "$termux_config")" 2>/dev/null || true
   touch "$codex_config" "$termux_config" 2>/dev/null || true
-  [ -r /root/.openclaw/codex-proxy.env ] && . /root/.openclaw/codex-proxy.env
-
   codex_remove_toml_key "$codex_config" "approvals_reviewer"
   codex_provider_base_url="${CODEX_BASE_URL:-${OPENAI_BASE_URL:-}}"
-  if [ -n "${OPENCLAW_CODEX_PROXY_UPSTREAM:-}" ]; then
-    codex_proxy_host="${OPENCLAW_CODEX_PROXY_HOST:-127.0.0.1}"
-    codex_proxy_port="${OPENCLAW_CODEX_PROXY_PORT:-8787}"
-    codex_provider_base_url="http://$codex_proxy_host:$codex_proxy_port/v1"
-  fi
   if [ -n "$codex_provider_base_url" ]; then
     codex_configure_model_provider "$codex_config" "hhhl" "$codex_provider_base_url"
   fi
@@ -1206,9 +1258,7 @@ esac
     final serviceModel = config.model.trim();
     final toolModel = config.effectiveToolModel;
     final effort = config.reasoningEffort.trim();
-    final openAiBaseUrl = toolId == 'codex' && baseUrl.isNotEmpty
-        ? _codexProxyBaseUrl
-        : _trimTrailingSlash(baseUrl);
+    final openAiBaseUrl = baseUrl.isNotEmpty ? _localApiProxyBaseUrl : '';
     final protocol = _normalizedProtocol(config.effectiveApiProtocol);
 
     if (apiKey.isNotEmpty) {
@@ -1294,7 +1344,7 @@ esac
           })}\n';
     }
     final model = config.effectiveToolModel;
-    final baseUrl = _trimTrailingSlash(config.baseUrl);
+    final baseUrl = config.baseUrl.trim().isEmpty ? '' : _localApiProxyBaseUrl;
     final modelId = model.isEmpty ? 'openclaw-model' : model;
     final payload = <String, dynamic>{
       'models': [
@@ -1332,7 +1382,7 @@ esac
         if (config.apiKey.trim().isNotEmpty)
           'CODEBUDDY_API_KEY': config.apiKey.trim(),
         if (config.baseUrl.trim().isNotEmpty)
-          'CODEBUDDY_BASE_URL': _trimTrailingSlash(config.baseUrl),
+          'CODEBUDDY_BASE_URL': _localApiProxyBaseUrl,
         if (config.effectiveToolModel.isNotEmpty) ...{
           'OPENCLAW_MODEL': config.effectiveToolModel,
           'CODEBUDDY_MODEL': config.effectiveToolModel,
@@ -1357,7 +1407,7 @@ esac
     final protocol = _normalizedProtocol(config.effectiveApiProtocol);
     final envKey = _apiKeyEnvKey(protocol);
     final model = config.effectiveToolModel;
-    final baseUrl = _trimTrailingSlash(config.baseUrl);
+    final baseUrl = config.baseUrl.trim().isEmpty ? '' : _localApiProxyBaseUrl;
     final modelId = model.isEmpty ? 'openclaw-model' : model;
     final modelEntry = <String, dynamic>{
       'id': modelId,
@@ -1433,7 +1483,7 @@ esac
     final defaultModel = config.model.trim().isNotEmpty
         ? config.model.trim()
         : config.effectiveToolModel.trim();
-    final baseUrl = _trimTrailingSlash(config.baseUrl);
+    final baseUrl = config.baseUrl.trim().isEmpty ? '' : _localApiProxyBaseUrl;
     final displayName = config.profileName.trim().isNotEmpty
         ? config.profileName.trim()
         : alias;
@@ -1482,7 +1532,7 @@ esac
       '# Generated by OpenClaw app. Hermes Agent runtime config.',
       'model:',
       '  provider: custom',
-      '  base_url: ${_yamlString(_trimTrailingSlash(config.baseUrl))}',
+      '  base_url: ${_yamlString(_localApiProxyBaseUrl)}',
       if (model.isNotEmpty) '  default: ${_yamlString(model)}',
     ];
     if (config.reasoningEffort.trim().isNotEmpty) {
@@ -1509,7 +1559,7 @@ esac
       if (config.apiKey.trim().isNotEmpty)
         'OPENAI_API_KEY=${_shQuote(config.apiKey.trim())}',
       if (config.baseUrl.trim().isNotEmpty)
-        'OPENAI_BASE_URL=${_shQuote(_trimTrailingSlash(config.baseUrl))}',
+        'OPENAI_BASE_URL=${_shQuote(_localApiProxyBaseUrl)}',
       if (config.effectiveToolModel.trim().isNotEmpty)
         'OPENAI_MODEL=${_shQuote(config.effectiveToolModel.trim())}',
       if (config.reasoningEffort.trim().isNotEmpty)
@@ -1525,7 +1575,7 @@ esac
     final managesRuntime = _shouldManageToolRuntime(codex);
     final apiKey = codex.apiKey.trim();
     final model = codex.effectiveToolModel.trim();
-    final baseUrl = managesRuntime ? _codexProxyBaseUrl : '';
+    final baseUrl = managesRuntime ? _localApiProxyBaseUrl : '';
     final effort = codex.reasoningEffort.trim();
 
     lines.add('# Generated by OpenClaw app. Safe to regenerate.');
@@ -1605,34 +1655,6 @@ esac
 
   static String _yamlString(String value) {
     return jsonEncode(value);
-  }
-
-  static String _buildCodexProxyEnv(CliApiConfig codex) {
-    if (!_shouldManageToolRuntime(codex)) {
-      return '# OpenClaw Codex proxy is disabled until a valid API base URL is configured.\n';
-    }
-    final lines = <String>[
-      'OPENCLAW_CODEX_PROXY_HOST=127.0.0.1',
-      'OPENCLAW_CODEX_PROXY_PORT=8787',
-    ];
-    final upstream = codex.baseUrl.trim();
-    if (upstream.isNotEmpty) {
-      lines.add(
-        'OPENCLAW_CODEX_PROXY_UPSTREAM='
-        '${_shQuote(_trimTrailingSlash(upstream))}',
-      );
-    }
-    if (codex.apiKey.trim().isNotEmpty) {
-      lines.add('OPENAI_API_KEY=${_shQuote(codex.apiKey.trim())}');
-    }
-    if (codex.effectiveToolModel.trim().isNotEmpty) {
-      lines.add(
-        'OPENCLAW_CODEX_PROXY_MODEL='
-        '${_shQuote(codex.effectiveToolModel.trim())}',
-      );
-    }
-    lines.add('');
-    return lines.join('\n');
   }
 
   static String _buildBrowserMcpScript() {
@@ -3307,92 +3329,8 @@ cd "\${OPENCLAW_CLI_WORKSPACE:-$cliWorkspacePath}" 2>/dev/null || cd /root
   static String _buildCodexLauncherSh() {
     return '''${_buildCliLauncherHeader('/root/.openclaw/cli-env-codex.sh')}
 [ -r /root/.openclaw/codex-termux-runtime.sh ] && . /root/.openclaw/codex-termux-runtime.sh
-openclaw_proxy_should_run=false
-if [ -r /root/.openclaw/codex-proxy.env ] && grep -q '^OPENCLAW_CODEX_PROXY_UPSTREAM=' /root/.openclaw/codex-proxy.env 2>/dev/null; then
-  openclaw_proxy_should_run=true
-fi
-if [ "\$openclaw_proxy_should_run" = true ]; then
-  set -a
-  . /root/.openclaw/codex-proxy.env
-  set +a
-  if [ -z "\${OPENCLAW_CODEX_PROXY_UPSTREAM:-}" ]; then
-    echo "OpenClaw Codex proxy upstream is empty; refusing to start without a configured upstream." >&2
-    exit 1
-  fi
-  if command -v configure_codex_termux_runtime >/dev/null 2>&1; then
-    configure_codex_termux_runtime || true
-  fi
-  openclaw_kill_codex_proxy_port() {
-    pkill -f "/root/.openclaw/codex-proxy.py" >/dev/null 2>&1 || true
-    pkill -f "/root/.openclaw/codex-proxy.js" >/dev/null 2>&1 || true
-    command -v python3 >/dev/null 2>&1 || return 0
-    python3 - <<'PY' >/dev/null 2>&1 || true
-import os
-import signal
-
-target_port = format(8787, "04X")
-inodes = set()
-for table in ("/proc/net/tcp", "/proc/net/tcp6"):
-    try:
-        with open(table, "r", encoding="utf-8") as handle:
-            next(handle, None)
-            for line in handle:
-                parts = line.split()
-                if len(parts) > 9 and parts[1].rsplit(":", 1)[-1].upper() == target_port:
-                    inodes.add(parts[9])
-    except OSError:
-        pass
-
-if inodes:
-    for pid in filter(str.isdigit, os.listdir("/proc")):
-        fd_dir = f"/proc/{pid}/fd"
-        try:
-            for fd in os.listdir(fd_dir):
-                try:
-                    link = os.readlink(os.path.join(fd_dir, fd))
-                except OSError:
-                    continue
-                if link.startswith("socket:[") and link[8:-1] in inodes:
-                    try:
-                        os.kill(int(pid), signal.SIGTERM)
-                    except OSError:
-                        pass
-                    break
-        except OSError:
-            pass
-PY
-  }
-  openclaw_proxy_ready=false
-  openclaw_proxy_health="\$(curl -fsS --max-time 1 http://127.0.0.1:8787/health 2>/dev/null || true)"
-  if [ -n "\$openclaw_proxy_health" ] && printf "%s" "\$openclaw_proxy_health" | grep -F -- "\${OPENCLAW_CODEX_PROXY_UPSTREAM:-}" >/dev/null 2>&1; then
-    openclaw_proxy_ready=true
-  else
-    openclaw_kill_codex_proxy_port
-    for openclaw_proxy_attempt in 1 2 3 4 5 6 7 8 9 10; do
-      openclaw_proxy_health="\$(curl -fsS --max-time 1 http://127.0.0.1:8787/health 2>/dev/null || true)"
-      [ -z "\$openclaw_proxy_health" ] && break
-      sleep 0.2
-    done
-    if command -v python3 >/dev/null 2>&1 && [ -r /root/.openclaw/codex-proxy.py ]; then
-      nohup python3 /root/.openclaw/codex-proxy.py >/tmp/openclaw-codex-proxy.log 2>&1 &
-    elif command -v node >/dev/null 2>&1 && [ -r /root/.openclaw/codex-proxy.js ]; then
-      nohup node /root/.openclaw/codex-proxy.js >/tmp/openclaw-codex-proxy.log 2>&1 &
-    fi
-  fi
-  for openclaw_proxy_attempt in 1 2 3 4 5 6 7 8 9 10; do
-    [ "\$openclaw_proxy_ready" = true ] && break
-    openclaw_proxy_health="\$(curl -fsS --max-time 1 http://127.0.0.1:8787/health 2>/dev/null || true)"
-    if [ -n "\$openclaw_proxy_health" ] && printf "%s" "\$openclaw_proxy_health" | grep -F -- "\${OPENCLAW_CODEX_PROXY_UPSTREAM:-}" >/dev/null 2>&1; then
-      openclaw_proxy_ready=true
-      break
-    fi
-    sleep 0.2
-  done
-  if [ "\$openclaw_proxy_ready" != true ]; then
-    cat /tmp/openclaw-codex-proxy.log >&2 2>/dev/null || true
-    echo "OpenClaw Codex proxy did not become ready on 127.0.0.1:8787; refusing to fall back to a stale provider." >&2
-    exit 1
-  fi
+if command -v configure_codex_termux_runtime >/dev/null 2>&1; then
+  configure_codex_termux_runtime || true
 fi
 
 CODEX_JS="/opt/openclaw-cli/codex/node_modules/@openai/codex/bin/codex.js"
@@ -3550,741 +3488,6 @@ if [ -x "\$HERMES_VENV/bin/python" ]; then
 fi
 echo "Hermes Agent runtime entrypoint is missing. Reinstall Hermes Agent from the CLI tools page." >&2
 exit 127
-''';
-  }
-
-  static String _buildCodexProxyPy() {
-    return r'''#!/usr/bin/env python3
-import http.server
-import json
-import os
-import urllib.error
-import urllib.parse
-import urllib.request
-from pathlib import Path
-
-ENV_FILE = Path("/root/.openclaw/codex-proxy.env")
-
-
-def load_env():
-    values = {}
-    if ENV_FILE.exists():
-        for line in ENV_FILE.read_text(encoding="utf-8").splitlines():
-            line = line.strip()
-            if not line or line.startswith("#") or "=" not in line:
-                continue
-            key, value = line.split("=", 1)
-            values[key.strip()] = value.strip().strip('"').strip("'")
-    return values
-
-
-def config():
-    values = load_env()
-    upstream = (
-        values.get("OPENCLAW_CODEX_PROXY_UPSTREAM")
-        or os.environ.get("OPENCLAW_CODEX_PROXY_UPSTREAM")
-        or ""
-    ).rstrip("/")
-    token = values.get("OPENAI_API_KEY") or os.environ.get("OPENAI_API_KEY") or ""
-    model = (
-        values.get("OPENCLAW_CODEX_PROXY_MODEL")
-        or os.environ.get("OPENCLAW_UPSTREAM_MODEL")
-        or ""
-    )
-    host = values.get("OPENCLAW_CODEX_PROXY_HOST") or "127.0.0.1"
-    port = int(values.get("OPENCLAW_CODEX_PROXY_PORT") or "8787")
-    return upstream, token, model, host, port
-
-
-def target_url(upstream, path):
-    if not upstream:
-        raise RuntimeError("OPENCLAW_CODEX_PROXY_UPSTREAM is not configured")
-    upstream_path = urllib.parse.urlsplit(upstream).path.rstrip("/")
-    if upstream_path.endswith("/v1") and path.startswith("/v1/"):
-        return upstream + path[3:]
-    return upstream + path
-
-
-def join_input_text(value):
-    if isinstance(value, str):
-        return value
-    if isinstance(value, list):
-        parts = []
-        for item in value:
-            if isinstance(item, str):
-                parts.append(item)
-                continue
-            if not isinstance(item, dict):
-                continue
-            if item.get("type") == "input_text":
-                parts.append(str(item.get("text") or ""))
-            elif item.get("type") == "output_text":
-                parts.append(str(item.get("text") or ""))
-            elif item.get("type") == "text":
-                parts.append(str(item.get("text") or ""))
-            elif item.get("type") == "message":
-                parts.append(join_input_text(item.get("content")))
-        return "\n".join(part for part in parts if part)
-    if isinstance(value, dict):
-        if value.get("type") == "input_text":
-            return str(value.get("text") or "")
-        if value.get("type") == "output_text":
-            return str(value.get("text") or "")
-        if value.get("type") == "text":
-            return str(value.get("text") or "")
-        if value.get("type") == "message":
-            return join_input_text(value.get("content"))
-    return ""
-
-
-def stringify_response_output(value):
-    if value is None:
-        return ""
-    if isinstance(value, str):
-        return value
-    if isinstance(value, (dict, list)):
-        return json.dumps(value, ensure_ascii=False)
-    return str(value)
-
-
-def responses_to_chat_messages(input_value):
-    if not isinstance(input_value, list):
-        text = join_input_text(input_value)
-        return [{"role": "user", "content": text}] if text else []
-
-    messages = []
-    pending_assistant = None
-
-    def flush_pending():
-        nonlocal pending_assistant
-        if not pending_assistant:
-            return
-        if not pending_assistant.get("tool_calls"):
-            pending_assistant.pop("tool_calls", None)
-        if pending_assistant.get("content", "") == "":
-            pending_assistant["content"] = None
-        if pending_assistant.get("content") is not None or pending_assistant.get("tool_calls"):
-            messages.append(pending_assistant)
-        pending_assistant = None
-
-    for item in input_value:
-        if isinstance(item, str):
-            flush_pending()
-            if item:
-                messages.append({"role": "user", "content": item})
-            continue
-        if not isinstance(item, dict):
-            continue
-
-        item_type = item.get("type")
-        if item_type == "message":
-            flush_pending()
-            role = item.get("role") or "user"
-            text = join_input_text(item.get("content"))
-            if role == "assistant":
-                pending_assistant = {"role": "assistant", "content": text or None, "tool_calls": []}
-            elif text:
-                messages.append({"role": role, "content": text})
-            continue
-
-        if item_type == "function_call":
-            if pending_assistant is None:
-                pending_assistant = {"role": "assistant", "content": None, "tool_calls": []}
-            pending_assistant.setdefault("tool_calls", []).append({
-                "id": item.get("call_id") or item.get("id") or "tool_call",
-                "type": "function",
-                "function": {
-                    "name": item.get("name") or "",
-                    "arguments": item.get("arguments") or json.dumps(item.get("input") or {}, ensure_ascii=False),
-                },
-            })
-            continue
-
-        if item_type == "function_call_output":
-            flush_pending()
-            messages.append({
-                "role": "tool",
-                "tool_call_id": item.get("call_id") or item.get("tool_call_id") or item.get("id") or "tool_call",
-                "content": stringify_response_output(item.get("output")),
-            })
-            continue
-
-        if item_type == "reasoning":
-            continue
-
-        text = join_input_text(item)
-        flush_pending()
-        if text:
-            messages.append({"role": "user", "content": text})
-
-    flush_pending()
-    return messages
-
-
-def responses_to_chat(payload, forced_model, path):
-    model = forced_model or payload.get("model") or ""
-    input_value = payload.get("input")
-    messages = responses_to_chat_messages(input_value)
-
-    instructions = str(payload.get("instructions") or "").strip()
-    if instructions:
-        messages.insert(0, {"role": "system", "content": instructions})
-
-    request = {
-        "model": model,
-        "messages": messages,
-        "stream": bool(payload.get("stream")),
-    }
-    if payload.get("temperature") is not None:
-        request["temperature"] = payload.get("temperature")
-    if payload.get("max_output_tokens") is not None:
-        request["max_tokens"] = payload.get("max_output_tokens")
-    if payload.get("top_p") is not None:
-        request["top_p"] = payload.get("top_p")
-    if isinstance(payload.get("tools"), list):
-        request["tools"] = payload.get("tools")
-    if isinstance(payload.get("tool_choice"), (str, dict)):
-        request["tool_choice"] = payload.get("tool_choice")
-    if payload.get("reasoning") is not None:
-        request["reasoning"] = payload.get("reasoning")
-    if path.endswith("/chat/completions"):
-        request["stream"] = bool(payload.get("stream"))
-    return request
-
-
-def chat_to_responses(payload, original_model):
-    choices = payload.get("choices") or []
-    first = choices[0] if choices else {}
-    message = first.get("message") if isinstance(first, dict) else {}
-    text = ""
-    if isinstance(message, dict):
-        content = message.get("content")
-        if isinstance(content, str):
-            text = content
-        elif isinstance(content, list):
-            parts = []
-            for item in content:
-                if isinstance(item, dict) and item.get("type") == "text":
-                    parts.append(str(item.get("text") or ""))
-            text = "\n".join(part for part in parts if part)
-    response_id = payload.get("id") or "resp_openclaw"
-    model = payload.get("model") or original_model or ""
-    usage = payload.get("usage") or {}
-    output = []
-    if text:
-        output.append({
-            "id": f"{response_id}_output_0",
-            "type": "message",
-            "role": "assistant",
-            "content": [
-                {
-                    "type": "output_text",
-                    "text": text,
-                    "annotations": [],
-                },
-            ],
-        })
-    for index, call in enumerate(message.get("tool_calls") or []):
-        function = call.get("function") if isinstance(call, dict) else {}
-        output.append({
-            "id": f"{response_id}_function_{index}",
-            "type": "function_call",
-            "call_id": call.get("id") or f"tool_call_{index}",
-            "name": function.get("name") or "",
-            "arguments": function.get("arguments") or "{}",
-            "status": "completed",
-        })
-    return {
-        "id": response_id,
-        "object": "response",
-        "created_at": payload.get("created") or 0,
-        "status": "completed",
-        "model": model,
-        "output": output,
-        "output_text": text,
-        "usage": {
-            "input_tokens": usage.get("prompt_tokens") or 0,
-            "output_tokens": usage.get("completion_tokens") or 0,
-            "total_tokens": usage.get("total_tokens") or 0,
-        },
-    }
-
-
-def build_models_response(model):
-    model_id = model or "openclaw-model"
-    return {
-        "object": "list",
-        "data": [
-            {
-                "id": model_id,
-                "object": "model",
-                "created": 0,
-                "owned_by": "openclaw",
-            },
-        ],
-    }
-
-
-def send_json(handler, status, payload):
-    body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-    handler.send_response(status)
-    handler.send_header("Content-Type", "application/json")
-    handler.send_header("Content-Length", str(len(body)))
-    handler.end_headers()
-    handler.wfile.write(body)
-    handler.wfile.flush()
-
-
-class Handler(http.server.BaseHTTPRequestHandler):
-    protocol_version = "HTTP/1.1"
-
-    def log_message(self, fmt, *args):
-        return
-
-    def _proxy(self):
-        upstream, token, model, _, _ = config()
-        parsed_path = urllib.parse.urlsplit(self.path).path
-        if parsed_path == "/health":
-            send_json(self, 200, {"ok": True, "upstream": upstream, "model": model, "has_key": bool(token)})
-            return
-        if self.command.upper() == "GET" and parsed_path == "/v1/models":
-            send_json(self, 200, build_models_response(model))
-            return
-
-        length = int(self.headers.get("content-length", "0") or "0")
-        body = self.rfile.read(length) if length else None
-        target_path = self.path
-        original_model = model
-        if body and self.command.upper() in {"POST", "PUT", "PATCH"}:
-            try:
-                payload = json.loads(body.decode("utf-8"))
-                if isinstance(payload, dict):
-                    if parsed_path == "/v1/responses":
-                        payload = responses_to_chat(payload, model, parsed_path)
-                        target_path = "/v1/chat/completions"
-                    elif model and isinstance(payload.get("model"), str):
-                        payload["model"] = model
-                    body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-            except Exception:
-                pass
-        try:
-            req = urllib.request.Request(target_url(upstream, target_path), data=body, method=self.command)
-            for key, value in self.headers.items():
-                if key.lower() in {"host", "content-length", "connection", "accept-encoding", "authorization"}:
-                    continue
-                req.add_header(key, value)
-            if token:
-                req.add_header("Authorization", "Bearer " + token)
-            with urllib.request.urlopen(req, timeout=300) as resp:
-                data = resp.read()
-                if parsed_path == "/v1/responses":
-                    try:
-                        payload = json.loads(data.decode("utf-8"))
-                        send_json(self, resp.status, chat_to_responses(payload, original_model))
-                        return
-                    except Exception:
-                        pass
-                self.send_response(resp.status)
-                for key, value in resp.headers.items():
-                    if key.lower() in {"transfer-encoding", "connection", "content-encoding", "content-length"}:
-                        continue
-                    self.send_header(key, value)
-                self.send_header("Content-Length", str(len(data)))
-                self.end_headers()
-                self.wfile.write(data)
-                self.wfile.flush()
-        except urllib.error.HTTPError as error:
-            data = error.read()
-            self.send_response(error.code)
-            self.send_header("Content-Type", error.headers.get("Content-Type", "application/json"))
-            self.send_header("Content-Length", str(len(data)))
-            self.end_headers()
-            self.wfile.write(data)
-            self.wfile.flush()
-        except Exception as error:
-            data = str(error).encode("utf-8")
-            self.send_response(502)
-            self.send_header("Content-Length", str(len(data)))
-            self.end_headers()
-            self.wfile.write(data)
-            self.wfile.flush()
-
-    def do_GET(self):
-        self._proxy()
-
-    def do_POST(self):
-        self._proxy()
-
-
-class ReusableThreadingHTTPServer(http.server.ThreadingHTTPServer):
-    allow_reuse_address = True
-
-
-if __name__ == "__main__":
-    _, _, _, host, port = config()
-    ReusableThreadingHTTPServer((host, port), Handler).serve_forever()
-''';
-  }
-
-  static String _buildCodexProxyJs() {
-    return r'''#!/usr/bin/env node
-const http = require("http");
-const https = require("https");
-const fs = require("fs");
-const { URL } = require("url");
-
-const envFile = "/root/.openclaw/codex-proxy.env";
-
-function loadEnv() {
-  const values = {};
-  if (!fs.existsSync(envFile)) return values;
-  for (const rawLine of fs.readFileSync(envFile, "utf8").split(/\r?\n/)) {
-    const line = rawLine.trim();
-    if (!line || line.startsWith("#") || !line.includes("=")) continue;
-    const index = line.indexOf("=");
-    const key = line.slice(0, index).trim();
-    let value = line.slice(index + 1).trim();
-    if (
-      (value.startsWith("'") && value.endsWith("'")) ||
-      (value.startsWith('"') && value.endsWith('"'))
-    ) {
-      value = value.slice(1, -1);
-    }
-    values[key] = value;
-  }
-  return values;
-}
-
-function config() {
-  const values = loadEnv();
-  return {
-    upstream: (
-      values.OPENCLAW_CODEX_PROXY_UPSTREAM ||
-      process.env.OPENCLAW_CODEX_PROXY_UPSTREAM ||
-      ""
-    ).replace(/\/+$/, ""),
-    token: values.OPENAI_API_KEY || process.env.OPENAI_API_KEY || "",
-    model:
-      values.OPENCLAW_CODEX_PROXY_MODEL ||
-      process.env.OPENCLAW_UPSTREAM_MODEL ||
-      "",
-    host: values.OPENCLAW_CODEX_PROXY_HOST || "127.0.0.1",
-    port: Number(values.OPENCLAW_CODEX_PROXY_PORT || 8787),
-  };
-}
-
-function targetUrl(upstream, path) {
-  if (!upstream) throw new Error("OPENCLAW_CODEX_PROXY_UPSTREAM is not configured");
-  const upstreamPath = new URL(upstream).pathname.replace(/\/+$/, "");
-  if (upstreamPath.endsWith("/v1") && path.startsWith("/v1/")) {
-    return upstream + path.slice(3);
-  }
-  return upstream + path;
-}
-
-function sendJson(res, status, payload) {
-  const body = Buffer.from(JSON.stringify(payload));
-  res.writeHead(status, {
-    "content-type": "application/json",
-    "content-length": body.length,
-  });
-  res.end(body);
-}
-
-function joinInputText(value) {
-  if (typeof value === "string") return value;
-  if (Array.isArray(value)) {
-    return value
-      .map((item) => {
-        if (typeof item === "string") return item;
-        if (!item || typeof item !== "object") return "";
-        if (item.type === "input_text" || item.type === "output_text" || item.type === "text") {
-          return item.text || "";
-        }
-        if (item.type === "message") {
-          return joinInputText(item.content);
-        }
-        return "";
-      })
-      .filter(Boolean)
-      .join("\n");
-  }
-  if (value && typeof value === "object") {
-    if (value.type === "input_text" || value.type === "output_text" || value.type === "text") {
-      return value.text || "";
-    }
-    if (value.type === "message") {
-      return joinInputText(value.content);
-    }
-  }
-  return "";
-}
-
-function stringifyResponseOutput(value) {
-  if (value == null) return "";
-  if (typeof value === "string") return value;
-  if (typeof value === "object") return JSON.stringify(value);
-  return String(value);
-}
-
-function responsesToChatMessages(input) {
-  if (!Array.isArray(input)) {
-    const text = joinInputText(input);
-    return text ? [{ role: "user", content: text }] : [];
-  }
-
-  const messages = [];
-  let pendingAssistant = null;
-
-  const flushPending = () => {
-    if (!pendingAssistant) return;
-    if (!pendingAssistant.tool_calls?.length) {
-      delete pendingAssistant.tool_calls;
-    }
-    if (pendingAssistant.content === "") {
-      pendingAssistant.content = null;
-    }
-    if (pendingAssistant.content != null || pendingAssistant.tool_calls?.length) {
-      messages.push(pendingAssistant);
-    }
-    pendingAssistant = null;
-  };
-
-  for (const item of input) {
-    if (typeof item === "string") {
-      flushPending();
-      if (item) messages.push({ role: "user", content: item });
-      continue;
-    }
-    if (!item || typeof item !== "object") continue;
-
-    if (item.type === "message") {
-      flushPending();
-      const role = item.role || "user";
-      const text = joinInputText(item.content);
-      if (role === "assistant") {
-        pendingAssistant = { role: "assistant", content: text || null, tool_calls: [] };
-      } else if (text) {
-        messages.push({ role, content: text });
-      }
-      continue;
-    }
-
-    if (item.type === "function_call") {
-      if (!pendingAssistant) {
-        pendingAssistant = { role: "assistant", content: null, tool_calls: [] };
-      }
-      pendingAssistant.tool_calls.push({
-        id: item.call_id || item.id || "tool_call",
-        type: "function",
-        function: {
-          name: item.name || "",
-          arguments: item.arguments || JSON.stringify(item.input || {}),
-        },
-      });
-      continue;
-    }
-
-    if (item.type === "function_call_output") {
-      flushPending();
-      messages.push({
-        role: "tool",
-        tool_call_id: item.call_id || item.tool_call_id || item.id || "tool_call",
-        content: stringifyResponseOutput(item.output),
-      });
-      continue;
-    }
-
-    if (item.type === "reasoning") {
-      continue;
-    }
-
-    const text = joinInputText(item);
-    flushPending();
-    if (text) {
-      messages.push({ role: "user", content: text });
-    }
-  }
-
-  flushPending();
-  return messages;
-}
-
-function responsesToChat(payload, forcedModel) {
-  const request = {
-    model: forcedModel || payload.model || "",
-    messages: responsesToChatMessages(payload.input),
-    stream: Boolean(payload.stream),
-  };
-  const instructions = String(payload.instructions || "").trim();
-  if (instructions) {
-    request.messages.unshift({ role: "system", content: instructions });
-  }
-  if (payload.temperature !== undefined) request.temperature = payload.temperature;
-  if (payload.max_output_tokens !== undefined) request.max_tokens = payload.max_output_tokens;
-  if (payload.top_p !== undefined) request.top_p = payload.top_p;
-  if (Array.isArray(payload.tools)) request.tools = payload.tools;
-  if (typeof payload.tool_choice === "string" || (payload.tool_choice && typeof payload.tool_choice === "object")) {
-    request.tool_choice = payload.tool_choice;
-  }
-  if (payload.reasoning !== undefined) request.reasoning = payload.reasoning;
-  return request;
-}
-
-function chatToResponses(payload, originalModel) {
-  const choice = (payload.choices || [])[0] || {};
-  const message = choice.message || {};
-  const responseId = payload.id || "resp_openclaw";
-  let text = "";
-  if (typeof message.content === "string") {
-    text = message.content;
-  } else if (Array.isArray(message.content)) {
-    text = message.content
-      .map((item) => (item && item.type === "text" ? item.text || "" : ""))
-      .filter(Boolean)
-      .join("\n");
-  }
-  const output = [];
-  if (text) {
-    output.push({
-      id: `${responseId}_output_0`,
-      type: "message",
-      role: "assistant",
-      content: [
-        {
-          type: "output_text",
-          text,
-          annotations: [],
-        },
-      ],
-    });
-  }
-  for (const [index, call] of (message.tool_calls || []).entries()) {
-    output.push({
-      id: `${responseId}_function_${index}`,
-      type: "function_call",
-      call_id: call.id || `tool_call_${index}`,
-      name: call.function?.name || "",
-      arguments: call.function?.arguments || "{}",
-      status: "completed",
-    });
-  }
-  return {
-    id: responseId,
-    object: "response",
-    created_at: payload.created || 0,
-    status: "completed",
-    model: payload.model || originalModel || "",
-    output,
-    output_text: text,
-    usage: {
-      input_tokens: payload.usage?.prompt_tokens || 0,
-      output_tokens: payload.usage?.completion_tokens || 0,
-      total_tokens: payload.usage?.total_tokens || 0,
-    },
-  };
-}
-
-const server = http.createServer((clientReq, clientRes) => {
-  const cfg = config();
-  const requestUrl = new URL(clientReq.url, `http://${cfg.host}:${cfg.port}`);
-  if (requestUrl.pathname === "/health") {
-    sendJson(clientRes, 200, {
-      ok: true,
-      upstream: cfg.upstream,
-      model: cfg.model,
-      has_key: Boolean(cfg.token),
-    });
-    return;
-  }
-
-  let target;
-  try {
-    target = new URL(targetUrl(cfg.upstream, clientReq.url));
-  } catch (error) {
-    sendJson(clientRes, 502, { error: String(error.message || error) });
-    return;
-  }
-
-  const headers = { ...clientReq.headers };
-  delete headers.host;
-  delete headers.connection;
-  delete headers["accept-encoding"];
-  delete headers.authorization;
-  if (cfg.token) headers.authorization = `Bearer ${cfg.token}`;
-
-  const bodyChunks = [];
-  clientReq.on("data", (chunk) => bodyChunks.push(chunk));
-  clientReq.on("end", () => {
-    let body = Buffer.concat(bodyChunks);
-    const parsedPath = requestUrl.pathname;
-    let targetPath = clientReq.url;
-    let expectingResponses = false;
-    if (body.length && ["POST", "PUT", "PATCH"].includes(clientReq.method || "")) {
-      try {
-        const payload = JSON.parse(body.toString("utf8"));
-        if (payload && typeof payload === "object") {
-          if (parsedPath === "/v1/responses") {
-            body = Buffer.from(JSON.stringify(responsesToChat(payload, cfg.model)));
-            targetPath = "/v1/chat/completions";
-            expectingResponses = true;
-          } else {
-            if (cfg.model && typeof payload.model === "string") {
-              payload.model = cfg.model;
-            }
-            body = Buffer.from(JSON.stringify(payload));
-          }
-        }
-      } catch (_) {}
-    }
-    headers["content-length"] = body.length;
-
-    try {
-      target = new URL(targetUrl(cfg.upstream, targetPath));
-    } catch (error) {
-      sendJson(clientRes, 502, { error: String(error.message || error) });
-      return;
-    }
-
-    const transport = target.protocol === "https:" ? https : http;
-    const upstreamReq = transport.request(
-      target,
-      {
-        method: clientReq.method,
-        headers,
-      },
-      (upstreamRes) => {
-        const responseChunks = [];
-        upstreamRes.on("data", (chunk) => responseChunks.push(chunk));
-        upstreamRes.on("end", () => {
-          const responseBody = Buffer.concat(responseChunks);
-          if (expectingResponses) {
-            try {
-              const payload = JSON.parse(responseBody.toString("utf8"));
-              sendJson(clientRes, upstreamRes.statusCode || 200, chatToResponses(payload, cfg.model));
-              return;
-            } catch (_) {}
-          }
-          const responseHeaders = { ...upstreamRes.headers };
-          delete responseHeaders["transfer-encoding"];
-          delete responseHeaders.connection;
-          delete responseHeaders["content-encoding"];
-          responseHeaders["content-length"] = responseBody.length;
-          clientRes.writeHead(upstreamRes.statusCode || 502, responseHeaders);
-          clientRes.end(responseBody);
-        });
-      },
-    );
-
-    upstreamReq.on("error", (error) => {
-      sendJson(clientRes, 502, { error: String(error.message || error) });
-    });
-    upstreamReq.end(body);
-  });
-});
-
-const cfg = config();
-server.listen(cfg.port, cfg.host);
 ''';
   }
 

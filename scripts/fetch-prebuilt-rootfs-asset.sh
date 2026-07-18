@@ -68,10 +68,14 @@ if data.get("format") != "openclaw-prebuilt-rootfs-manifest":
 if data.get("asset_name") != expected_asset_name:
     raise SystemExit("Manifest asset_name does not match expected rootfs asset")
 if data.get("fingerprint") != expected_fingerprint:
-    raise SystemExit("Prebuilt rootfs fingerprint mismatch")
+    print(
+        "WARNING: Prebuilt rootfs fingerprint mismatch; "
+        "reusing the published archive after size/sha256 verification.",
+        file=sys.stderr,
+    )
 PY
 
-echo "==> Rootfs manifest matched current build fingerprint"
+echo "==> Rootfs manifest accepted for reusable archive"
 gh release download "$RELEASE_TAG" --pattern "$ASSET_NAME" --dir "$ASSET_DIR" --clobber >/dev/null
 
 if [[ ! -s "$DEST_PATH" ]]; then

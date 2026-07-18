@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../constants.dart';
+import '../services/local_api_proxy_service.dart';
 import '../services/native_bridge.dart';
 import '../services/preferences_service.dart';
 import '../services/provider_config_service.dart';
@@ -128,6 +130,7 @@ class _SplashScreenState extends State<SplashScreen>
       if (!mounted) return;
 
       if (setupComplete) {
+        unawaited(LocalApiProxyService.start());
         final gatewayConfigured =
             await ProviderConfigService.hasRequiredGatewayConfig();
         final pendingSetupCompletionChoice =

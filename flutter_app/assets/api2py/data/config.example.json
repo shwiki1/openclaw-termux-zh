@@ -1,0 +1,28 @@
+{
+  "server": {
+    "host": "127.0.0.1",
+    "port": 9999
+  },
+  "providers": {},
+  "model_mappings": {},
+  "prefix_routes": {},
+  "default_provider": "",
+  "force_default_provider": false,
+  "auth_tokens": [],
+  "admin_tokens": [],
+  "pricing": {},
+  "log_max": 500,
+  "debug_requests": false,
+  "allow_local_unauthenticated": false,
+  "admin_account": {},
+  "concurrency": {
+    "max_upstream": 64,
+    "http_max_connections": 100,
+    "http_max_keepalive": 40,
+    "connect_timeout": 10.0,
+    "read_timeout": 300.0,
+    "write_queue_size": 1000,
+    "max_body_bytes": 8000000,
+    "server_limit_concurrency": 96
+  }
+}
