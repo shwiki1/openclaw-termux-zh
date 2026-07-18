@@ -69,13 +69,28 @@ echo '${restarted ? '本地中转代理已重启' : '本地中转代理已启动
       final installCommand = '''
 set -e
 cd $guestDir
-python3 -m pip install --break-system-packages -r requirements.txt
+if ! python3 -m pip --version >/dev/null 2>&1; then
+  if command -v apt-get >/dev/null 2>&1; then
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get update
+    apt-get install -y python3-pip
+  else
+    echo 'Python 缺少 pip，且当前 RootFS 中找不到 apt-get，无法自动安装中转代理依赖。' >&2
+    exit 1
+  fi
+fi
+python3 -m pip install --break-system-packages -r requirements.txt || \
+  python3 -m pip install -r requirements.txt
+python3 - <<'PY'
+for module in ('starlette', 'uvicorn', 'httpx', 'aiosqlite'):
+    __import__(module)
+PY
 bash start.sh
 curl -s --max-time 3 http://127.0.0.1:9999/api/health >/dev/null
 echo '本地中转代理依赖已安装并${restarted ? '重启' : '启动'}：http://127.0.0.1:9999/'
 ''';
       try {
-        return await NativeBridge.runInProot(installCommand, timeout: 180);
+        return await NativeBridge.runInProot(installCommand, timeout: 300);
       } catch (_) {
         rethrow;
       }
