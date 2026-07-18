@@ -25,7 +25,6 @@ import android.widget.FrameLayout
 import android.widget.HorizontalScrollView
 import android.widget.ImageView
 import android.widget.LinearLayout
-import android.widget.PopupMenu
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
@@ -340,45 +339,44 @@ class NativeCodexBrowserView(
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(NativeUiPalette.background)
             clipToPadding = false
-            setPadding(dp(6), dp(6), dp(6), dp(6))
+            setPadding(dp(3), dp(3), dp(3), dp(3))
         }
 
         statusColumn.apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(10), dp(8), dp(10), dp(8))
-            background = actionButtonDrawable(
-                NativeUiPalette.surface,
-                strokeColor = NativeUiPalette.borderStrong,
-            )
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(4), 0, dp(4), dp(2))
+            setBackgroundColor(NativeUiPalette.background)
         }
         bridgeStatusView.apply {
             setTextColor(NativeUiPalette.textPrimary)
-            textSize = 11f
+            textSize = 10f
             typeface = Typeface.DEFAULT_BOLD
             text = "浏览器自动化已连接"
+            maxLines = 1
         }
         bridgeMetaView.apply {
             setTextColor(NativeUiPalette.textMuted)
-            textSize = 11f
+            textSize = 10f
             typeface = Typeface.MONOSPACE
             maxLines = 1
             text = "Codex 浏览器原生页"
-            setPadding(0, dp(3), 0, 0)
+            setPadding(dp(8), 0, 0, 0)
         }
         statusColumn.addView(bridgeStatusView)
-        statusColumn.addView(bridgeMetaView)
+        statusColumn.addView(
+            bridgeMetaView,
+            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),
+        )
 
         val tabScroller = HorizontalScrollView(context).apply {
             isHorizontalScrollBarEnabled = false
             overScrollMode = View.OVER_SCROLL_NEVER
-            background = actionButtonDrawable(
-                NativeUiPalette.surfaceAlt,
-                strokeColor = NativeUiPalette.border,
-            )
+            setBackgroundColor(NativeUiPalette.background)
             addView(
                 tabStrip.apply {
                     orientation = LinearLayout.HORIZONTAL
-                    setPadding(dp(6), dp(6), dp(6), dp(6))
+                    setPadding(0, 0, 0, dp(2))
                 },
                 ViewGroup.LayoutParams(
                     ViewGroup.LayoutParams.WRAP_CONTENT,
@@ -388,25 +386,18 @@ class NativeCodexBrowserView(
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT,
-            ).apply {
-                topMargin = dp(6)
-            }
+            )
         }
 
         val navRow = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(8), dp(8), dp(8), dp(8))
-            background = actionButtonDrawable(
-                NativeUiPalette.surface,
-                strokeColor = NativeUiPalette.border,
-            )
+            setPadding(0, dp(2), 0, dp(3))
+            setBackgroundColor(NativeUiPalette.background)
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT,
-            ).apply {
-                topMargin = dp(6)
-            }
+            )
         }
         configureIconButton(backButton, R.drawable.lucide_chevron_left, "后退") {
             executeAction("back", emptyMap()) {}
@@ -427,9 +418,33 @@ class NativeCodexBrowserView(
         navRow.addView(forwardButton)
         navRow.addView(reloadButton)
         navRow.addView(newTabButton)
+        addressInput.apply {
+            setTextColor(NativeUiPalette.textPrimary)
+            setHintTextColor(NativeUiPalette.textSubtle)
+            hint = "URL / localhost"
+            background = flatControlDrawable(NativeUiPalette.surfaceAlt)
+            typeface = Typeface.MONOSPACE
+            textSize = 11f
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
+            setPadding(dp(9), 0, dp(9), 0)
+            minHeight = dp(30)
+            setSingleLine(true)
+            setOnEditorActionListener { _, _, _ ->
+                executeAction("open", mapOf("url" to addressInput.text?.toString().orEmpty())) {}
+                true
+            }
+        }
         navRow.addView(
-            View(context),
-            LinearLayout.LayoutParams(0, 1, 1f),
+            addressInput,
+            LinearLayout.LayoutParams(0, dp(32), 1f).apply {
+                marginStart = dp(4)
+                marginEnd = dp(4)
+            },
+        )
+        navRow.addView(
+            createActionButton("打开") {
+                executeAction("open", mapOf("url" to addressInput.text?.toString().orEmpty())) {}
+            },
         )
         uaButton.apply {
             minimumWidth = dp(52)
@@ -448,51 +463,6 @@ class NativeCodexBrowserView(
         }
         navRow.addView(uaButton)
         navRow.addView(moreButton)
-
-        val addressRow = LinearLayout(context).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(8), dp(8), dp(8), dp(8))
-            background = actionButtonDrawable(
-                NativeUiPalette.surfaceAlt,
-                strokeColor = NativeUiPalette.border,
-            )
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-            ).apply {
-                topMargin = dp(6)
-            }
-        }
-        addressInput.apply {
-            setTextColor(NativeUiPalette.textPrimary)
-            setHintTextColor(NativeUiPalette.textSubtle)
-            hint = "输入网址、后台地址或 localhost"
-            background = actionButtonDrawable(
-                NativeUiPalette.background,
-                strokeColor = NativeUiPalette.borderStrong,
-            )
-            typeface = Typeface.MONOSPACE
-            textSize = 12f
-            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
-            setPadding(dp(14), dp(12), dp(14), dp(12))
-            setSingleLine(true)
-            setOnEditorActionListener { _, _, _ ->
-                executeAction("open", mapOf("url" to addressInput.text?.toString().orEmpty())) {}
-                true
-            }
-        }
-        addressRow.addView(
-            addressInput,
-            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
-                marginEnd = dp(8)
-            },
-        )
-        addressRow.addView(
-            createActionButton("打开") {
-                executeAction("open", mapOf("url" to addressInput.text?.toString().orEmpty())) {}
-            },
-        )
 
         recentActionsColumn.apply {
             orientation = LinearLayout.VERTICAL
@@ -595,19 +565,14 @@ class NativeCodexBrowserView(
             0,
             1f,
         ).apply {
-            topMargin = dp(6)
+            topMargin = dp(2)
         }
-        webViewContainer.background = actionButtonDrawable(
-            NativeUiPalette.surface,
-            strokeColor = NativeUiPalette.borderStrong,
-        )
-        webViewContainer.clipToOutline = true
-        webViewContainer.setPadding(dp(1), dp(1), dp(1), dp(1))
+        webViewContainer.setBackgroundColor(Color.BLACK)
+        webViewContainer.setPadding(0, 0, 0, 0)
 
         rootLayout.addView(statusColumn)
         rootLayout.addView(tabScroller)
         rootLayout.addView(navRow)
-        rootLayout.addView(addressRow)
         rootLayout.addView(recentActionsColumn)
         rootLayout.addView(inspectorColumn)
         rootLayout.addView(webViewContainer)
@@ -626,14 +591,11 @@ class NativeCodexBrowserView(
             text = label
             setTextColor(NativeUiPalette.textPrimary)
             gravity = Gravity.CENTER
-            textSize = 12f
+            textSize = 11f
             typeface = Typeface.MONOSPACE
-            minHeight = dp(34)
-            setPadding(dp(10), dp(8), dp(10), dp(8))
-            background = actionButtonDrawable(
-                NativeUiPalette.accentSoft,
-                strokeColor = NativeUiPalette.accent,
-            )
+            minHeight = dp(30)
+            setPadding(dp(9), 0, dp(9), 0)
+            background = flatControlDrawable(NativeUiPalette.accentSoft)
             setOnClickListener { onClick() }
         }.also { button ->
             button.layoutParams = LinearLayout.LayoutParams(
@@ -653,10 +615,7 @@ class NativeCodexBrowserView(
         onClick: (View) -> Unit,
     ) {
         target.removeAllViews()
-        target.background = actionButtonDrawable(
-            NativeUiPalette.surfaceRaised,
-            strokeColor = NativeUiPalette.borderStrong,
-        )
+        target.background = flatControlDrawable(NativeUiPalette.surfaceRaised)
         target.setOnClickListener { onClick(it) }
         val iconDrawable = ContextCompat.getDrawable(context, iconRes)?.mutate()
         if (iconDrawable != null) {
@@ -668,9 +627,9 @@ class NativeCodexBrowserView(
                 this.rotation = rotation
                 contentDescription = description
             },
-            LayoutParams(dp(18), dp(18), Gravity.CENTER),
+            LayoutParams(dp(16), dp(16), Gravity.CENTER),
         )
-        target.layoutParams = LinearLayout.LayoutParams(dp(34), dp(34)).apply {
+        target.layoutParams = LinearLayout.LayoutParams(dp(30), dp(30)).apply {
             marginEnd = dp(4)
         }
     }
@@ -709,6 +668,12 @@ class NativeCodexBrowserView(
             if (strokeColor != null) {
                 setStroke(dp(1), strokeColor)
             }
+        }
+
+    private fun flatControlDrawable(color: Int) =
+        GradientDrawable().apply {
+            cornerRadius = dp(4).toFloat()
+            setColor(color)
         }
 
     private fun activeTabOrNull(): NativeBrowserTab? = tabs.getOrNull(activeTabIndex)
@@ -754,19 +719,15 @@ class NativeCodexBrowserView(
             },
         )
         uaButton.gravity = Gravity.CENTER
-        uaButton.textSize = 12f
+        uaButton.textSize = 11f
         uaButton.typeface = Typeface.MONOSPACE
-        uaButton.setPadding(dp(12), dp(10), dp(12), dp(10))
-        uaButton.background = actionButtonDrawable(
+        uaButton.minHeight = dp(30)
+        uaButton.setPadding(dp(9), 0, dp(9), 0)
+        uaButton.background = flatControlDrawable(
             if (tab.userAgentMode == NativeBrowserUserAgentMode.DESKTOP) {
                 Color.parseColor("#29F59E0B")
             } else {
                 NativeUiPalette.surfaceRaised
-            },
-            strokeColor = if (tab.userAgentMode == NativeBrowserUserAgentMode.DESKTOP) {
-                NativeUiPalette.warning
-            } else {
-                NativeUiPalette.borderStrong
             },
         )
         backButton.alpha = if (tab.canGoBack) 1f else 0.45f
@@ -788,10 +749,9 @@ class NativeCodexBrowserView(
                     )
                     textSize = 11f
                     typeface = Typeface.MONOSPACE
-                    setPadding(dp(12), dp(8), dp(12), dp(8))
-                    background = actionButtonDrawable(
+                    setPadding(dp(10), dp(5), dp(10), dp(5))
+                    background = flatControlDrawable(
                         if (index == activeTabIndex) NativeUiPalette.accentSoft else NativeUiPalette.surfaceAlt,
-                        strokeColor = if (index == activeTabIndex) NativeUiPalette.accent else NativeUiPalette.borderStrong,
                     )
                     setOnClickListener {
                         activeIndexSafeSet(index)
@@ -815,9 +775,9 @@ class NativeCodexBrowserView(
         ViewCompat.setOnApplyWindowInsetsListener(rootLayout) { view, insets ->
             val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
             view.updatePadding(
-                left = dp(6) + systemBars.left,
-                right = dp(6) + systemBars.right,
-                bottom = dp(6) + systemBars.bottom,
+                left = dp(3) + systemBars.left,
+                right = dp(3) + systemBars.right,
+                bottom = dp(3) + systemBars.bottom,
             )
             insets
         }
@@ -1084,36 +1044,112 @@ class NativeCodexBrowserView(
     }
 
     private fun showMoreMenu(anchor: View) {
-        PopupMenu(context, anchor).apply {
-            menu.add(0, MENU_RECENT_ACTIONS, 0, if (showRecentActions) "隐藏最近操作" else "显示最近操作")
-            menu.add(0, MENU_INSPECTOR, 1, if (showInspector) "隐藏检查器" else "显示检查器")
-            menu.add(0, MENU_SCRIPTS, 2, "脚本库")
-            menu.add(0, MENU_SNAPSHOT, 3, "查看页面快照")
-            menu.add(0, MENU_COPY_URL, 4, "复制当前地址")
-            menu.add(0, MENU_WELCOME, 5, "打开欢迎页")
-            menu.add(0, MENU_SELF_TEST, 6, "运行自检")
-            setOnMenuItemClickListener { item ->
-                when (item.itemId) {
-                    MENU_RECENT_ACTIONS -> {
-                        showRecentActions = !showRecentActions
-                        renderRecentActions()
-                    }
-                    MENU_INSPECTOR -> {
-                        showInspector = !showInspector
-                        if (showInspector && inspectorItems.isEmpty() && !inspectorLoading) {
-                            loadInspector(inspectorMode)
-                        }
-                        updateInspectorUi()
-                    }
-                    MENU_SCRIPTS -> showScriptLibrary()
-                    MENU_SNAPSHOT -> showSnapshotPreview()
-                    MENU_COPY_URL -> copyToClipboard(activeTabOrNull()?.currentUrl.orEmpty(), "当前地址")
-                    MENU_WELCOME -> activeTabOrNull()?.let(::loadWelcomePage)
-                    MENU_SELF_TEST -> executeAction("self_test", emptyMap()) {}
-                }
-                true
+        val dialog = AlertDialog.Builder(context).create()
+        val list = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(10), dp(8), dp(10), dp(8))
+            background = actionButtonDrawable(
+                Color.parseColor("#111111"),
+                strokeColor = Color.parseColor("#252525"),
+            )
+        }
+        list.addView(
+            TextView(context).apply {
+                text = "浏览器工具"
+                setTextColor(Color.WHITE)
+                textSize = 14f
+                typeface = Typeface.DEFAULT_BOLD
+                setPadding(dp(8), dp(4), dp(8), dp(8))
+            },
+        )
+        fun addItem(label: String, detail: String, onClick: () -> Unit) {
+            list.addView(createMoreMenuItem(label, detail) {
+                dialog.dismiss()
+                onClick()
+            })
+        }
+        addItem(
+            if (showRecentActions) "隐藏最近操作" else "显示最近操作",
+            "切换浏览器自动化动作流水",
+        ) {
+            showRecentActions = !showRecentActions
+            renderRecentActions()
+        }
+        addItem(
+            if (showInspector) "隐藏检查器" else "显示检查器",
+            "查看当前页链接和可交互元素",
+        ) {
+            showInspector = !showInspector
+            if (showInspector && inspectorItems.isEmpty() && !inspectorLoading) {
+                loadInspector(inspectorMode)
             }
-            show()
+            updateInspectorUi()
+        }
+        addItem("脚本库", "管理 Codex 流程和传统脚本") { showScriptLibrary() }
+        addItem("页面快照", "读取当前页文字和 URL") { showSnapshotPreview() }
+        addItem("复制地址", "复制当前标签页 URL") {
+            copyToClipboard(activeTabOrNull()?.currentUrl.orEmpty(), "当前地址")
+        }
+        addItem("打开欢迎页", "返回浏览器自动化说明页") {
+            activeTabOrNull()?.let(::loadWelcomePage)
+        }
+        addItem("运行自检", "检查原生浏览器桥接状态") {
+            executeAction("self_test", emptyMap()) {}
+        }
+        dialog.setView(
+            ScrollView(context).apply {
+                isFillViewport = false
+                addView(
+                    list,
+                    ViewGroup.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.WRAP_CONTENT,
+                    ),
+                )
+            },
+        )
+        dialog.show()
+        dialog.window?.setLayout(
+            (resources.displayMetrics.widthPixels * 0.88f).toInt(),
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+        )
+    }
+
+    private fun createMoreMenuItem(
+        label: String,
+        detail: String,
+        onClick: () -> Unit,
+    ): View {
+        return LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(10), dp(8), dp(10), dp(8))
+            background = flatControlDrawable(NativeUiPalette.surfaceAlt)
+            setOnClickListener { onClick() }
+            addView(
+                TextView(context).apply {
+                    text = label
+                    setTextColor(NativeUiPalette.textPrimary)
+                    textSize = 12.5f
+                    typeface = Typeface.DEFAULT_BOLD
+                    maxLines = 1
+                },
+            )
+            addView(
+                TextView(context).apply {
+                    text = detail
+                    setTextColor(NativeUiPalette.textMuted)
+                    textSize = 10.5f
+                    maxLines = 1
+                    setPadding(0, dp(2), 0, 0)
+                },
+            )
+        }.also { item ->
+            item.layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+            ).apply {
+                bottomMargin = dp(6)
+            }
         }
     }
 
@@ -1165,81 +1201,190 @@ class NativeCodexBrowserView(
         val automationScripts = loadStoredAutomationScripts()
         val userScripts = loadStoredUserScripts()
         var dialog: AlertDialog? = null
+        var workspaceIndex = 0
         val refreshLibrary: () -> Unit = {
             dialog?.dismiss()
             mainHandler.post { showScriptLibrary() }
             Unit
         }
-        val content = LinearLayout(context).apply {
+
+        val root = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(18), dp(12), dp(18), dp(8))
+            setPadding(dp(16), dp(10), dp(16), dp(8))
+        }
+
+        val headerRow = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        headerRow.addView(
+            TextView(context).apply {
+                text = "浏览器脚本助手"
+                setTextColor(Color.WHITE)
+                textSize = 16f
+                typeface = Typeface.DEFAULT_BOLD
+            },
+            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),
+        )
+        headerRow.addView(
+            createSmallActionButton("刷新") {
+                refreshLibrary()
+            },
+        )
+        root.addView(headerRow)
+        root.addView(
+            TextView(context).apply {
+                text = "左右切换 Codex 自动化流程与传统网站脚本"
+                setTextColor(Color.parseColor("#9CA3AF"))
+                textSize = 11.5f
+                setPadding(0, dp(4), 0, dp(10))
+            },
+        )
+
+        val actionRow = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(0, 0, 0, dp(10))
+        }
+        actionRow.addView(
+            createSmallActionButton("保存最近流程", active = true) {
+                saveRecentActionsAsScript(refreshLibrary)
+            },
+        )
+        actionRow.addView(
+            createSmallActionButton("新增传统脚本") {
+                editUserScript(script = null, initialCode = "", onSaved = refreshLibrary)
+            },
+        )
+        actionRow.addView(
+            createSmallActionButton("导入") {
+                importUserScript(refreshLibrary)
+            },
+        )
+        root.addView(
+            HorizontalScrollView(context).apply {
+                isHorizontalScrollBarEnabled = false
+                overScrollMode = View.OVER_SCROLL_NEVER
+                addView(
+                    actionRow,
+                    ViewGroup.LayoutParams(
+                        ViewGroup.LayoutParams.WRAP_CONTENT,
+                        ViewGroup.LayoutParams.WRAP_CONTENT,
+                    ),
+                )
+            },
+        )
+
+        val tabRow = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(0, 0, 0, dp(8))
+        }
+        val automationTab = createSmallActionButton(
+            "Codex 自动化 (${automationScripts.size})",
+            active = true,
+        ) {}
+        val userTab = createSmallActionButton(
+            "传统脚本 (${userScripts.size})",
+            active = false,
+        ) {}
+        tabRow.addView(
+            automationTab,
+            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
+                marginEnd = dp(6)
+            },
+        )
+        tabRow.addView(
+            userTab,
+            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),
+        )
+        root.addView(tabRow)
+
+        val summaryView = TextView(context).apply {
+            setTextColor(Color.parseColor("#9CA3AF"))
+            textSize = 11f
+            setPadding(0, 0, 0, dp(8))
+        }
+        root.addView(summaryView)
+
+        val listContainer = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+        }
+        val listScroll = ScrollView(context).apply {
+            isFillViewport = true
             addView(
-                TextView(context).apply {
-                    text = "复用已有浏览器流程，或继续维护传统网站脚本。"
-                    setTextColor(Color.parseColor("#D1D5DB"))
-                    textSize = 12f
-                },
+                listContainer,
+                ViewGroup.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                ),
             )
-            addView(
-                TextView(context).apply {
-                    text = "自动化脚本 ${automationScripts.size} 个 · 传统脚本 ${userScripts.size} 个"
-                    setTextColor(Color.parseColor("#9CA3AF"))
-                    textSize = 11f
-                    setPadding(0, dp(6), 0, dp(10))
-                },
+        }
+        root.addView(
+            listScroll,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                dp(420),
+            ),
+        )
+
+        fun renderWorkspace(index: Int) {
+            workspaceIndex = if (index == 1) 1 else 0
+            automationTab.background = actionButtonDrawable(
+                if (workspaceIndex == 0) NativeUiPalette.accentSoft else NativeUiPalette.surfaceAlt,
+                strokeColor = if (workspaceIndex == 0) NativeUiPalette.accent else NativeUiPalette.borderStrong,
             )
-            addView(
-                LinearLayout(context).apply {
-                    orientation = LinearLayout.HORIZONTAL
-                    setPadding(0, 0, 0, dp(10))
-                    addView(createSmallActionButton("保存最近流程") {
-                        saveRecentActionsAsScript(refreshLibrary)
-                        Unit
-                    })
-                    addView(createSmallActionButton("新增传统脚本") {
-                        editUserScript(script = null, initialCode = "", onSaved = refreshLibrary)
-                        Unit
-                    })
-                    addView(createSmallActionButton("导入") {
-                        importUserScript(refreshLibrary)
-                        Unit
-                    })
-                },
+            automationTab.setTextColor(
+                if (workspaceIndex == 0) NativeUiPalette.accent else NativeUiPalette.textPrimary,
             )
-            if (automationScripts.isEmpty()) {
-                addView(createEmptySection("还没有已保存的 Codex 自动化流程。先在页面上跑一遍，再点“保存最近流程”。"))
-            } else {
-                addView(createSectionTitle("Codex 自动化流程"))
-                automationScripts.forEach { script ->
-                    addView(createAutomationScriptCard(script, refreshLibrary))
+            userTab.background = actionButtonDrawable(
+                if (workspaceIndex == 1) Color.parseColor("#3A2A08") else NativeUiPalette.surfaceAlt,
+                strokeColor = if (workspaceIndex == 1) Color.parseColor("#FBBF24") else NativeUiPalette.borderStrong,
+            )
+            userTab.setTextColor(
+                if (workspaceIndex == 1) Color.parseColor("#FBBF24") else NativeUiPalette.textPrimary,
+            )
+            listContainer.removeAllViews()
+            if (workspaceIndex == 0) {
+                summaryView.text = "确定性浏览器操作流程。可运行、重命名、复制命令/提示，或保存最近一次可复用操作。"
+                if (automationScripts.isEmpty()) {
+                    listContainer.addView(
+                        createEmptySection(
+                            "还没有已保存的 Codex 自动化流程。先在页面上跑一遍，再点“保存最近流程”。",
+                        ),
+                    )
+                } else {
+                    automationScripts.forEach { script ->
+                        listContainer.addView(createAutomationScriptCard(script, refreshLibrary))
+                    }
                 }
-            }
-            if (userScripts.isEmpty()) {
-                addView(createEmptySection("还没有已保存的传统网站脚本。"))
             } else {
-                addView(createSectionTitle("传统网站脚本"))
-                userScripts.forEach { script ->
-                    addView(createUserScriptCard(script, refreshLibrary))
+                summaryView.text = "油猴风格 JavaScript。可新增、粘贴导入；运行前请审阅源码，仅执行可信脚本。"
+                if (userScripts.isEmpty()) {
+                    listContainer.addView(
+                        createEmptySection(
+                            "还没有传统脚本。使用“新增传统脚本”编写，或用“导入”粘贴现有油猴脚本。",
+                        ),
+                    )
+                } else {
+                    userScripts.forEach { script ->
+                        listContainer.addView(createUserScriptCard(script, refreshLibrary))
+                    }
                 }
             }
         }
+
+        automationTab.setOnClickListener { renderWorkspace(0) }
+        userTab.setOnClickListener { renderWorkspace(1) }
+        renderWorkspace(0)
+
         dialog = AlertDialog.Builder(context)
-            .setTitle("浏览器脚本库")
-            .setView(
-                ScrollView(context).apply {
-                    isFillViewport = true
-                    addView(
-                        content,
-                        ViewGroup.LayoutParams(
-                            ViewGroup.LayoutParams.MATCH_PARENT,
-                            ViewGroup.LayoutParams.WRAP_CONTENT,
-                        ),
-                    )
-                },
-            )
+            .setView(root)
             .setPositiveButton("关闭", null)
             .create()
         dialog?.show()
+        dialog?.window?.setLayout(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+        )
     }
 
     private fun createSectionTitle(label: String): View {
@@ -1276,7 +1421,7 @@ class NativeCodexBrowserView(
         return LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(12), dp(12), dp(12), dp(12))
-            background = actionButtonDrawable(Color.parseColor("#111111"), strokeColor = Color.parseColor("#252525"))
+            background = actionButtonDrawable(Color.parseColor("#111111"), strokeColor = Color.parseColor("#7F1D1D"))
             addView(
                 TextView(context).apply {
                     text = script.fileName
@@ -1363,7 +1508,7 @@ class NativeCodexBrowserView(
         return LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(12), dp(12), dp(12), dp(12))
-            background = actionButtonDrawable(Color.parseColor("#111111"), strokeColor = Color.parseColor("#252525"))
+            background = actionButtonDrawable(Color.parseColor("#111111"), strokeColor = Color.parseColor("#FBBF24"))
             addView(
                 TextView(context).apply {
                     text = script.name

@@ -3,7 +3,6 @@ package com.agent.cyx
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
-import android.graphics.Color
 import android.graphics.Typeface
 import android.os.Bundle
 import android.view.GestureDetector
@@ -13,28 +12,36 @@ import android.view.View
 import android.widget.FrameLayout
 import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
+import android.widget.PopupMenu
 import android.widget.TextView
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
 
 class NativeTerminalPagerActivity : Activity() {
+    private lateinit var launchGroupId: String
     private lateinit var baseConfig: NativeTerminalSessionConfig
     private lateinit var rootLayout: LinearLayout
     private lateinit var titleView: TextView
     private lateinit var pageHintView: TextView
+    private lateinit var sessionBadgeView: TextView
+    private lateinit var sessionSwitcherView: TextView
     private lateinit var terminalTabButton: TextView
     private lateinit var browserTabButton: TextView
+    private lateinit var newSessionButton: TextView
     private lateinit var pasteButton: TextView
     private lateinit var restartButton: TextView
+    private lateinit var closeSessionButton: TextView
     private lateinit var terminalPage: FrameLayout
     private lateinit var browserPage: FrameLayout
     private lateinit var pagesContainer: FrameLayout
-    private lateinit var terminalView: NativeTerminalSessionView
+    private lateinit var terminalContainer: FrameLayout
     private lateinit var browserView: NativeCodexBrowserView
+    private var activeTerminalView: NativeTerminalSessionView? = null
+    private val sessions = mutableListOf<NativeTerminalSessionConfig>()
+    private var activeIndex = 0
     private var activePageIndex = PAGE_TERMINAL
-    private var terminalTitle = "Terminal"
-    private var sessionClosed = false
+    private var closedAllSessions = false
     private val pagerGestureDetector by lazy {
         GestureDetector(
             this,
@@ -73,11 +80,28 @@ class NativeTerminalPagerActivity : Activity() {
             useNativeToolbar = true,
             useCodexChrome = true,
         )
-        terminalTitle = parsedConfig.title
+        launchGroupId = parsedConfig.sessionId
+        val savedSessionsForGroup = savedSessions[launchGroupId]
+        if (savedInstanceState == null && !savedSessionsForGroup.isNullOrEmpty()) {
+            sessions.addAll(savedSessionsForGroup.map {
+                it.copy(
+                    keepAlive = true,
+                    useNativeToolbar = true,
+                    useCodexChrome = true,
+                    restart = false,
+                )
+            })
+            activeIndex = (savedActiveIndexes[launchGroupId] ?: 0)
+                .coerceIn(0, sessions.lastIndex)
+        } else {
+            sessions.add(baseConfig)
+        }
+
         setResult(Activity.RESULT_OK)
         TerminalSessionService.start(applicationContext)
         setContentView(createContentView())
         NativeBrowserAutomationRegistry.controller = browserView
+        showSession(activeIndex, restart = baseConfig.restart)
         showPage(PAGE_TERMINAL)
     }
 
@@ -102,11 +126,13 @@ class NativeTerminalPagerActivity : Activity() {
             NativeBrowserAutomationRegistry.controller = null
         }
         browserView.dispose()
-        if (sessionClosed) {
-            terminalView.dispose(closeSession = true)
+        if (!closedAllSessions) {
+            persistSessions()
+            activeTerminalView?.dispose(closeSession = false)
         } else {
-            terminalView.dispose(closeSession = false)
+            activeTerminalView?.dispose(closeSession = true)
         }
+        activeTerminalView = null
         TerminalSessionService.stop(applicationContext)
         super.onDestroy()
     }
@@ -123,7 +149,6 @@ class NativeTerminalPagerActivity : Activity() {
             textSize = 17f
             typeface = Typeface.DEFAULT_BOLD
             maxLines = 1
-            text = terminalTitle
         }
         pageHintView = TextView(this).apply {
             setTextColor(NativeUiPalette.textMuted)
@@ -131,31 +156,32 @@ class NativeTerminalPagerActivity : Activity() {
             typeface = Typeface.MONOSPACE
             text = "左滑切到浏览器 · 右滑回终端"
         }
+        sessionBadgeView = TextView(this).apply {
+            setTextColor(NativeUiPalette.textMuted)
+            textSize = 11f
+            typeface = Typeface.DEFAULT_BOLD
+            setPadding(dp(8), dp(3), dp(8), dp(3))
+            background = nativeCardDrawable(
+                fillColor = NativeUiPalette.surfaceRaised,
+                strokeColor = NativeUiPalette.borderStrong,
+                radiusDp = 8,
+            )
+            visibility = View.GONE
+        }
+        sessionSwitcherView = createActionButton("会话") { showSessionMenu(it) }
         terminalTabButton = createActionButton("终端") { showPage(PAGE_TERMINAL) }
         browserTabButton = createActionButton("浏览器") { showPage(PAGE_BROWSER) }
-        pasteButton = createActionButton("粘贴") { terminalView.paste() }
-        restartButton = createActionButton("重开") { terminalView.restart() }
+        newSessionButton = createActionButton("新建") { openNewSession() }
+        pasteButton = createActionButton("粘贴") { activeTerminalView?.paste() }
+        restartButton = createActionButton("重开") { activeTerminalView?.restart() }
+        closeSessionButton = createActionButton("关闭会话") { closeCurrentSession() }
 
-        terminalView = NativeTerminalSessionView(
-            context = this,
-            appContext = applicationContext,
-            config = baseConfig,
-            callbacks = object : NativeTerminalSessionCallbacks {
-                override fun onTitleChanged(title: String) {
-                    if (title.isBlank()) {
-                        return
-                    }
-                    terminalTitle = title
-                    updateChrome()
-                }
-            },
-        )
-
+        terminalContainer = FrameLayout(this)
         browserView = NativeCodexBrowserView(this)
         terminalPage = FrameLayout(this).apply {
             setBackgroundColor(NativeUiPalette.background)
             addView(
-                terminalView,
+                terminalContainer,
                 FrameLayout.LayoutParams(
                     FrameLayout.LayoutParams.MATCH_PARENT,
                     FrameLayout.LayoutParams.MATCH_PARENT,
@@ -176,13 +202,7 @@ class NativeTerminalPagerActivity : Activity() {
         rootLayout.addView(createTitleRow())
         rootLayout.addView(createActionRow())
         pagesContainer = FrameLayout(this).apply {
-            background = nativeCardDrawable(
-                fillColor = NativeUiPalette.surface,
-                strokeColor = NativeUiPalette.borderStrong,
-                radiusDp = 12,
-            )
-            clipToOutline = true
-            setPadding(dp(1), dp(1), dp(1), dp(1))
+            setBackgroundColor(NativeUiPalette.background)
             addView(
                 terminalPage,
                 FrameLayout.LayoutParams(
@@ -205,10 +225,7 @@ class NativeTerminalPagerActivity : Activity() {
                 0,
                 1f,
             ).apply {
-                marginStart = dp(6)
-                marginEnd = dp(6)
-                topMargin = dp(4)
-                bottomMargin = dp(6)
+                topMargin = dp(2)
             },
         )
 
@@ -257,9 +274,9 @@ class NativeTerminalPagerActivity : Activity() {
                     marginEnd = dp(8)
                 },
             )
-            addView(createActionButton("关闭") {
-                sessionClosed = true
-                terminalView.closeSession()
+            addView(sessionBadgeView)
+            addView(createActionButton("退出") {
+                // Keep sessions alive for reopen; only the explicit close-session path tears them down.
                 finish()
             })
             layoutParams = LinearLayout.LayoutParams(
@@ -280,24 +297,23 @@ class NativeTerminalPagerActivity : Activity() {
             setPadding(dp(6), dp(6), dp(6), dp(6))
             addView(terminalTabButton)
             addView(browserTabButton)
+            addView(sessionSwitcherView)
+            addView(newSessionButton)
             addView(pasteButton)
             addView(restartButton)
+            addView(closeSessionButton)
         }
         return HorizontalScrollView(this).apply {
             isHorizontalScrollBarEnabled = false
             overScrollMode = View.OVER_SCROLL_NEVER
-            background = nativeCardDrawable(
-                fillColor = NativeUiPalette.surfaceAlt,
-                strokeColor = NativeUiPalette.border,
-                radiusDp = 10,
-            )
+            setBackgroundColor(NativeUiPalette.background)
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT,
             ).apply {
                 marginStart = dp(6)
                 marginEnd = dp(6)
-                topMargin = dp(6)
+                topMargin = dp(3)
             }
             addView(
                 row,
@@ -332,7 +348,129 @@ class NativeTerminalPagerActivity : Activity() {
     }
 
     private fun actionButtonDrawable(color: Int) =
-        nativeCardDrawable(fillColor = color, strokeColor = NativeUiPalette.borderStrong, radiusDp = 8)
+        nativeCardDrawable(fillColor = color, strokeColor = color, radiusDp = 0)
+
+    private fun showSession(index: Int, restart: Boolean = false) {
+        if (index !in sessions.indices) {
+            return
+        }
+        activeTerminalView?.dispose(closeSession = false)
+        terminalContainer.removeAllViews()
+
+        activeIndex = index
+        val targetConfig = sessions[index].copy(
+            restart = restart,
+            keepAlive = true,
+            useNativeToolbar = true,
+            useCodexChrome = true,
+        )
+        val sessionView = NativeTerminalSessionView(
+            context = this,
+            appContext = applicationContext,
+            config = targetConfig,
+            callbacks = object : NativeTerminalSessionCallbacks {
+                override fun onTitleChanged(title: String) {
+                    if (title.isBlank()) {
+                        return
+                    }
+                    sessions[activeIndex] = sessions[activeIndex].copy(title = title)
+                    updateChrome()
+                }
+            },
+        )
+        activeTerminalView = sessionView
+        terminalContainer.addView(
+            sessionView,
+            FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT,
+            ),
+        )
+        updateChrome()
+        if (activePageIndex == PAGE_TERMINAL) {
+            sessionView.post { sessionView.requestToolbarVisible() }
+        }
+    }
+
+    private fun openNewSession() {
+        val nextNumber = sessions.size + 1
+        sessions.add(
+            baseConfig.copy(
+                sessionId = "$launchGroupId-${System.currentTimeMillis()}",
+                title = "${baseConfig.title} $nextNumber",
+                restart = false,
+                keepAlive = true,
+                useNativeToolbar = true,
+                useCodexChrome = true,
+            ),
+        )
+        showSession(sessions.lastIndex)
+        showPage(PAGE_TERMINAL)
+        persistSessions()
+    }
+
+    private fun closeCurrentSession() {
+        val currentView = activeTerminalView
+        if (currentView == null) {
+            finish()
+            return
+        }
+        currentView.closeSession()
+        currentView.dispose(closeSession = true)
+        activeTerminalView = null
+        terminalContainer.removeAllViews()
+
+        if (sessions.size <= 1) {
+            savedSessions.remove(launchGroupId)
+            savedActiveIndexes.remove(launchGroupId)
+            closedAllSessions = true
+            finish()
+            return
+        }
+
+        sessions.removeAt(activeIndex)
+        if (activeIndex > sessions.lastIndex) {
+            activeIndex = sessions.lastIndex
+        }
+        showSession(activeIndex)
+        persistSessions()
+    }
+
+    private fun showSessionMenu(anchor: View) {
+        val popup = PopupMenu(this, anchor)
+        sessions.forEachIndexed { index, session ->
+            val prefix = if (index == activeIndex) "● " else "○ "
+            popup.menu.add(0, index, index, prefix + session.title)
+        }
+        popup.menu.add(1, MENU_NEW_SESSION, sessions.size, "新建会话")
+        popup.setOnMenuItemClickListener { item ->
+            if (item.itemId == MENU_NEW_SESSION) {
+                openNewSession()
+            } else {
+                showSession(item.itemId)
+                showPage(PAGE_TERMINAL)
+            }
+            true
+        }
+        popup.show()
+    }
+
+    private fun persistSessions() {
+        if (sessions.isEmpty()) {
+            savedSessions.remove(launchGroupId)
+            savedActiveIndexes.remove(launchGroupId)
+            return
+        }
+        savedSessions[launchGroupId] = sessions.map {
+            it.copy(
+                restart = false,
+                keepAlive = true,
+                useNativeToolbar = true,
+                useCodexChrome = true,
+            )
+        }
+        savedActiveIndexes[launchGroupId] = activeIndex
+    }
 
     private fun showPage(index: Int) {
         activePageIndex = if (index == PAGE_BROWSER) PAGE_BROWSER else PAGE_TERMINAL
@@ -350,27 +488,34 @@ class NativeTerminalPagerActivity : Activity() {
         browserTabButton.setTextColor(
             if (activePageIndex == PAGE_BROWSER) NativeUiPalette.accent else NativeUiPalette.textPrimary,
         )
-        pasteButton.visibility = if (activePageIndex == PAGE_TERMINAL) View.VISIBLE else View.GONE
-        restartButton.visibility = if (activePageIndex == PAGE_TERMINAL) View.VISIBLE else View.GONE
+        val terminalControlsVisible = if (activePageIndex == PAGE_TERMINAL) View.VISIBLE else View.GONE
+        sessionSwitcherView.visibility = terminalControlsVisible
+        newSessionButton.visibility = terminalControlsVisible
+        pasteButton.visibility = terminalControlsVisible
+        restartButton.visibility = terminalControlsVisible
+        closeSessionButton.visibility = terminalControlsVisible
         if (activePageIndex == PAGE_TERMINAL) {
-            terminalView.post { terminalView.requestToolbarVisible() }
+            activeTerminalView?.post { activeTerminalView?.requestToolbarVisible() }
         }
         updateChrome()
     }
 
     private fun updateChrome() {
-        titleView.text = if (activePageIndex == PAGE_TERMINAL) {
-            terminalTitle
+        val activeSession = sessions.getOrNull(activeIndex)
+        if (activePageIndex == PAGE_TERMINAL) {
+            titleView.text = activeSession?.title ?: baseConfig.title
+            pageHintView.text = "左滑切到浏览器 · 右滑回终端"
         } else {
-            "Codex 浏览器"
+            titleView.text = "Codex 浏览器"
+            pageHintView.text = "脚本助手在更多菜单 · 右滑回终端"
         }
-        pageHintView.text = if (activePageIndex == PAGE_TERMINAL) {
-            "左滑切到浏览器 · 右滑回终端"
+        val multipleSessions = sessions.size > 1
+        sessionBadgeView.visibility = if (multipleSessions && activePageIndex == PAGE_TERMINAL) {
+            View.VISIBLE
         } else {
-            "浏览器功能已切回原生布局 · 右滑回终端"
+            View.GONE
         }
-        pasteButton.setTextColor(NativeUiPalette.textPrimary)
-        restartButton.setTextColor(NativeUiPalette.textPrimary)
+        sessionBadgeView.text = "${activeIndex + 1}/${sessions.size}"
     }
 
     private fun dp(value: Int): Int =
@@ -392,6 +537,10 @@ class NativeTerminalPagerActivity : Activity() {
         private const val EXTRA_FONT_SIZE = "native_terminal.font_size"
         private const val PAGE_TERMINAL = 0
         private const val PAGE_BROWSER = 1
+        private const val MENU_NEW_SESSION = 10_001
+
+        private val savedSessions = mutableMapOf<String, List<NativeTerminalSessionConfig>>()
+        private val savedActiveIndexes = mutableMapOf<String, Int>()
 
         fun createIntent(context: Context, config: NativeTerminalSessionConfig): Intent {
             return Intent(context, NativeTerminalPagerActivity::class.java).apply {

@@ -305,11 +305,7 @@ class NativeTerminalSessionView(
             isHorizontalScrollBarEnabled = false
             overScrollMode = View.OVER_SCROLL_NEVER
             if (config.useCodexChrome) {
-                background = context.nativeCardDrawable(
-                    fillColor = NativeUiPalette.surfaceAlt,
-                    strokeColor = NativeUiPalette.borderStrong,
-                    radiusDp = 12,
-                )
+                setBackgroundColor(NativeUiPalette.background)
             } else {
                 setBackgroundColor(Color.BLACK)
             }
@@ -463,15 +459,9 @@ class NativeTerminalSessionView(
 
     private fun toolbarButtonDrawable(color: Int): GradientDrawable {
         return if (config.useCodexChrome) {
-            context.nativeCardDrawable(
-                fillColor = color,
-                strokeColor = if (color == toolbarActiveColor() || color == toolbarActivePressedColor()) {
-                    NativeUiPalette.accent
-                } else {
-                    NativeUiPalette.borderStrong
-                },
-                radiusDp = 10,
-            )
+            GradientDrawable().apply {
+                setColor(color)
+            }
         } else {
             GradientDrawable().apply {
                 cornerRadius = dpToPx(6).toFloat()

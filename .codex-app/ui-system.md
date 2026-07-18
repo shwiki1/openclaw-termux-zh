@@ -15,6 +15,8 @@ Operational Android utility app for managing an OpenClaw runtime. Existing scree
 - Elevation/shadow: mostly Material cards and low-emphasis borders; keep surfaces restrained.
 
 ## Components
+- `NativeTerminalPagerActivity` multi-session controls should stay parity with ordinary `NativeTerminalActivity` and the old Flutter terminal: always expose `新建`, a session switcher/menu, and `关闭会话`, plus a title badge when more than one Codex terminal session exists.
+- Native browser script assistant should present two workspaces like the old Flutter sheet: `Codex 自动化` and `传统脚本`, with top actions for `保存最近流程` / `新增传统脚本` / `导入`, not a single mixed scroll list.
 - `NativeTerminalActivity` owns the ordinary CLI top chrome and must apply system-bar/IME insets at the activity root. Its title and action rows use compact native cards; this is separate from Codex pager chrome and must not change the ordinary terminal shortcut strip into Codex styling.
 - `StatusCard`: repeated navigation/status card with icon, title, subtitle, optional trailing, optional tap.
 - `GatewayControls`, `NodeControls`: operational controls tied to gateway/node lifecycle.
@@ -39,6 +41,7 @@ Operational Android utility app for managing an OpenClaw runtime. Existing scree
 - Android launcher resources are committed under `flutter_app/android/app/src/main/res/mipmap-*` and adaptive icon XML under `mipmap-anydpi-v26`.
 
 ## Screen QA Notes
+- Codex pager density policy: terminal/page chrome should not wrap the terminal, shortcut strip, or WebView in rounded outer cards. Browser controls should fit into a compact top band, leaving most height to the WebView; the more menu should use the custom dense list, not the default platform popup.
 - Verify safe areas, keyboard overlap, loading states, empty states, error states, and text fitting.
 - Important screens to manually smoke when UI changes: setup wizard, dashboard, terminal, Web dashboard, config editor, provider detail, backup manager, local model screens, settings/update flow.
 - For Codex browser UI changes, smoke the terminal browser sidecar on compact and wide widths, including tab strip overflow, add/switch/close tab behavior, back/forward/reload state, desktop/mobile UA switching, desktop UA page layout, pinch/page zoom behavior, more-menu tool access, pending-save script draft card, script assistant bottom sheet, and header icon density.
