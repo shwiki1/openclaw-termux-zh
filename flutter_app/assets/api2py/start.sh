@@ -34,6 +34,7 @@ fi
 
 cd "$DIR"
 rm -f "$PID_FILE"
+rm -f "$LOG_FILE"
 export HOST PORT WORKERS
 if command -v setsid >/dev/null 2>&1; then
   setsid python3 "$DIR/server.py" </dev/null >> "$LOG_FILE" 2>&1 &
@@ -44,8 +45,13 @@ PID=$!
 echo "$PID" > "$PID_FILE"
 sleep 2
 if ! kill -0 "$PID" 2>/dev/null || ! curl -s --max-time 3 "http://127.0.0.1:$PORT/" >/dev/null; then
+  kill "$PID" 2>/dev/null || true
   rm -f "$PID_FILE"
   echo "Python 服务启动失败，请查看 $LOG_FILE" >&2
+  if [ -s "$LOG_FILE" ]; then
+    echo "--- server.log 最近输出 ---" >&2
+    tail -80 "$LOG_FILE" >&2 || true
+  fi
   exit 1
 fi
 echo "Python 服务启动成功 (PID $PID, 端口 $PORT, Workers $WORKERS)"

@@ -792,69 +792,6 @@ async function apiMaybe(path, opts = {}) {
   }
 }
 
-function renderAuth(installed, message = '') {
-  const existing = document.getElementById('auth-screen');
-  if (existing) existing.remove();
-  const setup = !installed;
-  const title = setup ? '初始化管理后台' : '管理员登录';
-  const subtitle = setup ? '首次使用，请创建管理员账号和密码。' : '登录后即可管理提供商、模型和统计数据。';
-  const submit = setup ? '创建并进入后台' : '登录后台';
-  const confirmField = setup ? '<label class="block text-sm text-ink-2 mb-2">确认密码<input id="auth-confirm-password" type="password" autocomplete="new-password" required class="mt-1 w-full bg-surface border border-surface-3 rounded-lg px-3 py-2.5 text-ink focus:outline-none focus:border-accent"></label>' : '';
-  document.body.insertAdjacentHTML('beforeend', `
-    <div id="auth-screen" class="fixed inset-0 z-[200] flex items-center justify-center bg-[#070b12]/95 backdrop-blur-sm p-5">
-      <form id="auth-form" class="w-full max-w-md card p-7 shadow-2xl border border-surface-3">
-        <div class="w-11 h-11 rounded-xl bg-accent/15 text-accent-light flex items-center justify-center mb-5"><i data-lucide="${setup ? 'settings' : 'lock-keyhole'}" class="w-5 h-5"></i></div>
-        <h1 class="text-xl font-semibold text-ink">${title}</h1>
-        <p class="mt-2 text-sm text-ink-3">${subtitle}</p>
-        <div id="auth-error" class="${message ? '' : 'hidden'} mt-4 rounded-lg bg-red-500/10 border border-red-500/20 px-3 py-2 text-sm text-red-300">${escHtml(message)}</div>
-        <div class="mt-6 space-y-4">
-          <label class="block text-sm text-ink-2">用户名<input id="auth-username" type="text" autocomplete="username" minlength="3" maxlength="32" required autofocus class="mt-1 w-full bg-surface border border-surface-3 rounded-lg px-3 py-2.5 text-ink focus:outline-none focus:border-accent"></label>
-          <label class="block text-sm text-ink-2">密码<input id="auth-password" type="password" autocomplete="${setup ? 'new-password' : 'current-password'}" minlength="8" required class="mt-1 w-full bg-surface border border-surface-3 rounded-lg px-3 py-2.5 text-ink focus:outline-none focus:border-accent"></label>
-          ${confirmField}
-        </div>
-        <button id="auth-submit" type="submit" class="mt-6 w-full rounded-lg bg-accent hover:bg-blue-500 px-4 py-2.5 text-sm font-medium text-white transition">${submit}</button>
-        <p class="mt-4 text-xs text-ink-3">${setup ? '密码只保存为安全哈希，无法找回。' : '登录状态仅保存在当前浏览器会话中。'}</p>
-      </form>
-    </div>`);
-  document.getElementById('auth-form').addEventListener('submit', async event => {
-    event.preventDefault();
-    const username = document.getElementById('auth-username').value.trim();
-    const password = document.getElementById('auth-password').value;
-    const confirm = document.getElementById('auth-confirm-password');
-    const error = document.getElementById('auth-error');
-    if (confirm && password !== confirm.value) {
-      error.textContent = '两次输入的密码不一致。'; error.classList.remove('hidden'); return;
-    }
-    const button = document.getElementById('auth-submit');
-    button.disabled = true; button.textContent = '处理中…';
-    try {
-      const response = await fetch(setup ? '/api/setup' : '/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password }) });
-      const result = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(result.error?.message || result.message || '操作失败');
-      document.getElementById('auth-screen').remove();
-      await startApplication();
-    } catch (err) {
-      error.textContent = err.message; error.classList.remove('hidden');
-      button.disabled = false; button.textContent = submit;
-    }
-  });
-  lucide.createIcons();
-}
-
-function addLogoutButton(username) {
-  if (document.getElementById('logout-button')) return;
-  const footer = document.getElementById('sidebar-footer');
-  if (!footer) return;
-  footer.insertAdjacentHTML('beforeend', `<button id="logout-button" title="退出 ${escAttr(username)}" class="w-full inline-flex items-center justify-center gap-2 rounded-lg border border-surface-3 bg-[#0a0e17] px-3 py-2 text-xs text-ink-2 hover:text-ink hover:border-accent transition"><i data-lucide="log-out" class="w-3.5 h-3.5"></i>退出登录</button>`);
-  document.getElementById('logout-button').addEventListener('click', async () => {
-    await fetch('/api/logout', { method: 'POST', headers: { 'Content-Type': 'application/json' } });
-    appStarted = false;
-    document.getElementById('logout-button').remove();
-    renderAuth(true);
-  });
-  lucide.createIcons();
-}
-
 async function startApplication() {
   if (appStarted) return;
   appStarted = true;
@@ -2100,7 +2037,7 @@ async function sendMessage() {
           || errText;
       } catch {}
       if (statusCode === 401 || statusCode === 403) {
-        errMsg = (errMsg || '未授权') + '（请先登录管理后台，或配置 auth_tokens）';
+        errMsg = (errMsg || '未授权') + '（请检查本地中转代理的提供商、模型映射或 auth_tokens 配置）';
       }
       bubble.innerHTML = `<div class="text-red-400 text-xs font-mono whitespace-pre-wrap">${escHtml(String(errMsg).slice(0, 300))}</div>`;
       meta.textContent = `${modelLabel} · HTTP ${statusCode} · ${Date.now() - start}ms`;

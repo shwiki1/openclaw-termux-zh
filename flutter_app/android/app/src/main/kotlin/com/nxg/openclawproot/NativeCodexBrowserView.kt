@@ -1374,14 +1374,12 @@ class NativeCodexBrowserView(
                     append(text.take(1800))
                 }
             }
-            AlertDialog.Builder(context)
-                .setTitle("页面快照")
-                .setMessage(summary.ifEmpty { "当前页面没有可读取的快照内容。" })
-                .setPositiveButton("复制") { _, _ ->
-                    copyToClipboard(summary, "页面快照")
-                }
-                .setNegativeButton("关闭", null)
-                .show()
+            showScriptInfoDialog(
+                iconRes = R.drawable.lucide_scan_search,
+                title = "页面快照",
+                body = summary.ifEmpty { "当前页面没有可读取的快照内容。" },
+                copyLabel = "页面快照",
+            )
         }
     }
 
@@ -1727,6 +1725,262 @@ class NativeCodexBrowserView(
             layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(34)).apply {
                 marginEnd = dp(6)
             }
+        }
+    }
+
+    private fun createScriptDialogButton(
+        iconRes: Int,
+        label: String,
+        active: Boolean = false,
+        danger: Boolean = false,
+        onClick: () -> Unit,
+    ): View {
+        val accentColor = when {
+            danger -> Color.parseColor("#F87171")
+            active -> NativeUiPalette.accent
+            else -> NativeUiPalette.textPrimary
+        }
+        val normalColor = when {
+            danger -> Color.parseColor("#2A1111")
+            active -> NativeUiPalette.accentSoft
+            else -> Color.parseColor("#151515")
+        }
+        val pressedColor = when {
+            danger -> Color.parseColor("#3A1717")
+            active -> NativeUiPalette.accentPressed
+            else -> Color.parseColor("#272727")
+        }
+        val strokeColor = when {
+            danger -> Color.parseColor("#7F1D1D")
+            active -> NativeUiPalette.accent
+            else -> Color.parseColor("#303030")
+        }
+        return LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            contentDescription = label
+            isClickable = true
+            isFocusable = true
+            isHapticFeedbackEnabled = true
+            minimumWidth = dp(88)
+            setPadding(dp(12), 0, dp(12), 0)
+            background = controlStateDrawable(normalColor, pressedColor, strokeColor)
+            addView(
+                ImageView(context).apply {
+                    setImageDrawable(tintedIcon(iconRes)?.also { DrawableCompat.setTint(it, accentColor) })
+                    contentDescription = label
+                },
+                LinearLayout.LayoutParams(dp(15), dp(15)).apply { marginEnd = dp(6) },
+            )
+            addView(
+                TextView(context).apply {
+                    text = label
+                    setTextColor(accentColor)
+                    textSize = 11.5f
+                    includeFontPadding = false
+                    typeface = Typeface.DEFAULT_BOLD
+                    maxLines = 1
+                },
+            )
+            setOnClickListener {
+                performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                onClick()
+            }
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(36)).apply {
+                marginStart = dp(6)
+            }
+        }
+    }
+
+    private fun createScriptDialogFrame(
+        iconRes: Int,
+        title: String,
+        subtitle: String = "",
+        content: View,
+        actions: LinearLayout.() -> Unit,
+    ): LinearLayout {
+        return LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(14), dp(14), dp(14), dp(14))
+            background = actionButtonDrawable(Color.parseColor("#090909"), strokeColor = Color.parseColor("#2A2A2A"))
+            addView(
+                LinearLayout(context).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                    addView(
+                        FrameLayout(context).apply {
+                            background = actionButtonDrawable(Color.parseColor("#171717"), strokeColor = NativeUiPalette.accent)
+                            addView(
+                                ImageView(context).apply {
+                                    setImageDrawable(tintedIcon(iconRes))
+                                    contentDescription = title
+                                },
+                                FrameLayout.LayoutParams(dp(18), dp(18), Gravity.CENTER),
+                            )
+                        },
+                        LinearLayout.LayoutParams(dp(38), dp(38)).apply { marginEnd = dp(10) },
+                    )
+                    addView(
+                        LinearLayout(context).apply {
+                            orientation = LinearLayout.VERTICAL
+                            addView(
+                                TextView(context).apply {
+                                    text = title
+                                    setTextColor(Color.WHITE)
+                                    textSize = 15f
+                                    typeface = Typeface.DEFAULT_BOLD
+                                    maxLines = 1
+                                },
+                            )
+                            if (subtitle.isNotBlank()) {
+                                addView(
+                                    TextView(context).apply {
+                                        text = subtitle
+                                        setTextColor(Color.parseColor("#9CA3AF"))
+                                        textSize = 10.5f
+                                        setPadding(0, dp(3), 0, 0)
+                                        maxLines = 2
+                                    },
+                                )
+                            }
+                        },
+                        LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),
+                    )
+                },
+            )
+            addView(
+                FrameLayout(context).apply {
+                    setPadding(dp(10), dp(10), dp(10), dp(10))
+                    background = actionButtonDrawable(Color.parseColor("#0D0D0D"), strokeColor = Color.parseColor("#202020"))
+                    addView(
+                        content,
+                        FrameLayout.LayoutParams(
+                            ViewGroup.LayoutParams.MATCH_PARENT,
+                            ViewGroup.LayoutParams.WRAP_CONTENT,
+                        ),
+                    )
+                },
+                LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                ).apply { topMargin = dp(12) },
+            )
+            addView(
+                HorizontalScrollView(context).apply {
+                    isHorizontalScrollBarEnabled = false
+                    overScrollMode = View.OVER_SCROLL_NEVER
+                    addView(
+                        LinearLayout(context).apply {
+                            orientation = LinearLayout.HORIZONTAL
+                            gravity = Gravity.CENTER_VERTICAL or Gravity.END
+                            setPadding(0, dp(12), 0, 0)
+                            actions()
+                        },
+                        ViewGroup.LayoutParams(
+                            ViewGroup.LayoutParams.WRAP_CONTENT,
+                            ViewGroup.LayoutParams.WRAP_CONTENT,
+                        ),
+                    )
+                },
+            )
+        }
+    }
+
+    private fun showScriptWorkbenchDialog(
+        iconRes: Int,
+        title: String,
+        subtitle: String = "",
+        content: View,
+        widthRatio: Float = 0.92f,
+        heightRatio: Float? = null,
+        actions: LinearLayout.(AlertDialog) -> Unit,
+    ): AlertDialog {
+        val dialog = AlertDialog.Builder(context).create()
+        val frame = createScriptDialogFrame(iconRes, title, subtitle, content) {
+            actions(dialog)
+        }
+        dialog.setView(frame)
+        dialog.show()
+        dialog.window?.setBackgroundDrawable(actionButtonDrawable(Color.TRANSPARENT))
+        dialog.window?.setLayout(
+            (resources.displayMetrics.widthPixels * widthRatio).toInt(),
+            heightRatio?.let { (resources.displayMetrics.heightPixels * it).toInt() }
+                ?: ViewGroup.LayoutParams.WRAP_CONTENT,
+        )
+        return dialog
+    }
+
+    private fun scriptDialogTextView(
+        text: String,
+        monospace: Boolean = false,
+        minLines: Int = 3,
+        maxLines: Int = 18,
+    ): TextView {
+        return TextView(context).apply {
+            this.text = text
+            setTextColor(Color.parseColor("#E5E7EB"))
+            textSize = if (monospace) 11f else 12f
+            typeface = if (monospace) Typeface.MONOSPACE else Typeface.DEFAULT
+            setLineSpacing(dp(2).toFloat(), 1f)
+            setPadding(dp(10), dp(10), dp(10), dp(10))
+            setMinLines(minLines)
+            setMaxLines(maxLines)
+            background = actionButtonDrawable(Color.parseColor("#101010"), strokeColor = Color.parseColor("#252525"))
+        }
+    }
+
+    private fun showScriptInfoDialog(
+        iconRes: Int,
+        title: String,
+        body: String,
+        copyLabel: String,
+        monospace: Boolean = false,
+    ) {
+        val content = ScrollView(context).apply {
+            addView(
+                scriptDialogTextView(
+                    body.ifBlank { "没有可显示的内容。" },
+                    monospace = monospace,
+                    minLines = 6,
+                    maxLines = 24,
+                ),
+                ViewGroup.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                ),
+            )
+        }
+        showScriptWorkbenchDialog(iconRes, title, copyLabel, content, heightRatio = 0.72f) { dialog ->
+            addView(createScriptDialogButton(R.drawable.lucide_copy, "复制", active = true) {
+                copyToClipboard(body, copyLabel)
+                dialog.dismiss()
+            })
+            addView(createScriptDialogButton(R.drawable.lucide_x, "关闭") { dialog.dismiss() })
+        }
+    }
+
+    private fun showScriptConfirmDialog(
+        iconRes: Int,
+        title: String,
+        message: String,
+        confirmLabel: String,
+        danger: Boolean = false,
+        onConfirm: () -> Unit,
+    ) {
+        val content = scriptDialogTextView(message, minLines = 2, maxLines = 8)
+        showScriptWorkbenchDialog(iconRes, title, "请确认此操作", content) { dialog ->
+            addView(createScriptDialogButton(R.drawable.lucide_x, "取消") { dialog.dismiss() })
+            addView(
+                createScriptDialogButton(
+                    if (danger) R.drawable.lucide_trash_2 else iconRes,
+                    confirmLabel,
+                    active = !danger,
+                    danger = danger,
+                ) {
+                    dialog.dismiss()
+                    onConfirm()
+                },
+            )
         }
     }
 
@@ -2136,14 +2390,13 @@ class NativeCodexBrowserView(
                 }
             }
         }
-        AlertDialog.Builder(context)
-            .setTitle("脚本步骤")
-            .setMessage(detail)
-            .setPositiveButton("复制内容") { _, _ ->
-                copyToClipboard(detail, "脚本步骤")
-            }
-            .setNegativeButton("关闭", null)
-            .show()
+        showScriptInfoDialog(
+            iconRes = R.drawable.lucide_route,
+            title = "脚本步骤",
+            body = detail,
+            copyLabel = "脚本步骤",
+            monospace = true,
+        )
     }
 
     private fun showUserScriptSource(script: NativeBrowserStoredUserScript) {
@@ -2160,14 +2413,27 @@ class NativeCodexBrowserView(
             isFocusable = false
             isClickable = true
         }
-        AlertDialog.Builder(context)
-            .setTitle(script.name)
-            .setView(sourceView)
-            .setPositiveButton("复制源码") { _, _ ->
+        showScriptWorkbenchDialog(
+            iconRes = R.drawable.lucide_file_code,
+            title = script.name,
+            subtitle = "传统脚本源码",
+            content = ScrollView(context).apply {
+                addView(
+                    sourceView,
+                    ViewGroup.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.WRAP_CONTENT,
+                    ),
+                )
+            },
+            heightRatio = 0.76f,
+        ) { dialog ->
+            addView(createScriptDialogButton(R.drawable.lucide_copy, "复制源码", active = true) {
                 copyToClipboard(script.code, "${script.name} 源码")
-            }
-            .setNegativeButton("关闭", null)
-            .show()
+                dialog.dismiss()
+            })
+            addView(createScriptDialogButton(R.drawable.lucide_x, "关闭") { dialog.dismiss() })
+        }
     }
 
     private fun saveRecentActionsAsScript(onSaved: () -> Unit) {
@@ -2222,16 +2488,17 @@ class NativeCodexBrowserView(
             showToast("没有待保存脚本")
             return
         }
-        AlertDialog.Builder(context)
-            .setTitle("丢弃待保存脚本")
-            .setMessage("确定清除当前待保存脚本？")
-            .setNegativeButton("取消", null)
-            .setPositiveButton("丢弃") { _, _ ->
+        showScriptConfirmDialog(
+            iconRes = R.drawable.lucide_x,
+            title = "丢弃待保存脚本",
+            message = "确定清除当前待保存脚本？",
+            confirmLabel = "丢弃",
+            danger = true,
+        ) {
                 pendingScriptDraft = null
                 showToast("待保存脚本已清除")
                 onDiscarded()
-            }
-            .show()
+        }
     }
 
     private fun promptAutomationScriptMetadata(
@@ -2265,17 +2532,21 @@ class NativeCodexBrowserView(
             addView(fileNameInput)
             addView(descriptionInput, spacedLayoutParams())
         }
-        AlertDialog.Builder(context)
-            .setTitle(title)
-            .setView(form)
-            .setNegativeButton("取消", null)
-            .setPositiveButton("保存") { _, _ ->
+        showScriptWorkbenchDialog(
+            iconRes = R.drawable.lucide_save,
+            title = title,
+            subtitle = "编辑自动化流程元数据",
+            content = form,
+        ) { dialog ->
+            addView(createScriptDialogButton(R.drawable.lucide_x, "取消") { dialog.dismiss() })
+            addView(createScriptDialogButton(R.drawable.lucide_save, "保存", active = true) {
+                dialog.dismiss()
                 onConfirm(
                     fileNameInput.text?.toString().orEmpty(),
                     descriptionInput.text?.toString().orEmpty(),
                 )
-            }
-            .show()
+            })
+        }
     }
 
     private fun renameStoredAutomationScript(
@@ -2308,16 +2579,17 @@ class NativeCodexBrowserView(
         script: NativeBrowserStoredScript,
         onDeleted: () -> Unit,
     ) {
-        AlertDialog.Builder(context)
-            .setTitle("删除脚本")
-            .setMessage("确定删除 ${script.fileName}？")
-            .setNegativeButton("取消", null)
-            .setPositiveButton("删除") { _, _ ->
+        showScriptConfirmDialog(
+            iconRes = R.drawable.lucide_trash_2,
+            title = "删除脚本",
+            message = "确定删除 ${script.fileName}？",
+            confirmLabel = "删除",
+            danger = true,
+        ) {
                 writeStoredAutomationScripts(loadStoredAutomationScripts().filterNot { it.id == script.id })
                 showToast("脚本已删除")
                 onDeleted()
-            }
-            .show()
+        }
     }
 
     private fun importUserScript(onSaved: () -> Unit) {
@@ -2333,28 +2605,33 @@ class NativeCodexBrowserView(
                 InputType.TYPE_TEXT_FLAG_MULTI_LINE or
                 InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
         }
-        AlertDialog.Builder(context)
-            .setTitle("导入传统脚本")
-            .setView(
-                ScrollView(context).apply {
-                    addView(
-                        sourceInput,
-                        ViewGroup.LayoutParams(
-                            ViewGroup.LayoutParams.MATCH_PARENT,
-                            ViewGroup.LayoutParams.WRAP_CONTENT,
-                        ),
+        showScriptWorkbenchDialog(
+            iconRes = R.drawable.lucide_upload,
+            title = "导入传统脚本",
+            subtitle = "粘贴 Tampermonkey 或 JavaScript 源码",
+            content = ScrollView(context).apply {
+                addView(
+                    sourceInput,
+                    ViewGroup.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.WRAP_CONTENT,
+                    ),
+                )
+            },
+            heightRatio = 0.74f,
+        ) { dialog ->
+            addView(createScriptDialogButton(R.drawable.lucide_x, "取消") { dialog.dismiss() })
+            addView(
+                createScriptDialogButton(R.drawable.lucide_play, "继续", active = true) {
+                    dialog.dismiss()
+                    editUserScript(
+                        script = null,
+                        initialCode = sourceInput.text?.toString().orEmpty().trim(),
+                        onSaved = onSaved,
                     )
                 },
             )
-            .setNegativeButton("取消", null)
-            .setPositiveButton("继续") { _, _ ->
-                editUserScript(
-                    script = null,
-                    initialCode = sourceInput.text?.toString().orEmpty().trim(),
-                    onSaved = onSaved,
-                )
-            }
-            .show()
+        }
     }
 
     private fun editUserScript(
@@ -2424,11 +2701,23 @@ class NativeCodexBrowserView(
                 spacedLayoutParams(),
             )
         }
-        AlertDialog.Builder(context)
-            .setTitle(if (script == null) "新增传统脚本" else "编辑传统脚本")
-            .setView(form)
-            .setNegativeButton("取消", null)
-            .setPositiveButton("保存") { _, _ ->
+        showScriptWorkbenchDialog(
+            iconRes = R.drawable.lucide_file_code,
+            title = if (script == null) "新增传统脚本" else "编辑传统脚本",
+            subtitle = "保存后不会自动运行，运行前仍需手动确认",
+            content = ScrollView(context).apply {
+                addView(
+                    form,
+                    ViewGroup.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.WRAP_CONTENT,
+                    ),
+                )
+            },
+            heightRatio = 0.82f,
+        ) { dialog ->
+            addView(createScriptDialogButton(R.drawable.lucide_x, "取消") { dialog.dismiss() })
+            addView(createScriptDialogButton(R.drawable.lucide_save, "保存", active = true) {
                 val scripts = loadStoredUserScripts().toMutableList()
                 val now = java.time.Instant.now().toString()
                 val normalizedMatches = matchesInput.text?.toString().orEmpty()
@@ -2447,7 +2736,7 @@ class NativeCodexBrowserView(
                 )
                 if (next.code.isBlank()) {
                     showToast("源码不能为空")
-                    return@setPositiveButton
+                    return@createScriptDialogButton
                 }
                 val index = scripts.indexOfFirst { it.id == next.id }
                 if (index >= 0) {
@@ -2457,17 +2746,19 @@ class NativeCodexBrowserView(
                 }
                 writeStoredUserScripts(scripts)
                 showToast(if (script == null) "传统脚本已保存" else "传统脚本已更新")
+                dialog.dismiss()
                 onSaved()
-            }
-            .show()
+            })
+        }
     }
 
     private fun runUserScript(script: NativeBrowserStoredUserScript) {
-        AlertDialog.Builder(context)
-            .setTitle("运行传统脚本")
-            .setMessage("将在当前页面执行“${script.name}”。请仅运行已审阅、可信的源码。")
-            .setNegativeButton("取消", null)
-            .setPositiveButton("运行") { _, _ ->
+        showScriptConfirmDialog(
+            iconRes = R.drawable.lucide_play,
+            title = "运行传统脚本",
+            message = "将在当前页面执行“${script.name}”。请仅运行已审阅、可信的源码。",
+            confirmLabel = "运行",
+        ) {
                 executeAction("eval", mapOf("script" to script.code)) { result ->
                     showToast(
                         if (result["ok"] == false) {
@@ -2477,24 +2768,24 @@ class NativeCodexBrowserView(
                         },
                     )
                 }
-            }
-            .show()
+        }
     }
 
     private fun deleteStoredUserScript(
         script: NativeBrowserStoredUserScript,
         onDeleted: () -> Unit,
     ) {
-        AlertDialog.Builder(context)
-            .setTitle("删除传统脚本")
-            .setMessage("确定删除 ${script.name}？")
-            .setNegativeButton("取消", null)
-            .setPositiveButton("删除") { _, _ ->
+        showScriptConfirmDialog(
+            iconRes = R.drawable.lucide_trash_2,
+            title = "删除传统脚本",
+            message = "确定删除 ${script.name}？",
+            confirmLabel = "删除",
+            danger = true,
+        ) {
                 writeStoredUserScripts(loadStoredUserScripts().filterNot { it.id == script.id })
                 showToast("传统脚本已删除")
                 onDeleted()
-            }
-            .show()
+        }
     }
 
     private fun promptAndRunScript(script: NativeBrowserStoredScript) {
@@ -2527,17 +2818,21 @@ class NativeCodexBrowserView(
             inputViews[variable] = input
             form.addView(input)
         }
-        AlertDialog.Builder(context)
-            .setTitle("运行脚本变量")
-            .setView(form)
-            .setPositiveButton("运行") { _, _ ->
+        showScriptWorkbenchDialog(
+            iconRes = R.drawable.lucide_play,
+            title = "运行脚本变量",
+            subtitle = "填写变量后执行自动化流程",
+            content = form,
+        ) { dialog ->
+            addView(createScriptDialogButton(R.drawable.lucide_x, "取消") { dialog.dismiss() })
+            addView(createScriptDialogButton(R.drawable.lucide_play, "运行", active = true) {
+                dialog.dismiss()
                 val values = inputViews.entries.associate { (key, view) ->
                     key to view.text?.toString().orEmpty()
                 }
                 runStoredScript(script, values)
-            }
-            .setNegativeButton("取消", null)
-            .show()
+            })
+        }
     }
 
     private fun runStoredScript(
@@ -2551,22 +2846,23 @@ class NativeCodexBrowserView(
             setPadding(dp(18), dp(14), dp(18), dp(14))
             text = "准备运行 ${script.fileName} …"
         }
-        val dialog = AlertDialog.Builder(context)
-            .setTitle("运行自动化脚本")
-            .setView(
-                ScrollView(context).apply {
-                    addView(
-                        logView,
-                        ViewGroup.LayoutParams(
-                            ViewGroup.LayoutParams.MATCH_PARENT,
-                            ViewGroup.LayoutParams.WRAP_CONTENT,
-                        ),
-                    )
-                },
-            )
-            .setNegativeButton("关闭", null)
-            .create()
-        dialog.show()
+        val dialog = showScriptWorkbenchDialog(
+            iconRes = R.drawable.lucide_play,
+            title = "运行自动化脚本",
+            subtitle = script.fileName,
+            content = ScrollView(context).apply {
+                addView(
+                    logView,
+                    ViewGroup.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.WRAP_CONTENT,
+                    ),
+                )
+            },
+            heightRatio = 0.58f,
+        ) { currentDialog ->
+            addView(createScriptDialogButton(R.drawable.lucide_x, "关闭") { currentDialog.dismiss() })
+        }
         val logLines = mutableListOf<String>()
         fun appendLog(line: String) {
             logLines += line

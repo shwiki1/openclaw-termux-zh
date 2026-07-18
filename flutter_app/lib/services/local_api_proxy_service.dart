@@ -80,7 +80,9 @@ if ! python3 -m pip --version >/dev/null 2>&1; then
   fi
 fi
 python3 -m pip install --break-system-packages -r requirements.txt || \
-  python3 -m pip install -r requirements.txt
+  python3 -m pip install --break-system-packages --index-url https://pypi.org/simple -r requirements.txt || \
+  python3 -m pip install -r requirements.txt || \
+  python3 -m pip install --index-url https://pypi.org/simple -r requirements.txt
 python3 - <<'PY'
 for module in ('starlette', 'uvicorn', 'httpx', 'aiosqlite'):
     __import__(module)
@@ -91,9 +93,43 @@ echo '本地中转代理依赖已安装并${restarted ? '重启' : '启动'}：h
 ''';
       try {
         return await NativeBridge.runInProot(installCommand, timeout: 300);
-      } catch (_) {
-        rethrow;
+      } catch (error, stackTrace) {
+        final logTail = await _serverLogTail();
+        if (logTail.trim().isEmpty) {
+          Error.throwWithStackTrace(error, stackTrace);
+        }
+        Error.throwWithStackTrace(
+          StateError('${_errorText(error)}\n\n$logTail'),
+          stackTrace,
+        );
       }
+    }
+  }
+
+  static String _errorText(Object error) {
+    if (error is PlatformException) {
+      final message = error.message?.trim();
+      if (message != null && message.isNotEmpty) {
+        return message;
+      }
+      return error.code;
+    }
+    return error.toString();
+  }
+
+  static Future<String> _serverLogTail() async {
+    try {
+      return await NativeBridge.runInProot(
+        '''
+if [ -f $guestDir/server.log ]; then
+  echo '--- server.log 最近输出 ---'
+  tail -80 $guestDir/server.log
+fi
+''',
+        timeout: 10,
+      );
+    } catch (_) {
+      return '';
     }
   }
 
