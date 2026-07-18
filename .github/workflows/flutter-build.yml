@@ -438,17 +438,6 @@ jobs:
           path: artifacts/*.apk
           retention-days: 30
 
-      - name: Upload APK parts to Gitee transfer branch
-        env:
-          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
-          GITEE_OWNER: cds-y-code
-          GITEE_REPO: openclaw-termux-zh
-          ARTIFACT_DIR: artifacts
-          GITEE_TRANSFER_BRANCH: apk-transfer-${{ github.run_id }}
-        run: |
-          set -euo pipefail
-          bash scripts/upload-apk-parts-to-gitee-branch.sh
-
       - name: Comment on PR
         if: github.event_name == 'pull_request'
         uses: actions/github-script@v9.0.0
