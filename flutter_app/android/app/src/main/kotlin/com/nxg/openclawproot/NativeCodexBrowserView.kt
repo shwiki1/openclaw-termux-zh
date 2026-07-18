@@ -894,8 +894,6 @@ class NativeCodexBrowserView(
             "切换电脑/手机 UA",
         )
         uaButton.isSelected = tab.userAgentMode == NativeBrowserUserAgentMode.DESKTOP
-        uaButton.gravity = Gravity.CENTER
-        uaButton.minHeight = dp(30)
         uaButton.setPadding(dp(8), 0, dp(8), 0)
         uaButton.background = context.nativeRoundedStateDrawable(
             normalColor = NativeUiPalette.surfaceRaised,
