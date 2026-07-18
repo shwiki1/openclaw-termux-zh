@@ -147,14 +147,18 @@ installers that fetch them into the Ubuntu rootfs at runtime under
 
 Included icons:
 
-`archive`, `arrow-down-up`, `arrow-up-from-line`, `audio-waveform`,
-`chevron-left`, `chevrons-down-up`, `clipboard`, `clipboard-paste`, `copy`,
-`eye`, `eye-off`, `file`, `file-archive`, `file-image`, `file-music`,
+`app-window`, `archive`, `arrow-down-up`, `arrow-up-from-line`,
+`audio-waveform`, `bot`, `chevron-left`, `chevrons-down-up`, `clipboard`,
+`clipboard-paste`, `copy`, `external-link`, `eye`, `eye-off`, `file`,
+`file-archive`, `file-code`,
+`file-image`, `file-music`,
 `file-text`, `file-video-camera`, `folder`, `folder-open`, `folder-plus`,
-`grid-2x2`, `hard-drive`, `history`, `house`, `info`, `layout-list`,
-`list-checks`, `minus`, `move`, `panel-top-close`, `panel-top-open`, `plus`,
-`refresh-cw`, `save`, `search`, `share-2`, `square-check`, `square-pen`,
-`star`, `star-off`, `trash-2`, `x`
+`globe`, `grid-2x2`, `hard-drive`, `history`, `house`, `info`,
+`layout-list`, `link`, `list-checks`, `minus`,
+`mouse-pointer-click`, `move`, `panel-right`, `panel-top-close`,
+`panel-top-open`, `play`, `plus`, `refresh-cw`, `route`, `save`,
+`scan-search`, `search`, `share-2`, `square-check`, `square-pen`, `star`,
+`star-off`, `trash-2`, `upload`, `workflow`, `x`
 
 ## Ace Editor / ace-builds
 

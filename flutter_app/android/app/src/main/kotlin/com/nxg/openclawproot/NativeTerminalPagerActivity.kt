@@ -174,7 +174,7 @@ class NativeTerminalPagerActivity : Activity() {
         }
         sessionSwitcherView = createIconActionButton(R.drawable.lucide_layout_list, "切换会话") { showSessionMenu(it) }
         terminalTabButton = createIconActionButton(R.drawable.lucide_hard_drive, "终端") { showPage(PAGE_TERMINAL) }
-        browserTabButton = createIconActionButton(R.drawable.lucide_search, "浏览器") { showPage(PAGE_BROWSER) }
+        browserTabButton = createIconActionButton(R.drawable.lucide_app_window, "浏览器") { showPage(PAGE_BROWSER) }
         newSessionButton = createIconActionButton(R.drawable.lucide_plus, "新建会话") { openNewSession() }
         pasteButton = createIconActionButton(R.drawable.lucide_clipboard_paste, "粘贴") { activeTerminalView?.paste() }
         restartButton = createIconActionButton(R.drawable.lucide_refresh_cw, "重开会话") { activeTerminalView?.restart() }

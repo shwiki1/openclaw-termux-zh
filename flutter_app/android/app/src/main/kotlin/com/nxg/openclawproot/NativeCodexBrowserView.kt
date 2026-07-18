@@ -181,15 +181,15 @@ class NativeCodexBrowserView(
     private val addressInput = EditText(context)
     private val bridgeStatusView = TextView(context)
     private val bridgeMetaView = TextView(context)
-    private val uaButton = TextView(context)
+    private val uaButton = FrameLayout(context)
     private val backButton = FrameLayout(context)
     private val forwardButton = FrameLayout(context)
     private val reloadButton = FrameLayout(context)
     private val moreButton = FrameLayout(context)
     private val newTabButton = FrameLayout(context)
-    private val inspectorToggleButton = TextView(context)
-    private val inspectorElementsButton = TextView(context)
-    private val inspectorLinksButton = TextView(context)
+    private val inspectorToggleButton = FrameLayout(context)
+    private val inspectorElementsButton = FrameLayout(context)
+    private val inspectorLinksButton = FrameLayout(context)
     private val inspectorErrorView = TextView(context)
     private val inspectorLoadingView = TextView(context)
     private var nextTabId = 1
@@ -483,19 +483,16 @@ class NativeCodexBrowserView(
             },
         )
         addressRow.addView(
-            createActionButton(R.drawable.lucide_arrow_up_from_line, "打开地址") {
+            createActionButton(R.drawable.lucide_external_link, "打开地址") {
                 executeAction("open", mapOf("url" to addressInput.text?.toString().orEmpty())) {}
             },
         )
         uaButton.apply {
             minimumWidth = dp(34)
-            gravity = Gravity.CENTER
             contentDescription = "切换电脑/手机 UA"
             isClickable = true
             isFocusable = true
             isHapticFeedbackEnabled = true
-            includeFontPadding = false
-            setCompoundDrawablesWithIntrinsicBounds(tintedIcon(R.drawable.lucide_grid_2x2), null, null, null)
             setPadding(dp(8), 0, dp(8), 0)
             background = controlStateDrawable(
                 normalColor = NativeUiPalette.surfaceRaised,
@@ -515,6 +512,7 @@ class NativeCodexBrowserView(
                 marginEnd = dp(4)
             }
         }
+        setCenteredButtonIcon(uaButton, R.drawable.lucide_panel_right)
         toolRow.addView(uaButton)
         toolRow.addView(inspectorToggleButton)
         toolRow.addView(moreButton)
@@ -539,13 +537,7 @@ class NativeCodexBrowserView(
             visibility = View.GONE
         }
         inspectorToggleButton.apply {
-            setTextColor(Color.WHITE)
-            textSize = 12f
-            typeface = Typeface.DEFAULT_BOLD
-            text = ""
             contentDescription = "显示检查器"
-            includeFontPadding = false
-            setCompoundDrawablesWithIntrinsicBounds(tintedIcon(R.drawable.lucide_eye), null, null, null)
             isClickable = true
             isFocusable = true
             isHapticFeedbackEnabled = true
@@ -563,11 +555,12 @@ class NativeCodexBrowserView(
                 updateInspectorUi()
             }
         }
+        setCenteredButtonIcon(inspectorToggleButton, R.drawable.lucide_scan_search)
         inspectorElementsButton.apply {
             isHapticFeedbackEnabled = true
             contentDescription = "页面元素"
-            includeFontPadding = false
-            setCompoundDrawablesWithIntrinsicBounds(tintedIcon(R.drawable.lucide_list_checks), null, null, null)
+            isClickable = true
+            isFocusable = true
             setOnClickListener {
                 performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
                 loadInspector(NativeBrowserInspectorMode.INTERACTABLES)
@@ -576,8 +569,8 @@ class NativeCodexBrowserView(
         inspectorLinksButton.apply {
             isHapticFeedbackEnabled = true
             contentDescription = "页面链接"
-            includeFontPadding = false
-            setCompoundDrawablesWithIntrinsicBounds(tintedIcon(R.drawable.lucide_share_2), null, null, null)
+            isClickable = true
+            isFocusable = true
             setOnClickListener {
                 performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
                 loadInspector(NativeBrowserInspectorMode.LINKS)
@@ -730,12 +723,46 @@ class NativeCodexBrowserView(
         }
     }
 
+    private fun setCenteredButtonIcon(target: FrameLayout, iconRes: Int, description: String? = null) {
+        target.removeAllViews()
+        description?.let { target.contentDescription = it }
+        target.addView(
+            ImageView(context).apply {
+                setImageDrawable(tintedIcon(iconRes))
+                contentDescription = description ?: target.contentDescription
+            },
+            FrameLayout.LayoutParams(dp(16), dp(16), Gravity.CENTER),
+        )
+    }
+
     private fun createSmallActionButton(
         label: String,
         active: Boolean = false,
         iconOnly: Boolean = true,
         onClick: () -> Unit,
-    ): TextView {
+    ): View {
+        val iconRes = smallActionIcon(label)
+        if (iconOnly && iconRes != null) {
+            return FrameLayout(context).apply {
+                contentDescription = label
+                isClickable = true
+                isFocusable = true
+                isHapticFeedbackEnabled = true
+                background = controlStateDrawable(
+                    normalColor = if (active) NativeUiPalette.accentSoft else NativeUiPalette.surfaceAlt,
+                    pressedColor = if (active) NativeUiPalette.accentPressed else NativeUiPalette.borderStrong,
+                    strokeColor = if (active) NativeUiPalette.accent else NativeUiPalette.borderStrong,
+                )
+                setCenteredButtonIcon(this, iconRes, label)
+                setOnClickListener {
+                    performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                    onClick()
+                }
+                layoutParams = LinearLayout.LayoutParams(dp(34), dp(30)).apply {
+                    marginEnd = dp(4)
+                }
+            }
+        }
         return TextView(context).apply {
             contentDescription = label
             gravity = Gravity.CENTER
@@ -746,16 +773,9 @@ class NativeCodexBrowserView(
             isClickable = true
             isFocusable = true
             isHapticFeedbackEnabled = true
-            val iconRes = smallActionIcon(label)
-            if (iconOnly && iconRes != null) {
-                text = ""
-                setCompoundDrawablesWithIntrinsicBounds(tintedIcon(iconRes), null, null, null)
-                setPadding(0, 0, 0, 0)
-            } else {
-                text = label
-                setCompoundDrawablesWithIntrinsicBounds(null, null, null, null)
-                setPadding(dp(8), dp(6), dp(8), dp(6))
-            }
+            text = label
+            setCompoundDrawablesWithIntrinsicBounds(null, null, null, null)
+            setPadding(dp(8), dp(6), dp(8), dp(6))
             background = controlStateDrawable(
                 normalColor = if (active) NativeUiPalette.accentSoft else NativeUiPalette.surfaceAlt,
                 pressedColor = if (active) NativeUiPalette.accentPressed else NativeUiPalette.borderStrong,
@@ -767,7 +787,7 @@ class NativeCodexBrowserView(
             }
         }.also { button ->
             button.layoutParams = LinearLayout.LayoutParams(
-                if (iconOnly && smallActionIcon(label) != null) dp(34) else ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
                 dp(30),
             ).apply {
                 marginEnd = dp(4)
@@ -810,22 +830,22 @@ class NativeCodexBrowserView(
             normalized.contains("保存/编辑") -> R.drawable.lucide_save
             normalized.contains("保存") -> R.drawable.lucide_save
             normalized.contains("新增") -> R.drawable.lucide_plus
-            normalized.contains("导入") -> R.drawable.lucide_arrow_up_from_line
-            normalized.contains("运行") -> R.drawable.lucide_square_check
+            normalized.contains("导入") -> R.drawable.lucide_upload
+            normalized.contains("运行") -> R.drawable.lucide_play
             normalized.contains("重命名") || normalized.contains("编辑") -> R.drawable.lucide_square_pen
-            normalized.contains("步骤") -> R.drawable.lucide_list_checks
+            normalized.contains("步骤") -> R.drawable.lucide_route
             normalized.contains("看源码") -> R.drawable.lucide_eye
             normalized.contains("复制") -> R.drawable.lucide_copy
-            normalized.contains("源码") -> R.drawable.lucide_file_text
+            normalized.contains("源码") -> R.drawable.lucide_file_code
             normalized.contains("关闭当前") -> R.drawable.lucide_x
             normalized.contains("关闭") || normalized.contains("丢弃") -> R.drawable.lucide_x
             normalized.contains("删除") -> R.drawable.lucide_trash_2
-            normalized.contains("打开") -> R.drawable.lucide_panel_top_open
+            normalized.contains("打开") -> R.drawable.lucide_external_link
             normalized.contains("标记") -> R.drawable.lucide_star
-            normalized.contains("点击") -> R.drawable.lucide_square_check
-            normalized.contains("让") || normalized.contains("Codex") -> R.drawable.lucide_square_pen
-            normalized.contains("传统脚本") -> R.drawable.lucide_file_text
-            normalized.contains("自动化") || normalized.contains("流程") -> R.drawable.lucide_list_checks
+            normalized.contains("点击") -> R.drawable.lucide_mouse_pointer_click
+            normalized.contains("让") || normalized.contains("Codex") -> R.drawable.lucide_bot
+            normalized.contains("传统脚本") -> R.drawable.lucide_file_code
+            normalized.contains("自动化") || normalized.contains("流程") -> R.drawable.lucide_route
             else -> null
         }
     }
@@ -864,18 +884,14 @@ class NativeCodexBrowserView(
             tab.currentUrl.isNotEmpty() -> tab.currentUrl
             else -> "Codex 浏览器原生页"
         }
-        uaButton.text = ""
-        uaButton.setCompoundDrawablesWithIntrinsicBounds(
-            tintedIcon(
-                if (tab.userAgentMode == NativeBrowserUserAgentMode.DESKTOP) {
-                    R.drawable.lucide_grid_2x2
-                } else {
-                    R.drawable.lucide_panel_top_open
-                },
-            ),
-            null,
-            null,
-            null,
+        setCenteredButtonIcon(
+            uaButton,
+            if (tab.userAgentMode == NativeBrowserUserAgentMode.DESKTOP) {
+                R.drawable.lucide_panel_right
+            } else {
+                R.drawable.lucide_globe
+            },
+            "切换电脑/手机 UA",
         )
         uaButton.isSelected = tab.userAgentMode == NativeBrowserUserAgentMode.DESKTOP
         uaButton.gravity = Gravity.CENTER
@@ -1017,19 +1033,15 @@ class NativeCodexBrowserView(
     private fun updateInspectorUi() {
         val shouldShow = showInspector || inspectorLoading || inspectorItems.isNotEmpty()
         inspectorColumn.visibility = if (shouldShow) View.VISIBLE else View.GONE
-        inspectorToggleButton.text = ""
         inspectorToggleButton.contentDescription = if (showInspector) "隐藏检查器" else "显示检查器"
-        inspectorToggleButton.setCompoundDrawablesWithIntrinsicBounds(
-            tintedIcon(if (showInspector) R.drawable.lucide_eye_off else R.drawable.lucide_eye),
-            null,
-            null,
-            null,
+        setCenteredButtonIcon(
+            inspectorToggleButton,
+            if (showInspector) R.drawable.lucide_eye_off else R.drawable.lucide_scan_search,
+            inspectorToggleButton.contentDescription?.toString(),
         )
         inspectorLoadingView.visibility = if (inspectorLoading) View.VISIBLE else View.GONE
         inspectorErrorView.visibility = if (inspectorError.isNotEmpty()) View.VISIBLE else View.GONE
         inspectorErrorView.text = inspectorError
-        inspectorElementsButton.text = ""
-        inspectorLinksButton.text = ""
         inspectorElementsButton.isSelected = inspectorMode == NativeBrowserInspectorMode.INTERACTABLES
         inspectorLinksButton.isSelected = inspectorMode == NativeBrowserInspectorMode.LINKS
         inspectorElementsButton.background = context.nativeRoundedStateDrawable(
@@ -1050,14 +1062,10 @@ class NativeCodexBrowserView(
             selectedStrokeColor = NativeUiPalette.accent,
             radiusDp = 8,
         )
-        inspectorElementsButton.gravity = Gravity.CENTER
-        inspectorLinksButton.gravity = Gravity.CENTER
-        inspectorElementsButton.textSize = 11f
-        inspectorLinksButton.textSize = 11f
-        inspectorElementsButton.typeface = Typeface.MONOSPACE
-        inspectorLinksButton.typeface = Typeface.MONOSPACE
         inspectorElementsButton.setPadding(dp(8), dp(6), dp(8), dp(6))
         inspectorLinksButton.setPadding(dp(8), dp(6), dp(8), dp(6))
+        setCenteredButtonIcon(inspectorElementsButton, R.drawable.lucide_mouse_pointer_click, "页面元素")
+        setCenteredButtonIcon(inspectorLinksButton, R.drawable.lucide_link, "页面链接")
         renderInspectorItems()
     }
 
@@ -1400,8 +1408,8 @@ class NativeCodexBrowserView(
 
         val root = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(14), dp(12), dp(14), dp(10))
-            background = actionButtonDrawable(Color.parseColor("#0B0B0B"), strokeColor = Color.parseColor("#27272A"))
+            setPadding(dp(12), dp(12), dp(12), dp(12))
+            background = actionButtonDrawable(Color.parseColor("#090909"), strokeColor = Color.parseColor("#2A2A2A"))
         }
 
         val headerRow = LinearLayout(context).apply {
@@ -1410,16 +1418,16 @@ class NativeCodexBrowserView(
         }
         headerRow.addView(
             FrameLayout(context).apply {
-                background = actionButtonDrawable(NativeUiPalette.accentSoft, strokeColor = NativeUiPalette.accent)
+                background = actionButtonDrawable(Color.parseColor("#171717"), strokeColor = NativeUiPalette.accent)
                 addView(
                     ImageView(context).apply {
-                        setImageDrawable(tintedIcon(R.drawable.lucide_list_checks))
+                        setImageDrawable(tintedIcon(R.drawable.lucide_workflow))
                         contentDescription = "浏览器脚本助手"
                     },
-                    LayoutParams(dp(18), dp(18), Gravity.CENTER),
+                    LayoutParams(dp(20), dp(20), Gravity.CENTER),
                 )
             },
-            LinearLayout.LayoutParams(dp(34), dp(34)).apply { marginEnd = dp(10) },
+            LinearLayout.LayoutParams(dp(38), dp(38)).apply { marginEnd = dp(10) },
         )
         headerRow.addView(
             LinearLayout(context).apply {
@@ -1428,7 +1436,7 @@ class NativeCodexBrowserView(
                     TextView(context).apply {
                         text = "浏览器脚本助手"
                         setTextColor(Color.WHITE)
-                        textSize = 16f
+                        textSize = 15f
                         typeface = Typeface.DEFAULT_BOLD
                         maxLines = 1
                     },
@@ -1438,7 +1446,7 @@ class NativeCodexBrowserView(
                         text = "Codex 自动化 ${automationScripts.size} · 传统脚本 ${userScripts.size}"
                         setTextColor(Color.parseColor("#9CA3AF"))
                         textSize = 10.5f
-                        setPadding(0, dp(2), 0, 0)
+                        setPadding(0, dp(3), 0, 0)
                         maxLines = 1
                     },
                 )
@@ -1446,17 +1454,25 @@ class NativeCodexBrowserView(
             LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),
         )
         headerRow.addView(
-            createSmallActionButton("刷新") {
-                refreshLibrary()
-            },
+            createDialogIconButton(R.drawable.lucide_refresh_cw, "刷新脚本库") { refreshLibrary() },
+        )
+        headerRow.addView(
+            createDialogIconButton(R.drawable.lucide_x, "关闭脚本库") { dialog?.dismiss() },
         )
         root.addView(headerRow)
+
+        val statsRow = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(0, dp(10), 0, dp(10))
+            addView(createScriptPill(R.drawable.lucide_workflow, "自动化 ${automationScripts.size}"))
+            addView(createScriptPill(R.drawable.lucide_file_code, "传统 ${userScripts.size}"))
+            pendingScriptDraft?.let { addView(createScriptPill(R.drawable.lucide_save, "待保存")) }
+        }
         root.addView(
-            TextView(context).apply {
-                text = "待保存草稿、已保存流程和传统网站脚本分区管理"
-                setTextColor(Color.parseColor("#9CA3AF"))
-                textSize = 11.5f
-                setPadding(0, dp(4), 0, dp(10))
+            HorizontalScrollView(context).apply {
+                isHorizontalScrollBarEnabled = false
+                overScrollMode = View.OVER_SCROLL_NEVER
+                addView(statsRow)
             },
         )
 
@@ -1465,17 +1481,17 @@ class NativeCodexBrowserView(
             setPadding(0, 0, 0, dp(10))
         }
         actionRow.addView(
-            createSmallActionButton("保存最近流程", active = true) {
+            createDialogTextButton(R.drawable.lucide_save, "保存最近流程", active = true) {
                 saveRecentActionsAsScript(refreshLibrary)
             },
         )
         actionRow.addView(
-            createSmallActionButton("新增传统脚本") {
+            createDialogTextButton(R.drawable.lucide_plus, "新增传统脚本") {
                 editUserScript(script = null, initialCode = "", onSaved = refreshLibrary)
             },
         )
         actionRow.addView(
-            createSmallActionButton("导入") {
+            createDialogTextButton(R.drawable.lucide_upload, "导入") {
                 importUserScript(refreshLibrary)
             },
         )
@@ -1495,18 +1511,21 @@ class NativeCodexBrowserView(
 
         val tabRow = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
-            setPadding(0, 0, 0, dp(8))
+            setPadding(dp(2), dp(2), dp(2), dp(2))
+            background = actionButtonDrawable(Color.parseColor("#111111"), strokeColor = Color.parseColor("#242424"))
         }
         val automationTab = createSmallActionButton(
             "Codex 自动化 (${automationScripts.size})",
             active = true,
             iconOnly = false,
-        ) {}
+            onClick = {},
+        ) as TextView
         val userTab = createSmallActionButton(
             "传统脚本 (${userScripts.size})",
             active = false,
             iconOnly = false,
-        ) {}
+            onClick = {},
+        ) as TextView
         tabRow.addView(
             automationTab,
             LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
@@ -1522,12 +1541,14 @@ class NativeCodexBrowserView(
         val summaryView = TextView(context).apply {
             setTextColor(Color.parseColor("#9CA3AF"))
             textSize = 11f
-            setPadding(0, 0, 0, dp(8))
+            setPadding(dp(2), dp(8), dp(2), dp(8))
         }
         root.addView(summaryView)
 
         val listContainer = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
+            setPadding(dp(8), dp(8), dp(8), dp(8))
+            background = actionButtonDrawable(Color.parseColor("#0D0D0D"), strokeColor = Color.parseColor("#202020"))
         }
         val listScroll = ScrollView(context).apply {
             isFillViewport = true
@@ -1624,12 +1645,11 @@ class NativeCodexBrowserView(
 
         dialog = AlertDialog.Builder(context)
             .setView(root)
-            .setPositiveButton("关闭", null)
             .create()
         dialog?.show()
         dialog?.window?.setLayout(
-            ViewGroup.LayoutParams.MATCH_PARENT,
-            ViewGroup.LayoutParams.WRAP_CONTENT,
+            (resources.displayMetrics.widthPixels * 0.94f).toInt(),
+            (resources.displayMetrics.heightPixels * 0.86f).toInt(),
         )
         dialog?.window?.setBackgroundDrawable(actionButtonDrawable(Color.TRANSPARENT))
     }
@@ -1644,14 +1664,109 @@ class NativeCodexBrowserView(
         }
     }
 
+    private fun createDialogIconButton(iconRes: Int, description: String, onClick: () -> Unit): View {
+        return FrameLayout(context).apply {
+            contentDescription = description
+            isClickable = true
+            isFocusable = true
+            isHapticFeedbackEnabled = true
+            background = controlStateDrawable(Color.parseColor("#171717"), Color.parseColor("#2A2A2A"), Color.parseColor("#303030"))
+            addView(
+                ImageView(context).apply {
+                    setImageDrawable(tintedIcon(iconRes))
+                    contentDescription = description
+                },
+                FrameLayout.LayoutParams(dp(16), dp(16), Gravity.CENTER),
+            )
+            setOnClickListener {
+                performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                onClick()
+            }
+            layoutParams = LinearLayout.LayoutParams(dp(34), dp(34)).apply { marginStart = dp(6) }
+        }
+    }
+
+    private fun createDialogTextButton(
+        iconRes: Int,
+        label: String,
+        active: Boolean = false,
+        onClick: () -> Unit,
+    ): View {
+        return LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            contentDescription = label
+            isClickable = true
+            isFocusable = true
+            isHapticFeedbackEnabled = true
+            setPadding(dp(10), 0, dp(10), 0)
+            background = controlStateDrawable(
+                normalColor = if (active) NativeUiPalette.accentSoft else Color.parseColor("#151515"),
+                pressedColor = if (active) NativeUiPalette.accentPressed else Color.parseColor("#272727"),
+                strokeColor = if (active) NativeUiPalette.accent else Color.parseColor("#303030"),
+            )
+            addView(
+                ImageView(context).apply {
+                    setImageDrawable(tintedIcon(iconRes))
+                    contentDescription = label
+                },
+                LinearLayout.LayoutParams(dp(15), dp(15)).apply { marginEnd = dp(6) },
+            )
+            addView(
+                TextView(context).apply {
+                    text = label
+                    setTextColor(if (active) NativeUiPalette.accent else NativeUiPalette.textPrimary)
+                    textSize = 11f
+                    includeFontPadding = false
+                    typeface = Typeface.DEFAULT_BOLD
+                    maxLines = 1
+                },
+            )
+            setOnClickListener {
+                performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                onClick()
+            }
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(34)).apply {
+                marginEnd = dp(6)
+            }
+        }
+    }
+
+    private fun createScriptPill(iconRes: Int, label: String): View {
+        return LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(9), 0, dp(10), 0)
+            background = actionButtonDrawable(Color.parseColor("#111111"), strokeColor = Color.parseColor("#262626"))
+            addView(
+                ImageView(context).apply {
+                    setImageDrawable(tintedIcon(iconRes))
+                    contentDescription = label
+                },
+                LinearLayout.LayoutParams(dp(14), dp(14)).apply { marginEnd = dp(6) },
+            )
+            addView(
+                TextView(context).apply {
+                    text = label
+                    setTextColor(Color.parseColor("#D4D4D8"))
+                    textSize = 10.5f
+                    includeFontPadding = false
+                },
+            )
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(28)).apply {
+                marginEnd = dp(6)
+            }
+        }
+    }
+
     private fun createEmptySection(message: String): View {
         return TextView(context).apply {
             text = message
             setTextColor(Color.parseColor("#9CA3AF"))
             textSize = 11f
             gravity = Gravity.CENTER
-            background = actionButtonDrawable(Color.parseColor("#0F0F0F"), strokeColor = NativeUiPalette.borderStrong)
-            setPadding(dp(14), dp(18), dp(14), dp(18))
+            background = actionButtonDrawable(Color.parseColor("#111111"), strokeColor = Color.parseColor("#252525"))
+            setPadding(dp(16), dp(22), dp(16), dp(22))
         }.also { empty ->
             empty.layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -1674,17 +1789,23 @@ class NativeCodexBrowserView(
         return LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(12), dp(12), dp(12), dp(12))
-            background = actionButtonDrawable(Color.parseColor("#1C1707"), strokeColor = Color.parseColor("#FBBF24"))
+            background = actionButtonDrawable(Color.parseColor("#19140A"), strokeColor = Color.parseColor("#A16207"))
             addView(
                 LinearLayout(context).apply {
                     orientation = LinearLayout.HORIZONTAL
                     gravity = Gravity.CENTER_VERTICAL
                     addView(
-                        ImageView(context).apply {
-                            setImageDrawable(tintedIcon(R.drawable.lucide_list_checks))
-                            contentDescription = "待保存脚本"
+                        FrameLayout(context).apply {
+                            background = actionButtonDrawable(Color.parseColor("#2A1D08"), strokeColor = Color.parseColor("#FBBF24"))
+                            addView(
+                                ImageView(context).apply {
+                                    setImageDrawable(tintedIcon(R.drawable.lucide_save))
+                                    contentDescription = "待保存脚本"
+                                },
+                                FrameLayout.LayoutParams(dp(16), dp(16), Gravity.CENTER),
+                            )
                         },
-                        LinearLayout.LayoutParams(dp(18), dp(18)).apply { marginEnd = dp(8) },
+                        LinearLayout.LayoutParams(dp(30), dp(30)).apply { marginEnd = dp(9) },
                     )
                     addView(
                         TextView(context).apply {
@@ -1780,14 +1901,35 @@ class NativeCodexBrowserView(
         }.joinToString(" · ")
         return LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(12), dp(12), dp(12), dp(12))
-            background = actionButtonDrawable(Color.parseColor("#111111"), strokeColor = Color.parseColor("#7F1D1D"))
+            setPadding(dp(12), dp(12), dp(12), dp(10))
+            background = actionButtonDrawable(Color.parseColor("#111111"), strokeColor = Color.parseColor("#3F1D1D"))
             addView(
-                TextView(context).apply {
-                    text = script.fileName
-                    setTextColor(Color.WHITE)
-                    textSize = 12f
-                    typeface = Typeface.DEFAULT_BOLD
+                LinearLayout(context).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                    addView(
+                        FrameLayout(context).apply {
+                            background = actionButtonDrawable(NativeUiPalette.accentSoft, strokeColor = NativeUiPalette.accent)
+                            addView(
+                                ImageView(context).apply {
+                                    setImageDrawable(tintedIcon(R.drawable.lucide_workflow))
+                                    contentDescription = "自动化流程"
+                                },
+                                FrameLayout.LayoutParams(dp(16), dp(16), Gravity.CENTER),
+                            )
+                        },
+                        LinearLayout.LayoutParams(dp(30), dp(30)).apply { marginEnd = dp(9) },
+                    )
+                    addView(
+                        TextView(context).apply {
+                            text = script.fileName
+                            setTextColor(Color.WHITE)
+                            textSize = 12.5f
+                            typeface = Typeface.DEFAULT_BOLD
+                            maxLines = 1
+                        },
+                        LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),
+                    )
                 },
             )
             if (script.description.isNotEmpty()) {
@@ -1867,14 +2009,35 @@ class NativeCodexBrowserView(
     ): View {
         return LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(12), dp(12), dp(12), dp(12))
-            background = actionButtonDrawable(Color.parseColor("#111111"), strokeColor = Color.parseColor("#FBBF24"))
+            setPadding(dp(12), dp(12), dp(12), dp(10))
+            background = actionButtonDrawable(Color.parseColor("#111111"), strokeColor = Color.parseColor("#5E460A"))
             addView(
-                TextView(context).apply {
-                    text = script.name
-                    setTextColor(Color.WHITE)
-                    textSize = 12f
-                    typeface = Typeface.DEFAULT_BOLD
+                LinearLayout(context).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                    addView(
+                        FrameLayout(context).apply {
+                            background = actionButtonDrawable(Color.parseColor("#2A210A"), strokeColor = Color.parseColor("#FBBF24"))
+                            addView(
+                                ImageView(context).apply {
+                                    setImageDrawable(tintedIcon(R.drawable.lucide_file_code))
+                                    contentDescription = "传统脚本"
+                                },
+                                FrameLayout.LayoutParams(dp(16), dp(16), Gravity.CENTER),
+                            )
+                        },
+                        LinearLayout.LayoutParams(dp(30), dp(30)).apply { marginEnd = dp(9) },
+                    )
+                    addView(
+                        TextView(context).apply {
+                            text = script.name
+                            setTextColor(Color.WHITE)
+                            textSize = 12.5f
+                            typeface = Typeface.DEFAULT_BOLD
+                            maxLines = 1
+                        },
+                        LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),
+                    )
                 },
             )
             if (script.description.isNotEmpty()) {
