@@ -75,16 +75,22 @@ jobs:
         id: restore_rootfs
         env:
           GH_TOKEN: ${{ github.token }}
+          BUILD_BUNDLED_ROOTFS: ${{ vars.BUILD_BUNDLED_ROOTFS }}
         run: |
           set -euo pipefail
           if bash scripts/fetch-prebuilt-rootfs-asset.sh --arch arm64 --release-tag basic-resource; then
             echo "restored=true" >> "$GITHUB_OUTPUT"
           else
             echo "restored=false" >> "$GITHUB_OUTPUT"
+            if [ "${BUILD_BUNDLED_ROOTFS:-false}" != "true" ]; then
+              echo "ERROR: prebuilt rootfs asset was not reusable for this source tree."
+              echo "Set repository variable BUILD_BUNDLED_ROOTFS=true only when intentionally rebuilding and publishing the rootfs asset."
+              exit 1
+            fi
           fi
 
       - name: Build bundled OpenClaw rootfs
-        if: ${{ steps.restore_rootfs.outputs.restored != 'true' }}
+        if: ${{ steps.restore_rootfs.outputs.restored != 'true' && vars.BUILD_BUNDLED_ROOTFS == 'true' }}
         run: |
           set -euo pipefail
           bash scripts/build-prebuilt-rootfs.sh --no-docker --arch arm64 --mirror http://mirrors.ustc.edu.cn/ubuntu-ports

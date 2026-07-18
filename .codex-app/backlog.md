@@ -3,6 +3,7 @@
 ## Priority Now
 - Device-smoke local `6.8 / 187` from `dist/github-run-29647690716/CiYuanXia-v6.8-187-arm64-v8a.apk`: ZIP digest matched GitHub artifact `sha256:189c6eaaee4c0af6d48c54bacc0bfbeb13fcbfbba1af7ec644426a99f42f6abc`, `unzip -t` passed, and APK SHA-256 is `df8144fa887bc8648684a5d0105e5b2be0ded157adfd0e8551b7b5213e0105c3`. Verify native browser script-library UI/function parity, pending draft stage/save/discard, saved automation run/rename/copy/delete, traditional script add/import/edit/run/delete/copy, and rounded browser controls.
 - Push/verify the GitHub-artifact-only workflow change: `.github/workflows/flutter-build.yml` no longer uploads APK parts to Gitee, so the next cloud build should finish after GitHub artifact upload instead of failing on Gitee timeout. Next build must use logical build `> 187`.
+- Resolve the prebuilt RootFS fingerprint mismatch before expecting the next APK cloud build to pass. Run `29651050217` logged `Prebuilt rootfs fingerprint mismatch` and was cancelled after the old workflow started rebuilding RootFS; the workflow now fails fast unless `BUILD_BUNDLED_ROOTFS=true` is intentionally set for a resource rebuild.
 - Device-smoke the unreleased local Codex pager multi-session controls and updated dual-workspace native script assistant after the next installable build; include pending draft stage/save/discard, saved automation run/rename/copy/delete, and traditional script add/import/edit/run/delete/copy. Do not cloud-build until the user asks.
 - Device-smoke the Codex pager/browser rounded icon-button pass after the next installable build: verify terminal header controls, browser nav/open/UA/more controls, inspector toggles, script-library tabs/actions, haptic feedback, and pressed/selected background changes on device.
 - Governance checkpoint (2026-07-18): project memory now records local GitHub artifact download for `6.8 / 187` and the workflow change away from Gitee delivery; stop feature churn until the installed candidate is device-smoked and promotion/signing decisions are recorded.
@@ -58,6 +59,7 @@
 
 ## Do Not Forget
 - Current local APK delivery path is GitHub Actions artifact -> local `dist/github-run-<run-id>/` download -> ZIP digest check -> `unzip -t` -> APK SHA-256 record. The main workflow no longer uploads APK parts to Gitee.
+- Ordinary APK cloud builds must reuse the prebuilt RootFS asset; do not allow hidden RootFS rebuilds in normal APK runs. Use `BUILD_BUNDLED_ROOTFS=true` only for an explicit RootFS resource rebuild/publish task.
 - Gitee token is configured as a GitHub Actions secret, but Gitee Release cannot host the current APK because the file exceeds the 100MB attachment limit, and split-branch upload timed out on run `29647690716`. Do not restore Gitee upload without a new explicit distribution strategy.
 - Device testing showed `5.7 / 176` can leave Codex unbound when the first and only shared API is created; use `5.8 / 177` or later for validating the configuration-save fix.
 - Keep app version/build number updated before every new cloud build.

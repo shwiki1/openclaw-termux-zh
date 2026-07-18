@@ -5,7 +5,7 @@ Last updated: 2026-07-18 UTC
 ## Current Truth
 - App: `次元虾` / package `com.agent.cyx`. Flutter Android shell + Kotlin native services + PRoot Ubuntu RootFS + legacy Node CLI.
 - Stack: Flutter/Dart Android shell, Kotlin native Android services, PRoot Ubuntu RootFS runtime, legacy Node.js CLI package.
-- Cloud build: `.github/workflows/flutter-build.yml` builds arm64-v8a APK, runs `flutter analyze --no-fatal-infos`, uploads the APK as GitHub artifact `ciyuanxia-apks`, and can publish a GitHub Release; it does not run `flutter test`. The Gitee split-parts upload step was removed locally on 2026-07-18 after repeated timeout risk.
+- Cloud build: `.github/workflows/flutter-build.yml` builds arm64-v8a APK, requires a reusable prebuilt RootFS by default, runs `flutter analyze --no-fatal-infos`, uploads the APK as GitHub artifact `ciyuanxia-apks`, and can publish a GitHub Release; it does not run `flutter test`. The Gitee split-parts upload step was removed locally on 2026-07-18 after repeated timeout risk, and default RootFS fallback rebuild was disabled after run `29651050217` hit a prebuilt fingerprint mismatch.
 - App version: published display `5.4`; latest GitHub artifact cloud candidate display `6.8`; source semantic anchor remains `2.5.0`.
 - Build number: published logical build `173`; latest GitHub artifact cloud candidate build `187`; next fresh cloud build must be greater than `187`.
 - Repository root: `/storage/emulated/0/ZeroTermux/开发/openclaw-termux-zh-5.5`.
@@ -27,6 +27,7 @@ Last updated: 2026-07-18 UTC
 - 2026-07-18 push/build: pushed native browser script-library UI/function parity work to existing GitHub branch `codex-terminal-ime-lag-fix` without creating a new branch/worktree. Initial run `29646867533` selected `6.7 / 186` and failed in Kotlin compilation because `NativeCodexBrowserView.kt` called `nativeRoundedStateDrawable(...)` without the required `Context` receiver. Follow-up fixed those calls to `context.nativeRoundedStateDrawable(...)` and changed workflow build-number discovery to include latest completed runs, so the retry did not reuse failed build `186`.
 - 2026-07-18 cloud candidate `6.8 / 187`: retry run `29647690716` selected `6.8 / 187`, passed Flutter analyze, Android arm64 build, APK PRoot verification, collection, and GitHub artifact upload. GitHub artifact is available, but the workflow failed at Gitee split-part upload due to the Gitee network being too slow for the 10-minute per-push timeout.
 - 2026-07-18 GitHub-artifact-only delivery change: removed the `Upload APK parts to Gitee transfer branch` step from `.github/workflows/flutter-build.yml`, added a Node test guard that the workflow publishes APK through GitHub artifacts only, and downloaded run `29647690716` locally to `dist/github-run-29647690716/`.
+- 2026-07-18 prebuilt RootFS fallback guard: pushed run `29651050217` for the GitHub-artifact-only workflow, then cancelled it after it revealed `Prebuilt rootfs fingerprint mismatch` and started rebuilding RootFS. The workflow now fails fast when the prebuilt RootFS asset is not reusable unless repository variable `BUILD_BUNDLED_ROOTFS=true` is explicitly set.
 - 2026-07-18 native script-library UI/function parity: `NativeCodexBrowserView` script assistant dialog now has a denser dark workbench header, clearer workspace counts, pending-draft card, improved empty states, and native handling for `browser_script_stage/save/run/rename/delete/clear_pending` plus `browser_user_script_list/save/delete` aliases. This keeps the native path closer to the old Flutter script assistant without creating a new branch/worktree.
 - 2026-07-18 memory sync: cloud run `29640675284` succeeded after the Gitee timeout work, producing `6.6 / 185`; branch name `codex-gitee-transfer-timeout-186` is a topic name, not the APK build number. Project memory previously lagged at `6.5 / 184` and has been corrected.
 - 2026-07-18 native Codex pager/browser rounded icon-button fix: `NativeTerminalPagerActivity` top actions are Lucide-style icon-only rounded buttons with selected/pressed states and `KEYBOARD_TAP` haptics. `NativeTerminalSessionView` keeps Codex shortcut keys rounded with press feedback. `NativeCodexBrowserView` browser nav/open/UA/more/inspector/script-library actions are icon-first rounded controls with haptics, while script-library tabs use selected rounded states.
@@ -45,6 +46,7 @@ Last updated: 2026-07-18 UTC
 
 ## Cloud Build Status
 - Latest requested cloud build: GitHub Actions run `29647690716` completed with workflow conclusion `failure`, but the installable APK artifact was successfully produced and uploaded to GitHub. It selected logical build `187`, semantic `6.8.0`, display `6.8`, APK `CiYuanXia-v6.8-187-arm64-v8a.apk`, artifact ID `8430713820`, digest `sha256:189c6eaaee4c0af6d48c54bacc0bfbeb13fcbfbba1af7ec644426a99f42f6abc`. Gitee branch `apk-transfer-29647690716` was created with the manifest, then part `1/7` timed out after 10 minutes at about 8.37 MiB uploaded. Do not call this a full Gitee-delivered build.
+- Cancelled workflow-only run: GitHub Actions run `29651050217` on remote SHA `5403e945357cbda8351eceb6b648c7fde012e89d` was cancelled after `Restore bundled OpenClaw rootfs` reported `Prebuilt rootfs fingerprint mismatch` and the old workflow started rebuilding RootFS. It produced no APK artifact. Use it as evidence that default RootFS fallback must remain disabled unless intentionally rebuilding resources.
 - Latest published release: `5.4 / 173`.
 - Latest GitHub artifact candidate: `6.8 / 187`.
 - Latest fully Gitee-delivered candidate: `6.6 / 185`.
@@ -54,6 +56,7 @@ Last updated: 2026-07-18 UTC
 
 ## Risks And Blockers
 - Gitee split-part upload was removed from the main APK workflow after timeout on run `29647690716`; do not restore it without a new explicit distribution strategy.
+- Prebuilt RootFS release asset currently mismatches the source-tree fingerprint used by run `29651050217`; a future cloud build will now fail fast instead of silently rebuilding RootFS unless `BUILD_BUNDLED_ROOTFS=true` is intentionally set.
 - Native script assistant now handles native `browser_script_stage` pending drafts, but existing Flutter-side in-memory drafts from the old `TerminalBrowserPanel` are still separate if that fallback panel is used in the same session.
 - Device smoke still required for multi-session and script-library interactions.
 - Branch topology remains divergent; promotion must name exact remote SHA.
