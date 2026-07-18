@@ -763,7 +763,7 @@ class NativeCodexBrowserView(
         }
 
     private fun controlStateDrawable(normalColor: Int, pressedColor: Int, strokeColor: Int? = null) =
-        nativeRoundedStateDrawable(
+        context.nativeRoundedStateDrawable(
             normalColor = normalColor,
             pressedColor = pressedColor,
             strokeColor = strokeColor,
@@ -850,7 +850,7 @@ class NativeCodexBrowserView(
         uaButton.gravity = Gravity.CENTER
         uaButton.minHeight = dp(30)
         uaButton.setPadding(dp(8), 0, dp(8), 0)
-        uaButton.background = nativeRoundedStateDrawable(
+        uaButton.background = context.nativeRoundedStateDrawable(
             normalColor = NativeUiPalette.surfaceRaised,
             pressedColor = NativeUiPalette.borderStrong,
             selectedColor = Color.parseColor("#29F59E0B"),
@@ -883,7 +883,7 @@ class NativeCodexBrowserView(
                     isFocusable = true
                     isHapticFeedbackEnabled = true
                     isSelected = index == activeTabIndex
-                    background = nativeRoundedStateDrawable(
+                    background = context.nativeRoundedStateDrawable(
                         normalColor = NativeUiPalette.surfaceAlt,
                         pressedColor = NativeUiPalette.borderStrong,
                         selectedColor = NativeUiPalette.accentSoft,
@@ -1001,7 +1001,7 @@ class NativeCodexBrowserView(
         inspectorLinksButton.text = ""
         inspectorElementsButton.isSelected = inspectorMode == NativeBrowserInspectorMode.INTERACTABLES
         inspectorLinksButton.isSelected = inspectorMode == NativeBrowserInspectorMode.LINKS
-        inspectorElementsButton.background = nativeRoundedStateDrawable(
+        inspectorElementsButton.background = context.nativeRoundedStateDrawable(
             normalColor = NativeUiPalette.surfaceAlt,
             pressedColor = NativeUiPalette.borderStrong,
             selectedColor = NativeUiPalette.accentSoft,
@@ -1010,7 +1010,7 @@ class NativeCodexBrowserView(
             selectedStrokeColor = NativeUiPalette.accent,
             radiusDp = 8,
         )
-        inspectorLinksButton.background = nativeRoundedStateDrawable(
+        inspectorLinksButton.background = context.nativeRoundedStateDrawable(
             normalColor = NativeUiPalette.surfaceAlt,
             pressedColor = NativeUiPalette.borderStrong,
             selectedColor = NativeUiPalette.accentSoft,
@@ -1518,7 +1518,7 @@ class NativeCodexBrowserView(
             workspaceIndex = if (index == 1) 1 else 0
             automationTab.isSelected = workspaceIndex == 0
             userTab.isSelected = workspaceIndex == 1
-            automationTab.background = nativeRoundedStateDrawable(
+            automationTab.background = context.nativeRoundedStateDrawable(
                 normalColor = NativeUiPalette.surfaceAlt,
                 pressedColor = NativeUiPalette.borderStrong,
                 selectedColor = NativeUiPalette.accentSoft,
@@ -1530,7 +1530,7 @@ class NativeCodexBrowserView(
             automationTab.setTextColor(
                 if (workspaceIndex == 0) NativeUiPalette.accent else NativeUiPalette.textPrimary,
             )
-            userTab.background = nativeRoundedStateDrawable(
+            userTab.background = context.nativeRoundedStateDrawable(
                 normalColor = NativeUiPalette.surfaceAlt,
                 pressedColor = NativeUiPalette.borderStrong,
                 selectedColor = Color.parseColor("#3A2A08"),

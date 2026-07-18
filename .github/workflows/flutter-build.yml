@@ -218,7 +218,7 @@ jobs:
               --event push \
               --json databaseId,status,conclusion \
               --limit 10 \
-              --jq '.[] | select(.status == "completed" and .conclusion == "success") | .databaseId' \
+              --jq '.[] | select(.status == "completed") | .databaseId' \
               | while read -r run_id; do
                   [ -n "$run_id" ] || continue
                   build="$(
@@ -236,7 +236,7 @@ jobs:
             echo "WARNING: Unable to determine the latest successful workflow Android build from recent logs."
             LATEST_WORKFLOW_BUILD=0
           fi
-          echo "Detected latest successful workflow Android build: ${LATEST_WORKFLOW_BUILD}"
+          echo "Detected latest completed workflow Android build: ${LATEST_WORKFLOW_BUILD}"
           LATEST_KNOWN_BUILD="$LATEST_RELEASE_BUILD"
           if [ "${LATEST_WORKFLOW_BUILD}" -gt "${LATEST_KNOWN_BUILD}" ]; then
             LATEST_KNOWN_BUILD="${LATEST_WORKFLOW_BUILD}"
