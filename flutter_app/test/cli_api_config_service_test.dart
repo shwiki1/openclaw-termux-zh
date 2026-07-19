@@ -216,7 +216,7 @@ void main() {
 
     final auth = jsonDecode(rootfsFiles['/root/.codex/auth.json']!)
         as Map<String, dynamic>;
-    expect(auth['auth_mode'], 'apikey');
+    expect(auth.containsKey('auth_mode'), isFalse);
     expect(auth['OPENAI_API_KEY'], 'sk-test');
   });
 

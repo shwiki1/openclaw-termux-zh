@@ -174,14 +174,7 @@ npm config set registry https://registry.npmmirror.com --global >/dev/null 2>&1 
 
 ensure_cli_workspace() {
   [ -r /root/.openclaw/cli-env.sh ] && . /root/.openclaw/cli-env.sh
-  mkdir -p \
-    "${OPENCLAW_CLI_WORKSPACE:-/root/openclaw-cli-workspace}" \
-    "${OPENCLAW_CLI_PROJECTS:-/root/openclaw-cli-workspace/projects}" \
-    "${OPENCLAW_CLI_SCRATCH:-/root/openclaw-cli-workspace/scratch}" \
-    "${OPENCLAW_CLI_WORKSPACE:-/root/openclaw-cli-workspace}/.gemini" \
-    "${OPENCLAW_CLI_WORKSPACE:-/root/openclaw-cli-workspace}/.gen-cli" \
-    "${OPENCLAW_CLI_WORKSPACE:-/root/openclaw-cli-workspace}/.agents/skills" \
-    2>/dev/null || true
+  mkdir -p "${OPENCLAW_CLI_WORKSPACE:-/root/openclaw-cli-workspace}" "${OPENCLAW_CLI_PROJECTS:-/root/openclaw-cli-workspace/projects}" "${OPENCLAW_CLI_SCRATCH:-/root/openclaw-cli-workspace/scratch}" "${OPENCLAW_CLI_WORKSPACE:-/root/openclaw-cli-workspace}/.gemini" "${OPENCLAW_CLI_WORKSPACE:-/root/openclaw-cli-workspace}/.gen-cli" "${OPENCLAW_CLI_WORKSPACE:-/root/openclaw-cli-workspace}/.agents/skills" 2>/dev/null || true
 }
 
 python_pip_mirror_candidates() {
@@ -373,14 +366,7 @@ export NODE_EXTRA_CA_CERTS="${NODE_EXTRA_CA_CERTS:-/etc/ssl/certs/ca-certificate
 export TMPDIR="${TMPDIR:-/tmp}"
 [ -r /root/.openclaw/terminal-theme.sh ] && . /root/.openclaw/terminal-theme.sh
 [ -r /root/.openclaw/cli-env.sh ] && . /root/.openclaw/cli-env.sh
-mkdir -p \
-  "${OPENCLAW_CLI_WORKSPACE:-/root/openclaw-cli-workspace}" \
-  "${OPENCLAW_CLI_PROJECTS:-/root/openclaw-cli-workspace/projects}" \
-  "${OPENCLAW_CLI_SCRATCH:-/root/openclaw-cli-workspace/scratch}" \
-  "${OPENCLAW_CLI_WORKSPACE:-/root/openclaw-cli-workspace}/.gemini" \
-  "${OPENCLAW_CLI_WORKSPACE:-/root/openclaw-cli-workspace}/.gen-cli" \
-  "${OPENCLAW_CLI_WORKSPACE:-/root/openclaw-cli-workspace}/.agents/skills" \
-  2>/dev/null || true
+mkdir -p "${OPENCLAW_CLI_WORKSPACE:-/root/openclaw-cli-workspace}" "${OPENCLAW_CLI_PROJECTS:-/root/openclaw-cli-workspace/projects}" "${OPENCLAW_CLI_SCRATCH:-/root/openclaw-cli-workspace/scratch}" "${OPENCLAW_CLI_WORKSPACE:-/root/openclaw-cli-workspace}/.gemini" "${OPENCLAW_CLI_WORKSPACE:-/root/openclaw-cli-workspace}/.gen-cli" "${OPENCLAW_CLI_WORKSPACE:-/root/openclaw-cli-workspace}/.agents/skills" 2>/dev/null || true
 cd "${OPENCLAW_CLI_WORKSPACE:-/root/openclaw-cli-workspace}" 2>/dev/null || cd /root
 OPENCLAW_WRAPPER_HEADER
 }
@@ -873,14 +859,7 @@ if [ -r /root/.hermes/.env ]; then
   . /root/.hermes/.env
   set +a
 fi
-mkdir -p \
-  "${OPENCLAW_CLI_WORKSPACE:-/root/openclaw-cli-workspace}" \
-  "${OPENCLAW_CLI_PROJECTS:-/root/openclaw-cli-workspace/projects}" \
-  "${OPENCLAW_CLI_SCRATCH:-/root/openclaw-cli-workspace/scratch}" \
-  "${OPENCLAW_CLI_WORKSPACE:-/root/openclaw-cli-workspace}/.gemini" \
-  "${OPENCLAW_CLI_WORKSPACE:-/root/openclaw-cli-workspace}/.gen-cli" \
-  "${OPENCLAW_CLI_WORKSPACE:-/root/openclaw-cli-workspace}/.agents/skills" \
-  2>/dev/null || true
+mkdir -p "${OPENCLAW_CLI_WORKSPACE:-/root/openclaw-cli-workspace}" "${OPENCLAW_CLI_PROJECTS:-/root/openclaw-cli-workspace/projects}" "${OPENCLAW_CLI_SCRATCH:-/root/openclaw-cli-workspace/scratch}" "${OPENCLAW_CLI_WORKSPACE:-/root/openclaw-cli-workspace}/.gemini" "${OPENCLAW_CLI_WORKSPACE:-/root/openclaw-cli-workspace}/.gen-cli" "${OPENCLAW_CLI_WORKSPACE:-/root/openclaw-cli-workspace}/.agents/skills" 2>/dev/null || true
 cd "${OPENCLAW_CLI_WORKSPACE:-/root/openclaw-cli-workspace}" 2>/dev/null || cd /root
 HERMES_VENV=/opt/openclaw-cli/hermes-agent/venv
 if [ -x "$HERMES_VENV/bin/python" ]; then
@@ -959,8 +938,7 @@ except Exception:
     data = {}
 
 data = {key: value for key, value in data.items()
-        if key in ("auth_mode", "OPENAI_API_KEY")}
-data["auth_mode"] = "apikey"
+        if key == "OPENAI_API_KEY"}
 data["OPENAI_API_KEY"] = api_key
 
 tmp_path = f"{path}.tmp"
@@ -981,7 +959,7 @@ const fs = require("fs");
 const path = process.env.CODEX_AUTH_FILE || "/root/.codex/auth.json";
 const apiKey = (process.env.OPENAI_API_KEY || "").trim();
 if (!apiKey) process.exit(0);
-const data = { auth_mode: "apikey", OPENAI_API_KEY: apiKey };
+const data = { OPENAI_API_KEY: apiKey };
 fs.writeFileSync(`${path}.tmp`, `${JSON.stringify(data, null, 2)}\n`, {
   mode: 0o600,
 });

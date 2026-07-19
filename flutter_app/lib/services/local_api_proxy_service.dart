@@ -76,17 +76,13 @@ class LocalApiProxyService {
 
   static Future<String> restart() async {
     await installBundledFiles();
-    await NativeBridge.runInProot(
-      '''
-cd $guestDir 2>/dev/null && bash stop.sh || true
-''',
-      timeout: 15,
-    );
+    await NativeBridge.stopLocalApiProxy();
+    await Future<void>.delayed(const Duration(milliseconds: 800));
     return _startInstalled(restarted: true);
   }
 
   static Future<String> _startInstalled({bool restarted = false}) async {
-    final command = '''
+    final verifyCommand = '''
 set -e
 cd $guestDir
 mkdir -p data/sessions
@@ -104,15 +100,9 @@ for module in ('starlette', 'uvicorn', 'httpx', 'aiosqlite'):
 if missing:
     raise SystemExit(1)
 PY
-bash start.sh
-curl -s --max-time 3 http://127.0.0.1:9999/api/health >/dev/null
-curl -fsS --max-time 3 http://127.0.0.1:9999/ >/dev/null
-curl -fsS --max-time 3 http://127.0.0.1:9999/static/lib/tailwind.js >/dev/null
-curl -fsS --max-time 3 http://127.0.0.1:9999/static/lib/lucide.js >/dev/null
-echo '${restarted ? '本地中转代理已重启' : '本地中转代理已启动'}：http://127.0.0.1:9999/'
 ''';
     try {
-      return await NativeBridge.runInProot(command, timeout: 30);
+      await NativeBridge.runInProot(verifyCommand, timeout: 30);
     } catch (_) {
       final installCommand = '''
 set -e
@@ -135,15 +125,9 @@ python3 - <<'PY'
 for module in ('starlette', 'uvicorn', 'httpx', 'aiosqlite'):
     __import__(module)
 PY
-bash start.sh
-curl -s --max-time 3 http://127.0.0.1:9999/api/health >/dev/null
-curl -fsS --max-time 3 http://127.0.0.1:9999/ >/dev/null
-curl -fsS --max-time 3 http://127.0.0.1:9999/static/lib/tailwind.js >/dev/null
-curl -fsS --max-time 3 http://127.0.0.1:9999/static/lib/lucide.js >/dev/null
-echo '本地中转代理依赖已安装并${restarted ? '重启' : '启动'}：http://127.0.0.1:9999/'
 ''';
       try {
-        return await NativeBridge.runInProot(installCommand, timeout: 300);
+        await NativeBridge.runInProot(installCommand, timeout: 300);
       } catch (error, stackTrace) {
         final logTail = await _serverLogTail();
         if (logTail.trim().isEmpty) {
@@ -155,6 +139,29 @@ echo '本地中转代理依赖已安装并${restarted ? '重启' : '启动'}：h
         );
       }
     }
+    await NativeBridge.startLocalApiProxy();
+    return _waitUntilReady(restarted: restarted);
+  }
+
+  static Future<String> _waitUntilReady({required bool restarted}) async {
+    LocalApiProxyStatus last = const LocalApiProxyStatus(
+      running: false,
+      manageable: false,
+      message: '代理正在启动。',
+    );
+    for (var attempt = 0; attempt < 30; attempt += 1) {
+      await Future<void>.delayed(const Duration(milliseconds: 700));
+      last = await status();
+      if (last.manageable) {
+        return '${restarted ? '本地中转代理已重启' : '本地中转代理已启动'}：$url';
+      }
+      if (!await NativeBridge.isLocalApiProxyRunning() && attempt > 3) {
+        break;
+      }
+    }
+    final logTail = await _serverLogTail();
+    final suffix = logTail.trim().isEmpty ? '' : '\n\n$logTail';
+    throw StateError('${last.message}$suffix');
   }
 
   static String _errorText(Object error) {

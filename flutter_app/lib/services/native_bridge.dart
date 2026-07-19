@@ -72,6 +72,18 @@ class NativeBridge {
     return await _channel.invokeMethod('stopGateway');
   }
 
+  static Future<bool> startLocalApiProxy() async {
+    return await _channel.invokeMethod('startLocalApiProxy');
+  }
+
+  static Future<bool> stopLocalApiProxy() async {
+    return await _channel.invokeMethod('stopLocalApiProxy');
+  }
+
+  static Future<bool> isLocalApiProxyRunning() async {
+    return await _channel.invokeMethod('isLocalApiProxyRunning');
+  }
+
   static Future<bool> isGatewayRunning() async {
     return await _channel.invokeMethod('isGatewayRunning');
   }

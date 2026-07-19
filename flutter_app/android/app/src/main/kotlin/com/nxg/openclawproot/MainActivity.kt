@@ -185,6 +185,25 @@ class MainActivity : FlutterActivity() {
                         }
                     }.start()
                 }
+                "startLocalApiProxy" -> {
+                    try {
+                        LocalApiProxyForegroundService.start(applicationContext)
+                        result.success(true)
+                    } catch (e: Exception) {
+                        result.error("SERVICE_ERROR", e.message, null)
+                    }
+                }
+                "stopLocalApiProxy" -> {
+                    try {
+                        LocalApiProxyForegroundService.stop(applicationContext)
+                        result.success(true)
+                    } catch (e: Exception) {
+                        result.error("SERVICE_ERROR", e.message, null)
+                    }
+                }
+                "isLocalApiProxyRunning" -> {
+                    result.success(LocalApiProxyForegroundService.isRunning)
+                }
                 "isGatewayRunning" -> {
                     Thread {
                         try {

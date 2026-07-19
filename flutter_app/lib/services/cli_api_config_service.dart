@@ -1638,7 +1638,6 @@ esac
             ? 'openclaw-local-proxy'
             : '';
     return '${const JsonEncoder.withIndent('  ').convert(<String, dynamic>{
-          if (useApiAuth) 'auth_mode': 'apikey',
           if (effectiveApiKey.isNotEmpty) 'OPENAI_API_KEY': effectiveApiKey,
         })}\n';
   }
@@ -3309,17 +3308,7 @@ export TMPDIR="\${TMPDIR:-/tmp}"
 [ -r /root/.openclaw/terminal-theme.sh ] && . /root/.openclaw/terminal-theme.sh
 [ -r /root/.openclaw/cli-env.sh ] && . /root/.openclaw/cli-env.sh
 [ -r $toolEnvPath ] && . $toolEnvPath
-mkdir -p \
-  "\${OPENCLAW_CLI_WORKSPACE:-$cliWorkspacePath}" \
-  "\${OPENCLAW_CLI_PROJECTS:-$_cliWorkspaceProjectsPath}" \
-  "\${OPENCLAW_CLI_SCRATCH:-$_cliWorkspaceScratchPath}" \
-  "\${OPENCLAW_CLI_WORKSPACE:-$cliWorkspacePath}/.gemini" \
-  "\${OPENCLAW_CLI_WORKSPACE:-$cliWorkspacePath}/.gen-cli" \
-  "\${OPENCLAW_CLI_WORKSPACE:-$cliWorkspacePath}/.agents/skills" \
-  "\${CODEX_HOME:-/root/.codex}" \
-  "\${GEMINI_CONFIG_DIR:-/root/.gemini}" \
-  "\${XDG_CONFIG_HOME:-/root/.config}" \
-  2>/dev/null || true
+mkdir -p "\${OPENCLAW_CLI_WORKSPACE:-$cliWorkspacePath}" "\${OPENCLAW_CLI_PROJECTS:-$_cliWorkspaceProjectsPath}" "\${OPENCLAW_CLI_SCRATCH:-$_cliWorkspaceScratchPath}" "\${OPENCLAW_CLI_WORKSPACE:-$cliWorkspacePath}/.gemini" "\${OPENCLAW_CLI_WORKSPACE:-$cliWorkspacePath}/.gen-cli" "\${OPENCLAW_CLI_WORKSPACE:-$cliWorkspacePath}/.agents/skills" "\${CODEX_HOME:-/root/.codex}" "\${GEMINI_CONFIG_DIR:-/root/.gemini}" "\${XDG_CONFIG_HOME:-/root/.config}" 2>/dev/null || true
 cd "\${OPENCLAW_CLI_WORKSPACE:-$cliWorkspacePath}" 2>/dev/null || cd /root
 ''';
   }
@@ -3369,8 +3358,7 @@ except Exception:
     data = {}
 
 data = {key: value for key, value in data.items()
-        if key in ("auth_mode", "OPENAI_API_KEY")}
-data["auth_mode"] = "apikey"
+        if key == "OPENAI_API_KEY"}
 data["OPENAI_API_KEY"] = api_key
 
 tmp_path = f"{path}.tmp"
@@ -3391,7 +3379,7 @@ const fs = require("fs");
 const path = process.env.CODEX_AUTH_FILE || "/root/.codex/auth.json";
 const apiKey = (process.env.OPENAI_API_KEY || "").trim();
 if (!apiKey) process.exit(0);
-const data = { auth_mode: "apikey", OPENAI_API_KEY: apiKey };
+const data = { OPENAI_API_KEY: apiKey };
 fs.writeFileSync(`\${path}.tmp`, `\${JSON.stringify(data, null, 2)}\n`, {
   mode: 0o600,
 });
