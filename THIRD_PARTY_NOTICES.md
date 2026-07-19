@@ -112,11 +112,13 @@ installers that fetch them into the Ubuntu rootfs at runtime under
 - Version: 4.3.2.
 - License: MIT.
 - Used as: local browser-side Tailwind runtime for the floating WebView file
-  manager frontend.
+  manager frontend and bundled api2py management frontend.
 - Upstream: https://github.com/tailwindlabs/tailwindcss/tree/main/packages/@tailwindcss-browser
 - Source for distributed binary: npm package `@tailwindcss/browser@4.3.2`.
 - Modifications: none; `dist/index.global.js` is copied into
-  `flutter_app/android/app/src/main/assets/file-manager/vendor/tailwind-browser.js`.
+  `flutter_app/android/app/src/main/assets/file-manager/vendor/tailwind-browser.js`
+  and api2py's local `tailwind.js` copy is bundled at
+  `flutter_app/assets/api2py/public/static/lib/tailwind.js`.
 - Required notices: license text is preserved in
   `flutter_app/android/app/src/main/assets/file-manager/vendor/licenses/tailwindcss-browser-LICENSE`.
 
@@ -125,11 +127,13 @@ installers that fetch them into the Ubuntu rootfs at runtime under
 - Version: 1.23.0.
 - License: ISC.
 - Used as: local UMD icon runtime for the floating WebView file manager
-  frontend.
+  frontend and bundled api2py management frontend.
 - Upstream: https://github.com/lucide-icons/lucide/tree/main/packages/lucide
 - Source for distributed binary: npm package `lucide@1.23.0`.
 - Modifications: none; `dist/umd/lucide.min.js` is copied into
-  `flutter_app/android/app/src/main/assets/file-manager/vendor/lucide.min.js`.
+  `flutter_app/android/app/src/main/assets/file-manager/vendor/lucide.min.js`
+  and api2py's local `lucide.js` copy is bundled at
+  `flutter_app/assets/api2py/public/static/lib/lucide.js`.
 - Required notices: license text is preserved in
   `flutter_app/android/app/src/main/assets/file-manager/vendor/licenses/lucide-LICENSE`.
 

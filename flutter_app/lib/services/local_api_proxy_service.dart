@@ -12,15 +12,60 @@ class LocalApiProxyService {
   static const guestDir = '/root/.openclaw/api2py';
   static const url = 'http://127.0.0.1:9999/';
   static const healthUrl = 'http://127.0.0.1:9999/api/health';
+  static const tailwindUrl = 'http://127.0.0.1:9999/static/lib/tailwind.js';
+  static const lucideUrl = 'http://127.0.0.1:9999/static/lib/lucide.js';
 
   static Future<bool> isRunning() async {
+    return (await status()).running;
+  }
+
+  static Future<LocalApiProxyStatus> status() async {
     try {
-      final response = await http
+      final health = await http
           .get(Uri.parse(healthUrl))
           .timeout(const Duration(seconds: 2));
-      return response.statusCode >= 200 && response.statusCode < 500;
-    } catch (_) {
-      return false;
+      if (health.statusCode < 200 || health.statusCode >= 500) {
+        return LocalApiProxyStatus(
+          running: false,
+          manageable: false,
+          message: '健康检查异常：HTTP ${health.statusCode}',
+        );
+      }
+      final page = await http
+          .get(Uri.parse(url))
+          .timeout(const Duration(seconds: 2));
+      if (page.statusCode < 200 || page.statusCode >= 400) {
+        return LocalApiProxyStatus(
+          running: true,
+          manageable: false,
+          message: '代理运行中，但管理页异常：HTTP ${page.statusCode}',
+        );
+      }
+      final tailwind = await http
+          .get(Uri.parse(tailwindUrl))
+          .timeout(const Duration(seconds: 2));
+      final lucide = await http
+          .get(Uri.parse(lucideUrl))
+          .timeout(const Duration(seconds: 2));
+      if (tailwind.statusCode != 200 || lucide.statusCode != 200) {
+        return LocalApiProxyStatus(
+          running: true,
+          manageable: false,
+          message:
+              '代理运行中，但管理页静态资源缺失：tailwind ${tailwind.statusCode}, lucide ${lucide.statusCode}',
+        );
+      }
+      return const LocalApiProxyStatus(
+        running: true,
+        manageable: true,
+        message: '代理运行正常，管理页可访问。',
+      );
+    } catch (error) {
+      return LocalApiProxyStatus(
+        running: false,
+        manageable: false,
+        message: '代理未响应：$error',
+      );
     }
   }
 
@@ -61,6 +106,9 @@ if missing:
 PY
 bash start.sh
 curl -s --max-time 3 http://127.0.0.1:9999/api/health >/dev/null
+curl -fsS --max-time 3 http://127.0.0.1:9999/ >/dev/null
+curl -fsS --max-time 3 http://127.0.0.1:9999/static/lib/tailwind.js >/dev/null
+curl -fsS --max-time 3 http://127.0.0.1:9999/static/lib/lucide.js >/dev/null
 echo '${restarted ? '本地中转代理已重启' : '本地中转代理已启动'}：http://127.0.0.1:9999/'
 ''';
     try {
@@ -89,6 +137,9 @@ for module in ('starlette', 'uvicorn', 'httpx', 'aiosqlite'):
 PY
 bash start.sh
 curl -s --max-time 3 http://127.0.0.1:9999/api/health >/dev/null
+curl -fsS --max-time 3 http://127.0.0.1:9999/ >/dev/null
+curl -fsS --max-time 3 http://127.0.0.1:9999/static/lib/tailwind.js >/dev/null
+curl -fsS --max-time 3 http://127.0.0.1:9999/static/lib/lucide.js >/dev/null
 echo '本地中转代理依赖已安装并${restarted ? '重启' : '启动'}：http://127.0.0.1:9999/'
 ''';
       try {
@@ -168,6 +219,8 @@ fi
       'app/config.py',
       'app/main.py',
       'public/static/index.html',
+      'public/static/lib/tailwind.js',
+      'public/static/lib/lucide.js',
     ];
     final missing = requiredFiles
         .where((path) => !File('${targetRoot.path}/$path').existsSync())
@@ -178,4 +231,16 @@ fi
       );
     }
   }
+}
+
+class LocalApiProxyStatus {
+  const LocalApiProxyStatus({
+    required this.running,
+    required this.manageable,
+    required this.message,
+  });
+
+  final bool running;
+  final bool manageable;
+  final String message;
 }

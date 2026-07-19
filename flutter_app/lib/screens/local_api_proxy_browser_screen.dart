@@ -21,19 +21,52 @@ class _LocalApiProxyBrowserScreenState
   bool _loading = true;
   bool _canGoBack = false;
   bool _canGoForward = false;
+  String _serviceMessage = '正在连接本地中转代理...';
 
   @override
   void initState() {
     super.initState();
     _addressController = TextEditingController(text: LocalApiProxyService.url);
     _controller = _createController();
-    unawaited(_controller.loadRequest(Uri.parse(LocalApiProxyService.url)));
+    unawaited(_openManagerWhenReady());
   }
 
   @override
   void dispose() {
     _addressController.dispose();
     super.dispose();
+  }
+
+  Future<void> _openManagerWhenReady() async {
+    setState(() {
+      _loading = true;
+      _serviceMessage = '正在检查本地中转代理...';
+    });
+    var status = await LocalApiProxyService.status();
+    if (!status.manageable) {
+      setState(() => _serviceMessage = '正在启动本地中转代理...');
+      try {
+        await LocalApiProxyService.start();
+      } catch (error) {
+        if (!mounted) return;
+        setState(() {
+          _loading = false;
+          _serviceMessage = '启动失败：$error';
+        });
+        return;
+      }
+      status = await LocalApiProxyService.status();
+    }
+    if (!mounted) return;
+    if (!status.manageable) {
+      setState(() {
+        _loading = false;
+        _serviceMessage = status.message;
+      });
+      return;
+    }
+    setState(() => _serviceMessage = status.message);
+    await _controller.loadRequest(Uri.parse(LocalApiProxyService.url));
   }
 
   WebViewController _createController() {
@@ -151,7 +184,51 @@ class _LocalApiProxyBrowserScreenState
               ),
             ),
           ),
-          Expanded(child: WebViewWidget(controller: _controller)),
+          if (_serviceMessage.isNotEmpty)
+            Material(
+              color: theme.colorScheme.surfaceContainerHighest,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                child: Row(
+                  children: [
+                    Icon(
+                      _serviceMessage.contains('正常')
+                          ? Icons.check_circle_outline
+                          : Icons.info_outline,
+                      size: 16,
+                      color: _serviceMessage.contains('正常')
+                          ? Colors.green
+                          : theme.colorScheme.onSurfaceVariant,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        _serviceMessage,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodySmall,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          Expanded(
+            child: _serviceMessage.startsWith('启动失败') ||
+                    _serviceMessage.contains('未响应') ||
+                    _serviceMessage.contains('异常') ||
+                    _serviceMessage.contains('缺失')
+                ? Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(20),
+                      child: SelectableText(
+                        _serviceMessage,
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  )
+                : WebViewWidget(controller: _controller),
+          ),
         ],
       ),
     );

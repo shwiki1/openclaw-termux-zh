@@ -28,6 +28,7 @@ export default [
       'dist/',
       '.tmp/',
       '.tmp-*/',
+      'flutter_app/assets/api2py/public/static/lib/',
       'flutter_app/build/',
       'flutter_app/.dart_tool/',
     ],

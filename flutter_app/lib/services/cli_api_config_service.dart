@@ -881,16 +881,7 @@ openclaw_kill_codex_proxy_port
       'export FORCE_COLOR=1',
       'export TMPDIR="\${TMPDIR:-/tmp}"',
       'export PATH=${_shQuote(_managedCliBinDir)}:/usr/local/bin:/usr/bin:/bin:\${PATH:-}',
-      'mkdir -p "\${OPENCLAW_CLI_WORKSPACE:-$cliWorkspacePath}" '
-      '"\${OPENCLAW_CLI_PROJECTS:-$_cliWorkspaceProjectsPath}" '
-      '"\${OPENCLAW_CLI_SCRATCH:-$_cliWorkspaceScratchPath}" '
-      '"\${OPENCLAW_CLI_WORKSPACE:-$cliWorkspacePath}/.gemini" '
-      '"\${OPENCLAW_CLI_WORKSPACE:-$cliWorkspacePath}/.gen-cli" '
-      '"\${OPENCLAW_CLI_WORKSPACE:-$cliWorkspacePath}/.agents/skills" '
-      '"\${CODEX_HOME:-/root/.codex}" '
-      '"\${GEMINI_CONFIG_DIR:-/root/.gemini}" '
-      '"\${XDG_CONFIG_HOME:-/root/.config}" '
-      '2>/dev/null || true',
+      'mkdir -p "\${OPENCLAW_CLI_WORKSPACE:-$cliWorkspacePath}" "\${OPENCLAW_CLI_PROJECTS:-$_cliWorkspaceProjectsPath}" "\${OPENCLAW_CLI_SCRATCH:-$_cliWorkspaceScratchPath}" "\${OPENCLAW_CLI_WORKSPACE:-$cliWorkspacePath}/.gemini" "\${OPENCLAW_CLI_WORKSPACE:-$cliWorkspacePath}/.gen-cli" "\${OPENCLAW_CLI_WORKSPACE:-$cliWorkspacePath}/.agents/skills" "\${CODEX_HOME:-/root/.codex}" "\${GEMINI_CONFIG_DIR:-/root/.gemini}" "\${XDG_CONFIG_HOME:-/root/.config}" 2>/dev/null || true',
       '',
     ].join('\n');
   }
@@ -1272,6 +1263,8 @@ esac
         ..add('export DASHSCOPE_API_KEY=${_shQuote(apiKey)}')
         ..add('export CODEBUDDY_API_KEY=${_shQuote(apiKey)}')
         ..add('export CHINESE_LLM_API_KEY=${_shQuote(apiKey)}');
+    } else if (toolId == 'codex' && openAiBaseUrl.isNotEmpty) {
+      lines.add('export OPENAI_API_KEY=${_shQuote('openclaw-local-proxy')}');
     }
     if (openAiBaseUrl.isNotEmpty) {
       lines
@@ -1639,9 +1632,14 @@ esac
   static String _buildCodexAuthJson(CliApiConfig codex) {
     final apiKey = codex.apiKey.trim();
     final useApiAuth = _shouldManageToolRuntime(codex) || apiKey.isNotEmpty;
+    final effectiveApiKey = apiKey.isNotEmpty
+        ? apiKey
+        : useApiAuth
+            ? 'openclaw-local-proxy'
+            : '';
     return '${const JsonEncoder.withIndent('  ').convert(<String, dynamic>{
           if (useApiAuth) 'auth_mode': 'apikey',
-          if (apiKey.isNotEmpty) 'OPENAI_API_KEY': apiKey,
+          if (effectiveApiKey.isNotEmpty) 'OPENAI_API_KEY': effectiveApiKey,
         })}\n';
   }
 

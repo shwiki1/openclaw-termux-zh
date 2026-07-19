@@ -484,7 +484,25 @@ class _LocalApiProxyDialog extends StatefulWidget {
 
 class _LocalApiProxyDialogState extends State<_LocalApiProxyDialog> {
   bool _starting = false;
+  bool _checking = true;
+  LocalApiProxyStatus? _proxyStatus;
   String _status = '';
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_refreshStatus());
+  }
+
+  Future<void> _refreshStatus() async {
+    setState(() => _checking = true);
+    final status = await LocalApiProxyService.status();
+    if (!mounted) return;
+    setState(() {
+      _proxyStatus = status;
+      _checking = false;
+    });
+  }
 
   Future<void> _startService() async {
     setState(() {
@@ -499,6 +517,7 @@ class _LocalApiProxyDialogState extends State<_LocalApiProxyDialog> {
             ? '代理已重启：${LocalApiProxyService.url}'
             : output.trim();
       });
+      await _refreshStatus();
     } catch (error) {
       if (!mounted) return;
       setState(() {
@@ -514,6 +533,14 @@ class _LocalApiProxyDialogState extends State<_LocalApiProxyDialog> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final proxyStatus = _proxyStatus;
+    final statusColor = proxyStatus == null
+        ? theme.colorScheme.onSurfaceVariant
+        : proxyStatus.manageable
+            ? Colors.green
+            : proxyStatus.running
+                ? Colors.orange
+                : theme.colorScheme.error;
     return AlertDialog(
       title: const Text('本地中转代理'),
       content: SizedBox(
@@ -547,6 +574,54 @@ class _LocalApiProxyDialogState extends State<_LocalApiProxyDialog> {
                     ),
                   ),
                 ],
+              ),
+              const SizedBox(height: 14),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: theme.colorScheme.outlineVariant),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (_checking)
+                      const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    else
+                      Icon(
+                        proxyStatus?.manageable == true
+                            ? Icons.check_circle_outline
+                            : proxyStatus?.running == true
+                                ? Icons.warning_amber_outlined
+                                : Icons.error_outline,
+                        size: 18,
+                        color: statusColor,
+                      ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: SelectableText(
+                        _checking
+                            ? '正在检查代理状态...'
+                            : proxyStatus?.message ?? '代理状态未知',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: statusColor,
+                          fontFamily: 'monospace',
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: '刷新状态',
+                      onPressed: _checking ? null : _refreshStatus,
+                      icon: const Icon(Icons.refresh, size: 18),
+                    ),
+                  ],
+                ),
               ),
               const SizedBox(height: 14),
               Text(

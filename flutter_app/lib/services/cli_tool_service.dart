@@ -918,13 +918,7 @@ export TMPDIR="${TMPDIR:-/tmp}"
 [ -r /root/.openclaw/cli-env.sh ] && . /root/.openclaw/cli-env.sh
 [ -r /root/.openclaw/cli-env-codex.sh ] && . /root/.openclaw/cli-env-codex.sh
 [ -r /root/.openclaw/codex-termux-runtime.sh ] && . /root/.openclaw/codex-termux-runtime.sh
-mkdir -p \
-  "${OPENCLAW_CLI_WORKSPACE:-/root/openclaw-cli-workspace}" \
-  "${OPENCLAW_CLI_PROJECTS:-/root/openclaw-cli-workspace/projects}" \
-  "${OPENCLAW_CLI_SCRATCH:-/root/openclaw-cli-workspace/scratch}" \
-  "${CODEX_HOME:-/root/.codex}" \
-  "${XDG_CONFIG_HOME:-/root/.config}" \
-  2>/dev/null || true
+mkdir -p "${OPENCLAW_CLI_WORKSPACE:-/root/openclaw-cli-workspace}" "${OPENCLAW_CLI_PROJECTS:-/root/openclaw-cli-workspace/projects}" "${OPENCLAW_CLI_SCRATCH:-/root/openclaw-cli-workspace/scratch}" "${CODEX_HOME:-/root/.codex}" "${XDG_CONFIG_HOME:-/root/.config}" 2>/dev/null || true
 cd "${OPENCLAW_CLI_WORKSPACE:-/root/openclaw-cli-workspace}" 2>/dev/null || cd /root
 
 CODEX_JS="/opt/openclaw-cli/codex/node_modules/@openai/codex/bin/codex.js"

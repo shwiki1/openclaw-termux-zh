@@ -46,6 +46,7 @@ flutter:
     - assets/api2py/app/
     - assets/api2py/data/
     - assets/api2py/public/static/
+    - assets/api2py/public/static/lib/
     - assets/api2py/scripts/
     - assets/sample_configs/openclaw/
   fonts:
