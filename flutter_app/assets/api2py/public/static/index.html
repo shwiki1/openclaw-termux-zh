@@ -12,7 +12,7 @@ tailwind.config = {
   theme: {
     extend: {
       fontFamily: {
-        serif: ['system-ui', '-apple-system', 'BlinkMacSystemFont', '"Segoe UI"', 'sans-serif'],
+        serif: ['ui-serif', 'Georgia', '"Times New Roman"', '"Noto Serif SC"', 'serif'],
         mono: ['"JetBrains Mono"', '"Fira Code"', 'Consolas', 'monospace'],
       },
       colors: {
@@ -27,7 +27,7 @@ tailwind.config = {
 <style>
   * { -webkit-tap-highlight-color: transparent; }
   html, body { overscroll-behavior: none; }
-  body { font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+  body { font-family: ui-serif, Georgia, 'Times New Roman', 'Noto Serif SC', serif; }
 
   @media (max-width: 900px) {
     *, *::before, *::after {
@@ -233,7 +233,7 @@ tailwind.config = {
   .modal-panel {
     background: #05070b; border: 1px solid #263244;
     color: #e2e8f0;
-    font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-family: ui-serif, Georgia, 'Times New Roman', 'Noto Serif SC', serif;
     border-radius: 12px; width: 100%; max-width: 760px; max-height: min(88vh, 800px);
     display: flex; flex-direction: column; overflow: hidden;
     box-shadow: 0 30px 80px rgba(0,0,0,.68), inset 0 1px 0 rgba(255,255,255,.06);
@@ -296,7 +296,7 @@ tailwind.config = {
   .modal-btn-danger:hover { background: #b91c1c; }
   #modal,
   #modal * {
-    font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+    font-family: ui-serif, Georgia, 'Times New Roman', 'Noto Serif SC', serif !important;
   }
   .modal-choice-grid {
     display: grid;
@@ -327,7 +327,7 @@ tailwind.config = {
     display: flex; align-items: center; justify-content: space-between; gap: 8px;
     background: #0a0e17; border: 1px solid #263244; border-radius: 8px;
     padding: 9px 11px; color: #e2e8f0;
-    font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-family: ui-serif, Georgia, 'Times New Roman', 'Noto Serif SC', serif;
     font-size: 13px; text-align: left;
   }
   .dark-select-button::after { content: '⌄'; color: #94a3b8; font-size: 12px; }
@@ -344,7 +344,7 @@ tailwind.config = {
     display: flex; align-items: center;
     background: transparent; color: #e2e8f0; border: 0; border-radius: 6px;
     padding: 8px 9px; text-align: left; font-size: 13px;
-    font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-family: ui-serif, Georgia, 'Times New Roman', 'Noto Serif SC', serif;
   }
   .dark-select-option:hover,
   .dark-select-option.active { background: #111827; color: #f8fafc; }
@@ -1869,9 +1869,9 @@ async function loadChatModels() {
     const current = models[0] || { id: '', protocol: 'openai', provider_name: '无模型' };
     document.getElementById('chat-model').innerHTML = `
       <input class="dark-select-value" type="hidden" value="${escAttr(current.id)}" data-protocol="${escAttr(current.protocol || 'openai')}">
-      <button type="button" class="dark-select-button"><span>${escHtml(current.provider_name || current.owned_by || '')} · ${escHtml(current.id || '无模型')} · ${escHtml(current.protocol || 'openai')}</span></button>
+      <button type="button" class="dark-select-button"><span>${escHtml(current.provider_name || current.owned_by || '')} · ${escHtml(current.id || '无模型')} · ${escHtml(current.upstream_model || current.id || '')} · ${escHtml(current.provider_base_url || '')} · ${escHtml(current.protocol || 'openai')}</span></button>
       <div class="dark-select-menu">
-        ${models.map((m, index) => `<button type="button" class="dark-select-option ${index === 0 ? 'active' : ''}" data-value="${escAttr(m.id)}" data-protocol="${escAttr(m.protocol || 'openai')}">${escHtml(m.provider_name || m.owned_by)} · ${escHtml(m.id)} · ${escHtml(m.protocol || 'openai')}</button>`).join('')}
+        ${models.map((m, index) => `<button type="button" class="dark-select-option ${index === 0 ? 'active' : ''}" data-value="${escAttr(m.id)}" data-protocol="${escAttr(m.protocol || 'openai')}">${escHtml(m.provider_name || m.owned_by)} · ${escHtml(m.id)} · ${escHtml(m.upstream_model || m.id || '')} · ${escHtml(m.provider_base_url || '')} · ${escHtml(m.protocol || 'openai')}</button>`).join('')}
       </div>
     `;
   } catch {

@@ -6,6 +6,24 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/cli_api_config.dart';
 import 'native_bridge.dart';
 
+class CliApiModelOption {
+  final String id;
+  final String upstreamModel;
+  final String providerId;
+  final String providerName;
+  final String providerBaseUrl;
+  final String protocol;
+
+  const CliApiModelOption({
+    required this.id,
+    this.upstreamModel = '',
+    this.providerId = '',
+    this.providerName = '',
+    this.providerBaseUrl = '',
+    this.protocol = 'openai',
+  });
+}
+
 class CliApiConfigService {
   static const _configPath = '/root/.openclaw/app/cli-api-config.json';
   static const _envPath = '/root/.openclaw/cli-env.sh';
@@ -212,6 +230,60 @@ class CliApiConfigService {
       throw Exception('模型列表为空或响应格式不支持');
     }
     return models;
+  }
+
+  static Future<List<CliApiModelOption>> fetchModelOptions({
+    required String toolId,
+    required String baseUrl,
+    required String apiKey,
+    String apiProtocol = '',
+  }) async {
+    final protocol = apiProtocol.trim().isEmpty ? 'openai' : apiProtocol.trim();
+    final endpoint = _modelsEndpoint(baseUrl, protocol: protocol);
+    if (endpoint == null) {
+      throw Exception('请先填写 API 地址');
+    }
+    if (apiKey.trim().isEmpty) {
+      throw Exception('请先填写 API Key');
+    }
+
+    final useAnthropicHeaders = protocol == 'anthropic';
+    final useGeminiHeaders = protocol == 'gemini';
+    final headers = <String, String>{
+      'Accept': 'application/json',
+      if (useAnthropicHeaders) ...{
+        'x-api-key': apiKey.trim(),
+        'anthropic-version': '2023-06-01',
+      } else if (useGeminiHeaders)
+        'x-goog-api-key': apiKey.trim()
+      else
+        'Authorization': 'Bearer ${apiKey.trim()}',
+    };
+    if (useAnthropicHeaders) {
+      headers['Authorization'] = 'Bearer ${apiKey.trim()}';
+    }
+
+    final response = await http
+        .get(endpoint, headers: headers)
+        .timeout(const Duration(seconds: 20));
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception('模型列表获取失败：HTTP ${response.statusCode}');
+    }
+
+    final decoded = jsonDecode(response.body);
+    final models = _extractModelOptions(decoded).toList()
+      ..sort((left, right) => left.id.compareTo(right.id));
+    final unique = <String, CliApiModelOption>{};
+    for (final model in models) {
+      unique.putIfAbsent(
+        '${model.id}|${model.providerId}|${model.upstreamModel}',
+        () => model,
+      );
+    }
+    if (unique.isEmpty) {
+      throw Exception('模型列表为空或响应格式不支持');
+    }
+    return unique.values.toList();
   }
 
   static Future<void> regenerateRuntimeFiles({
@@ -961,12 +1033,6 @@ openclaw_kill_codex_proxy_port
 
     final mappings = _asMap(existingConfig['model_mappings']);
     final appManagedAliases = <String>{};
-    final previousAppAliases = _asStringList(
-      existingConfig['openclaw_app_managed_model_aliases'],
-    ).toSet();
-    for (final alias in previousAppAliases) {
-      mappings.remove(alias);
-    }
 
     final activeConfigs = {
       for (final toolId in configurableToolIds)
@@ -994,7 +1060,9 @@ openclaw_kill_codex_proxy_port
         continue;
       }
       appManagedAliases.add(alias);
+      final existingMapping = _asMap(mappings[alias]);
       mappings[alias] = <String, dynamic>{
+        ...existingMapping,
         'provider': providerId,
         'model': actualModel,
         'protocol': _apiProxyClientProtocol(toolConfig.effectiveApiProtocol),
@@ -4089,16 +4157,35 @@ server.listen(cfg.port, cfg.host);
   }
 
   static List<String> _extractModelIds(dynamic decoded) {
-    final result = <String>[];
+    return _extractModelOptions(decoded).map((item) => item.id).toList();
+  }
+
+  static List<CliApiModelOption> _extractModelOptions(dynamic decoded) {
+    final result = <CliApiModelOption>[];
     void addModel(dynamic item) {
       if (item is String && item.trim().isNotEmpty) {
-        result.add(item.trim());
+        result.add(CliApiModelOption(id: item.trim()));
         return;
       }
       if (item is Map) {
         final id = item['id'] ?? item['name'] ?? item['model'];
         if (id is String && id.trim().isNotEmpty) {
-          result.add(id.trim());
+          result.add(
+            CliApiModelOption(
+              id: id.trim(),
+              upstreamModel: _stringValue(item['upstream_model']).isNotEmpty
+                  ? _stringValue(item['upstream_model'])
+                  : id.trim(),
+              providerId: _stringValue(item['owned_by']).isNotEmpty
+                  ? _stringValue(item['owned_by'])
+                  : _stringValue(item['provider']),
+              providerName: _stringValue(item['provider_name']),
+              providerBaseUrl: _stringValue(item['provider_base_url']),
+              protocol: _stringValue(item['protocol']).isNotEmpty
+                  ? _stringValue(item['protocol'])
+                  : 'openai',
+            ),
+          );
         }
       }
     }
@@ -4119,4 +4206,6 @@ server.listen(cfg.port, cfg.host);
     }
     return result;
   }
+
+  static String _stringValue(dynamic value) => value is String ? value.trim() : '';
 }

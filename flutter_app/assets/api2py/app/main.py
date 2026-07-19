@@ -532,6 +532,8 @@ async def list_models(request: Request) -> Response:
                     "created": 0,
                     "owned_by": pid,
                     "provider_name": provider.get("name") or pid,
+                    "provider_base_url": provider.get("base_url") or "",
+                    "upstream_model": mapping.get("model") or alias,
                     "protocol": normalize_protocol(mapping.get("protocol") or "", provider),
                 }
             )

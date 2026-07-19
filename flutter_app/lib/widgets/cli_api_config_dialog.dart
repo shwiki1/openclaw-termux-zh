@@ -33,7 +33,7 @@ class _CliApiConfigDialogState extends State<CliApiConfigDialog> {
   final _mappingController = TextEditingController();
 
   List<CliApiConfig> _sharedProfiles = const [];
-  List<String> _availableModels = const [];
+  List<CliApiModelOption> _availableModels = const [];
   String _reasoningEffort = '';
   String _sharedProfileId = '';
   bool _loading = true;
@@ -157,7 +157,7 @@ class _CliApiConfigDialogState extends State<CliApiConfigDialog> {
     });
 
     try {
-      final models = await CliApiConfigService.fetchModels(
+      final models = await CliApiConfigService.fetchModelOptions(
         toolId: widget.tool.id,
         baseUrl: profile.baseUrl,
         apiKey: profile.apiKey,
@@ -168,7 +168,13 @@ class _CliApiConfigDialogState extends State<CliApiConfigDialog> {
         _availableModels = models;
         _loadingModels = false;
         if (_modelController.text.trim().isEmpty && models.isNotEmpty) {
-          _modelController.text = models.first;
+          _modelController.text = models.first.upstreamModel.trim().isEmpty
+              ? models.first.id
+              : models.first.upstreamModel;
+          if (models.first.upstreamModel.trim().isNotEmpty &&
+              models.first.upstreamModel.trim() != models.first.id.trim()) {
+            _mappingController.text = models.first.id;
+          }
         }
       });
     } catch (error) {
@@ -188,12 +194,13 @@ class _CliApiConfigDialogState extends State<CliApiConfigDialog> {
       return;
     }
 
-    final selected = await showModalBottomSheet<String>(
+    final selected = await showModalBottomSheet<CliApiModelOption>(
       context: context,
       isScrollControlled: true,
       builder: (ctx) {
         final theme = Theme.of(ctx);
         final currentModel = _modelController.text.trim();
+        final currentAlias = _mappingController.text.trim();
         return SafeArea(
           child: FractionallySizedBox(
             heightFactor: 0.82,
@@ -232,11 +239,27 @@ class _CliApiConfigDialogState extends State<CliApiConfigDialog> {
                       separatorBuilder: (_, __) => const Divider(height: 1),
                       itemBuilder: (_, index) {
                         final model = _availableModels[index];
-                        final selected = model == currentModel;
+                        final upstreamModel = model.upstreamModel.trim().isEmpty
+                            ? model.id
+                            : model.upstreamModel.trim();
+                        final selected = model.id == currentAlias ||
+                            upstreamModel == currentModel;
                         return ListTile(
                           title: Text(
-                            model,
+                            model.id,
                             maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          subtitle: Text(
+                            [
+                              if (upstreamModel != model.id) '上游模型：$upstreamModel',
+                              if (model.providerName.trim().isNotEmpty)
+                                '上游：${model.providerName.trim()}',
+                              if (model.providerBaseUrl.trim().isNotEmpty)
+                                model.providerBaseUrl.trim(),
+                              '协议：${model.protocol}',
+                            ].join(' · '),
+                            maxLines: 3,
                             overflow: TextOverflow.ellipsis,
                           ),
                           trailing: selected
@@ -258,12 +281,18 @@ class _CliApiConfigDialogState extends State<CliApiConfigDialog> {
       },
     );
 
-    if (!mounted || selected == null || selected.isEmpty) {
+    if (!mounted || selected == null || selected.id.trim().isEmpty) {
       return;
     }
 
     setState(() {
-      _modelController.text = selected;
+      final upstreamModel = selected.upstreamModel.trim().isEmpty
+          ? selected.id.trim()
+          : selected.upstreamModel.trim();
+      _modelController.text = upstreamModel;
+      _mappingController.text = selected.id.trim() == upstreamModel
+          ? ''
+          : selected.id.trim();
     });
   }
 

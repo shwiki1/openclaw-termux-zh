@@ -5,6 +5,7 @@ import 'package:webview_flutter/webview_flutter.dart';
 import 'package:webview_flutter_android/webview_flutter_android.dart';
 
 import '../services/local_api_proxy_service.dart';
+import '../services/native_bridge.dart';
 
 class LocalApiProxyBrowserScreen extends StatefulWidget {
   const LocalApiProxyBrowserScreen({super.key});
@@ -23,6 +24,12 @@ class _LocalApiProxyBrowserScreenState
   bool _canGoBack = false;
   bool _canGoForward = false;
   String _serviceMessage = '正在连接本地中转代理...';
+  static const _background = Color(0xFF0A0E17);
+  static const _surface2 = Color(0xFF1A2235);
+  static const _border = Color(0xFF1E293B);
+  static const _ink = Color(0xFFE2E8F0);
+  static const _ink2 = Color(0xFF94A3B8);
+  static const _accent = Color(0xFF60A5FA);
 
   @override
   bool get wantKeepAlive => true;
@@ -32,11 +39,13 @@ class _LocalApiProxyBrowserScreenState
     super.initState();
     _addressController = TextEditingController(text: LocalApiProxyService.url);
     _controller = _createController();
+    unawaited(NativeBridge.acquireBrowserSoftInputMode());
     unawaited(_openManagerWhenReady());
   }
 
   @override
   void dispose() {
+    unawaited(NativeBridge.releaseBrowserSoftInputMode());
     _addressController.dispose();
     super.dispose();
   }
@@ -68,7 +77,7 @@ class _LocalApiProxyBrowserScreenState
     const params = PlatformWebViewControllerCreationParams();
     final controller = WebViewController.fromPlatformCreationParams(params)
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..setBackgroundColor(Colors.white)
+      ..setBackgroundColor(_background)
       ..setNavigationDelegate(
         NavigationDelegate(
           onPageStarted: (url) {
@@ -137,49 +146,44 @@ class _LocalApiProxyBrowserScreenState
     await _controller.loadRequest(Uri.parse(url));
   }
 
+  Widget _buildWebView() {
+    final platformController = _controller.platform;
+    if (platformController is AndroidWebViewController) {
+      final params = AndroidWebViewWidgetCreationParams(
+        controller: platformController,
+        displayWithHybridComposition: true,
+      );
+      return WebViewWidget.fromPlatformCreationParams(params: params);
+    }
+    return WebViewWidget(controller: _controller);
+  }
+
+  bool get _serviceOk =>
+      _serviceMessage.contains('正常') || _serviceMessage.contains('响应');
+
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    final theme = Theme.of(context);
     return Scaffold(
-      appBar: AppBar(title: const Text('中转代理管理')),
+      backgroundColor: _background,
+      appBar: AppBar(
+        title: const Text('中转代理管理'),
+        backgroundColor: _background,
+        foregroundColor: _ink,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+      ),
       body: Column(
         children: [
           Material(
-            color: theme.colorScheme.surface,
-            elevation: 1,
+            color: _background,
             child: SafeArea(
               top: false,
               bottom: false,
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(8, 8, 8, 8),
+                padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
                 child: Row(
                   children: [
-                    IconButton.filledTonal(
-                      tooltip: '后退',
-                      onPressed: _canGoBack ? () => _controller.goBack() : null,
-                      icon: const Icon(Icons.arrow_back),
-                    ),
-                    const SizedBox(width: 4),
-                    IconButton.filledTonal(
-                      tooltip: '前进',
-                      onPressed:
-                          _canGoForward ? () => _controller.goForward() : null,
-                      icon: const Icon(Icons.arrow_forward),
-                    ),
-                    const SizedBox(width: 4),
-                    IconButton.filledTonal(
-                      tooltip: '刷新',
-                      onPressed: () => _controller.reload(),
-                      icon: _loading
-                          ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.refresh),
-                    ),
-                    const SizedBox(width: 8),
                     Expanded(
                       child: TextField(
                         controller: _addressController,
@@ -187,15 +191,74 @@ class _LocalApiProxyBrowserScreenState
                         textInputAction: TextInputAction.go,
                         minLines: 1,
                         maxLines: 1,
-                        style: theme.textTheme.bodySmall?.copyWith(
+                        style: const TextStyle(
                           fontFamily: 'monospace',
+                          color: _ink,
+                          fontSize: 13,
                         ),
-                        decoration: const InputDecoration(
+                        decoration: InputDecoration(
                           isDense: true,
-                          border: OutlineInputBorder(),
+                          filled: true,
+                          fillColor: _background,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: const BorderSide(color: _border),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: const BorderSide(color: _border),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: const BorderSide(color: _accent),
+                          ),
                           hintText: 'http://127.0.0.1:9999/',
+                          hintStyle: const TextStyle(color: _ink2),
                         ),
                         onSubmitted: (_) => _openAddress(),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      constraints: const BoxConstraints(maxWidth: 128),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 7,
+                      ),
+                      decoration: BoxDecoration(
+                        color: _serviceOk
+                            ? Colors.green.withAlpha(28)
+                            : _surface2,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: _serviceOk
+                              ? Colors.green.withAlpha(120)
+                              : _border,
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            _serviceOk
+                                ? Icons.check_circle_outline
+                                : Icons.info_outline,
+                            size: 14,
+                            color: _serviceOk ? Colors.greenAccent : _ink2,
+                          ),
+                          const SizedBox(width: 5),
+                          Flexible(
+                            child: Text(
+                              _serviceOk ? '正常' : _serviceMessage,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: _ink2,
+                                fontSize: 11,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],
@@ -203,35 +266,6 @@ class _LocalApiProxyBrowserScreenState
               ),
             ),
           ),
-          if (_serviceMessage.isNotEmpty)
-            Material(
-              color: theme.colorScheme.surfaceContainerHighest,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                child: Row(
-                  children: [
-                    Icon(
-                      _serviceMessage.contains('正常')
-                          ? Icons.check_circle_outline
-                          : Icons.info_outline,
-                      size: 16,
-                      color: _serviceMessage.contains('正常')
-                          ? Colors.green
-                          : theme.colorScheme.onSurfaceVariant,
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        _serviceMessage,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.bodySmall,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
           Expanded(
             child: _serviceMessage.startsWith('启动失败') ||
                     _serviceMessage.contains('未响应') ||
@@ -243,12 +277,83 @@ class _LocalApiProxyBrowserScreenState
                       child: SelectableText(
                         _serviceMessage,
                         textAlign: TextAlign.center,
+                        style: const TextStyle(color: _ink),
                       ),
                     ),
                   )
-                : WebViewWidget(controller: _controller),
+                : _buildWebView(),
+          ),
+          SafeArea(
+            top: false,
+            child: Material(
+              color: _background,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    _bottomButton(
+                      tooltip: '后退',
+                      onPressed: _canGoBack ? () => _controller.goBack() : null,
+                      icon: Icons.arrow_back,
+                    ),
+                    const SizedBox(width: 10),
+                    _bottomButton(
+                      tooltip: '前进',
+                      onPressed: _canGoForward
+                          ? () => _controller.goForward()
+                          : null,
+                      icon: Icons.arrow_forward,
+                    ),
+                    const SizedBox(width: 10),
+                    _bottomButton(
+                      tooltip: '刷新',
+                      onPressed: () => _controller.reload(),
+                      icon: Icons.refresh,
+                      loading: _loading,
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _bottomButton({
+    required String tooltip,
+    required VoidCallback? onPressed,
+    required IconData icon,
+    bool loading = false,
+  }) {
+    return Tooltip(
+      message: tooltip,
+      child: SizedBox(
+        width: 48,
+        height: 40,
+        child: FilledButton.tonal(
+          style: FilledButton.styleFrom(
+            padding: EdgeInsets.zero,
+            backgroundColor: _surface2,
+            foregroundColor: _ink,
+            disabledBackgroundColor: _surface2.withAlpha(120),
+            disabledForegroundColor: _ink2.withAlpha(120),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+              side: const BorderSide(color: _border),
+            ),
+          ),
+          onPressed: onPressed,
+          child: loading
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : Icon(icon, size: 20),
+        ),
       ),
     );
   }
