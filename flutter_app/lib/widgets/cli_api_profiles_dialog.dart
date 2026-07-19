@@ -30,6 +30,10 @@ class _CliApiProfilesDialogState extends State<CliApiProfilesDialog> {
   bool _saving = false;
   String? _error;
 
+  bool get _currentProfileIsBuiltinLocalProxy =>
+      _profiles.isNotEmpty &&
+      CliApiConfigService.isBuiltinLocalApiProxyProfile(_profiles[_activeIndex]);
+
   @override
   void initState() {
     super.initState();
@@ -85,7 +89,10 @@ class _CliApiProfilesDialogState extends State<CliApiProfilesDialog> {
         profile.profileName.trim().isEmpty ? 'API ${_activeIndex + 1}' : profile.profileName;
     _baseUrlController.text = profile.baseUrl;
     _apiKeyController.text = profile.apiKey;
-    _apiProtocol = profile.effectiveApiProtocol;
+    _apiProtocol = CliApiConfigService.supportedApiProtocols
+            .containsKey(profile.effectiveApiProtocol)
+        ? profile.effectiveApiProtocol
+        : 'openai';
   }
 
   CliApiConfig _profileFromControllers() {
@@ -102,6 +109,9 @@ class _CliApiProfilesDialogState extends State<CliApiProfilesDialog> {
 
   void _persistCurrentProfileInMemory() {
     if (_profiles.isEmpty) {
+      return;
+    }
+    if (CliApiConfigService.isBuiltinLocalApiProxyProfile(_profiles[_activeIndex])) {
       return;
     }
     final nextProfiles = List<CliApiConfig>.from(_profiles);
@@ -139,6 +149,9 @@ class _CliApiProfilesDialogState extends State<CliApiProfilesDialog> {
   }
 
   void _deleteProfile() {
+    if (_currentProfileIsBuiltinLocalProxy) {
+      return;
+    }
     if (_profiles.length <= 1) {
       final reset = CliApiConfig(
         toolId: 'shared',
@@ -204,7 +217,7 @@ class _CliApiProfilesDialogState extends State<CliApiProfilesDialog> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      '这里统一维护 API 地址与 Key。各 CLI 工具只需要选择这里的某个共享 API，再设置自己的模型、模型映射和推理强度。',
+                      '这里统一维护上游 API 地址与 Key。内置“本地中转代理”只用于 CLI 选择，不会写入中转代理上游。',
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: theme.colorScheme.onSurfaceVariant,
                       ),
@@ -248,7 +261,9 @@ class _CliApiProfilesDialogState extends State<CliApiProfilesDialog> {
                         const SizedBox(width: 4),
                         IconButton.outlined(
                           tooltip: '删除当前 API',
-                          onPressed: _saving ? null : _deleteProfile,
+                          onPressed: _saving || _currentProfileIsBuiltinLocalProxy
+                              ? null
+                              : _deleteProfile,
                           icon: const Icon(Icons.delete_outline),
                         ),
                       ],
@@ -256,6 +271,7 @@ class _CliApiProfilesDialogState extends State<CliApiProfilesDialog> {
                     const SizedBox(height: 12),
                     TextField(
                       controller: _profileNameController,
+                      readOnly: _currentProfileIsBuiltinLocalProxy,
                       decoration: const InputDecoration(
                         labelText: '配置名称',
                         hintText: '例如：主线路 / 备用线路',
@@ -271,26 +287,21 @@ class _CliApiProfilesDialogState extends State<CliApiProfilesDialog> {
                         border: OutlineInputBorder(),
                       ),
                       items: const [
-                        DropdownMenuItem(
-                          value: 'openai',
-                          child: Text('OpenAI 兼容协议'),
-                        ),
-                        DropdownMenuItem(
-                          value: 'anthropic',
-                          child: Text('Anthropic 协议'),
-                        ),
-                        DropdownMenuItem(
-                          value: 'gemini',
-                          child: Text('Gemini 协议'),
-                        ),
+                        DropdownMenuItem(value: 'openai', child: Text('OpenAI 兼容协议')),
+                        DropdownMenuItem(value: 'responses', child: Text('Codex Responses 协议')),
+                        DropdownMenuItem(value: 'anthropic', child: Text('Anthropic Messages 协议')),
+                        DropdownMenuItem(value: 'ollama', child: Text('Ollama 协议')),
                       ],
-                      onChanged: (value) {
+                      onChanged: _currentProfileIsBuiltinLocalProxy
+                          ? null
+                          : (value) {
                         setState(() => _apiProtocol = value ?? 'openai');
                       },
                     ),
                     const SizedBox(height: 12),
                     TextField(
                       controller: _baseUrlController,
+                      readOnly: _currentProfileIsBuiltinLocalProxy,
                       decoration: const InputDecoration(
                         labelText: 'API 地址',
                         hintText: 'https://api.example.com/v1',
@@ -301,6 +312,7 @@ class _CliApiProfilesDialogState extends State<CliApiProfilesDialog> {
                     const SizedBox(height: 12),
                     TextField(
                       controller: _apiKeyController,
+                      readOnly: _currentProfileIsBuiltinLocalProxy,
                       decoration: const InputDecoration(
                         labelText: 'API Key',
                         hintText: 'sk-...',

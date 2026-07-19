@@ -85,6 +85,30 @@ class BootstrapService {
     }
   }
 
+  Future<String?> _readPrebuiltOpenClawVersion() async {
+    try {
+      final marker = await NativeBridge.readRootfsFile(
+        '/etc/openclaw-prebuilt-rootfs',
+      );
+      if (marker == null || marker.trim().isEmpty) {
+        return null;
+      }
+      for (final line in marker.split(RegExp(r'\r?\n'))) {
+        final trimmed = line.trim();
+        if (!trimmed.startsWith('openclaw=')) {
+          continue;
+        }
+        final version = trimmed.substring('openclaw='.length).trim();
+        if (version.isNotEmpty) {
+          return version;
+        }
+      }
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<_PreparedArchiveSource> _prepareBundledOrCachedArchive({
     required String assetPath,
     required String destinationPath,
@@ -1054,9 +1078,11 @@ class BootstrapService {
       } else {
         final installedOpenClawVersion =
             await _openClawVersionService.readInstalledVersion();
+        final prebuiltOpenClawVersion = await _readPrebuiltOpenClawVersion();
         final targetVersion = selectedOpenClawRelease?.version.trim();
-        final openClawReady =
-            _statusFlag(bootstrapStatus, 'openclawInstalled') &&
+        final hasPrebuiltOpenClaw = prebuiltOpenClawVersion != null;
+        final openClawReady = hasPrebuiltOpenClaw ||
+            (_statusFlag(bootstrapStatus, 'openclawInstalled') &&
                 installedOpenClawVersion != null &&
                 (targetVersion == null ||
                     targetVersion.isEmpty ||
@@ -1064,15 +1090,19 @@ class BootstrapService {
                       installedVersion: installedOpenClawVersion,
                       targetVersion: targetVersion,
                     )) &&
-                await _isInstalledOpenClawUsable();
+                await _isInstalledOpenClawUsable());
 
         if (openClawReady) {
+          final reusedVersion =
+              prebuiltOpenClawVersion ?? installedOpenClawVersion ?? 'prebuilt';
           _emitProgress(
             onProgress: onProgress,
             step: SetupStep.installingOpenClaw,
             progress: 1.0,
             message: 'OpenClaw already installed',
-            detail: 'Reusing OpenClaw $installedOpenClawVersion.',
+            detail: hasPrebuiltOpenClaw
+                ? 'Reusing prebuilt OpenClaw $reusedVersion.'
+                : 'Reusing OpenClaw $reusedVersion.',
           );
         } else {
           await _openClawVersionService.installVersion(

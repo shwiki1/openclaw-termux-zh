@@ -12,7 +12,7 @@ tailwind.config = {
   theme: {
     extend: {
       fontFamily: {
-        serif: ['"Noto Serif SC"', '"Source Serif 4"', '"Noto Serif"', 'Georgia', '"Times New Roman"', 'serif'],
+        serif: ['system-ui', '-apple-system', 'BlinkMacSystemFont', '"Segoe UI"', 'sans-serif'],
         mono: ['"JetBrains Mono"', '"Fira Code"', 'Consolas', 'monospace'],
       },
       colors: {
@@ -25,11 +25,18 @@ tailwind.config = {
 }
 </script>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600;700&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;0,8..60,700;1,8..60,400&display=swap');
-
   * { -webkit-tap-highlight-color: transparent; }
   html, body { overscroll-behavior: none; }
-  body { font-family: 'Noto Serif SC', 'Source Serif 4', Georgia, serif; }
+  body { font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+
+  @media (max-width: 900px) {
+    *, *::before, *::after {
+      animation-duration: .001ms !important;
+      animation-iteration-count: 1 !important;
+      scroll-behavior: auto !important;
+      transition-duration: .001ms !important;
+    }
+  }
 
   /* scrollbar */
   ::-webkit-scrollbar { width: 4px; height: 4px; }
@@ -226,7 +233,7 @@ tailwind.config = {
   .modal-panel {
     background: #05070b; border: 1px solid #263244;
     color: #e2e8f0;
-    font-family: 'Noto Serif SC', 'Source Serif 4', Georgia, 'Times New Roman', serif;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     border-radius: 12px; width: 100%; max-width: 760px; max-height: min(88vh, 800px);
     display: flex; flex-direction: column; overflow: hidden;
     box-shadow: 0 30px 80px rgba(0,0,0,.68), inset 0 1px 0 rgba(255,255,255,.06);
@@ -289,7 +296,7 @@ tailwind.config = {
   .modal-btn-danger:hover { background: #b91c1c; }
   #modal,
   #modal * {
-    font-family: 'Noto Serif SC', 'Source Serif 4', Georgia, 'Times New Roman', serif !important;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
   }
   .modal-choice-grid {
     display: grid;
@@ -320,7 +327,7 @@ tailwind.config = {
     display: flex; align-items: center; justify-content: space-between; gap: 8px;
     background: #0a0e17; border: 1px solid #263244; border-radius: 8px;
     padding: 9px 11px; color: #e2e8f0;
-    font-family: 'Noto Serif SC', 'Source Serif 4', Georgia, 'Times New Roman', serif;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     font-size: 13px; text-align: left;
   }
   .dark-select-button::after { content: '⌄'; color: #94a3b8; font-size: 12px; }
@@ -337,7 +344,7 @@ tailwind.config = {
     display: flex; align-items: center;
     background: transparent; color: #e2e8f0; border: 0; border-radius: 6px;
     padding: 8px 9px; text-align: left; font-size: 13px;
-    font-family: 'Noto Serif SC', 'Source Serif 4', Georgia, 'Times New Roman', serif;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   }
   .dark-select-option:hover,
   .dark-select-option.active { background: #111827; color: #f8fafc; }
@@ -771,6 +778,23 @@ let config = {};
 let currentStats = null;
 let appStarted = false;
 let currentPricing = [];
+let lucideIconFrame = 0;
+
+function scheduleLucideIcons() {
+  if (!window.lucide || lucideIconFrame) return;
+  lucideIconFrame = requestAnimationFrame(() => {
+    lucideIconFrame = 0;
+    window.lucide.createIcons();
+  });
+}
+
+function debounce(fn, delay = 180) {
+  let timer = 0;
+  return (...args) => {
+    window.clearTimeout(timer);
+    timer = window.setTimeout(() => fn(...args), delay);
+  };
+}
 
 // ── 工具函数 ──
 async function api(path, opts = {}) {
@@ -799,7 +823,7 @@ async function startApplication() {
     config = await api('/api/config');
     loadStats();
     loadSettings();
-    lucide.createIcons();
+    scheduleLucideIcons();
   } catch (error) {
     appStarted = false;
     throw error;
@@ -925,7 +949,7 @@ function openModal({ icon, iconBg, title, desc, body, buttons }) {
   document.getElementById('modal-desc').style.display = desc ? '' : 'none';
   document.getElementById('modal-body').innerHTML = body || '';
   document.getElementById('modal-footer').innerHTML = buttons || '';
-  lucide.createIcons();
+  scheduleLucideIcons();
   modalEl().classList.add('open');
   setTimeout(() => {
     const primary = document.querySelector('#modal [data-modal-primary]') || document.querySelector('#modal button:last-child') || document.querySelector('#modal input');
@@ -1208,7 +1232,7 @@ function renderStatsOverview() {
       <div class="text-2xl font-bold ${c.color}">${c.value}</div>
     </div>
   `).join('');
-  lucide.createIcons();
+  scheduleLucideIcons();
 }
 
 function renderModelStats() {
@@ -1450,7 +1474,7 @@ async function renderProviders() {
     </button>
   `;
   bindProviderControls();
-  lucide.createIcons();
+  scheduleLucideIcons();
 }
 
 function bindProviderControls() {
@@ -1458,7 +1482,7 @@ function bindProviderControls() {
   const sort = document.getElementById('provider-sort');
   if (search && !search.dataset.bound) {
     search.dataset.bound = '1';
-    search.addEventListener('input', () => renderProviders());
+    search.addEventListener('input', debounce(() => renderProviders()));
   }
   if (sort && !sort.dataset.bound) {
     sort.dataset.bound = '1';
@@ -1569,7 +1593,7 @@ async function deleteProvider(id) {
 async function testProvider(id) {
   const el = document.getElementById(`test-${id}`);
   if (el) el.innerHTML = '<span class="inline-flex items-center gap-1 text-ink-3"><i data-lucide="loader-2" class="w-3.5 h-3.5 animate-spin"></i>测试中...</span>';
-  lucide.createIcons();
+  scheduleLucideIcons();
   try {
     const keyInput = document.getElementById(`pk-${id}`);
     if (keyInput) await saveProviderKey(id, false);
@@ -1581,7 +1605,7 @@ async function testProvider(id) {
   } catch (error) {
     if (el) el.innerHTML = `<span class="inline-flex items-center gap-1 text-red-400"><i data-lucide="x-circle" class="w-3.5 h-3.5"></i>测试失败: ${escHtml(error.message)}</span>`;
   }
-  lucide.createIcons();
+  scheduleLucideIcons();
 }
 
 async function saveProviderKey(id, notify = true) {
@@ -1636,7 +1660,7 @@ async function renderMappings() {
     </tr>
   `).join('');
   updateMappingsCount();
-  lucide.createIcons();
+  scheduleLucideIcons();
 
   const sel = document.getElementById('default-provider');
   sel.innerHTML = Object.entries(providers).map(([id, p]) =>
@@ -1662,7 +1686,7 @@ function addMappingRow() {
   updateMappingsCount();
   tr.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   tr.querySelector('.m-alias')?.focus();
-  lucide.createIcons();
+  scheduleLucideIcons();
 }
 
 function updateMappingsCount() {
@@ -1783,7 +1807,7 @@ async function renderPricing() {
     `;
   }).join('') || '<tr><td colspan="8" class="text-center text-ink-3 py-8">暂无价格项</td></tr>';
 
-  lucide.createIcons();
+  scheduleLucideIcons();
   bindPricingControls();
 }
 
@@ -1792,7 +1816,7 @@ function bindPricingControls() {
   const sort = document.getElementById('pricing-sort');
   if (search && !search.dataset.bound) {
     search.dataset.bound = '1';
-    search.addEventListener('input', () => renderPricing());
+    search.addEventListener('input', debounce(() => renderPricing()));
   }
   if (sort && !sort.dataset.bound) {
     sort.dataset.bound = '1';
@@ -1883,7 +1907,7 @@ function addChatMsg(role, content) {
   `;
   box.appendChild(div);
   box.scrollTop = box.scrollHeight;
-  lucide.createIcons();
+  scheduleLucideIcons();
   return div;
 }
 
@@ -1892,8 +1916,8 @@ function copyBubble(btn) {
   const text = bubble?.textContent || '';
   navigator.clipboard.writeText(text).then(() => {
     const icon = btn.querySelector('[data-lucide]');
-    if (icon) { icon.setAttribute('data-lucide', 'check'); lucide.createIcons(); }
-    setTimeout(() => { if (icon) { icon.setAttribute('data-lucide', 'copy'); lucide.createIcons(); } }, 1500);
+    if (icon) { icon.setAttribute('data-lucide', 'check'); scheduleLucideIcons(); }
+    setTimeout(() => { if (icon) { icon.setAttribute('data-lucide', 'copy'); scheduleLucideIcons(); } }, 1500);
   });
 }
 
@@ -2226,7 +2250,7 @@ async function loadLogs(page = 1) {
     if (data.page < data.pages) btns += `<button onclick="loadLogs(${data.page + 1})" class="px-2 py-1 rounded bg-surface border border-surface-3 text-xs hover:border-accent">&raquo;</button>`;
     pagination.innerHTML = btns;
 
-    lucide.createIcons();
+    scheduleLucideIcons();
   } catch (e) {
     await showAlert({ title: '加载日志失败', message: e.message || '请稍后重试', icon: 'file-warning', iconBg: 'red' });
   }

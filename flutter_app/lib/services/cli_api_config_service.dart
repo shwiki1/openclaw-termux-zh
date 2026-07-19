@@ -35,6 +35,9 @@ class CliApiConfigService {
   static const _codexConfigPath = '/root/.codex/config.toml';
   static const _codexAuthPath = '/root/.codex/auth.json';
   static const _localApiProxyBaseUrl = 'http://127.0.0.1:9999/v1';
+  static const _localApiProxyProfileId = 'openclaw-local-api-proxy';
+  static const _localApiProxyProfileName = '本地中转代理';
+  static const _localApiProxyApiKey = 'openclaw-local-proxy';
   static const _localApiProxyConfigPath =
       '/root/.openclaw/api2py/data/config.json';
   static const _codeBuddyModelsPath = '/root/.codebuddy/models.json';
@@ -66,6 +69,16 @@ class CliApiConfigService {
     'gemini',
   };
 
+  static const supportedApiProtocols = <String, String>{
+    'openai': 'OpenAI 兼容协议',
+    'responses': 'Codex Responses 协议',
+    'anthropic': 'Anthropic Messages 协议',
+    'ollama': 'Ollama 协议',
+  };
+
+  static bool isBuiltinLocalApiProxyProfile(CliApiConfig profile) =>
+      _isLocalApiProxyProfile(profile);
+
   static Future<CliApiConfig> load(String toolId) async {
     final configs = await _loadAll();
     return _resolvedToolConfig(toolId, configs);
@@ -73,7 +86,7 @@ class CliApiConfigService {
 
   static Future<List<CliApiConfig>> loadSharedProfiles() async {
     final configs = await _loadAll();
-    return _sharedProfilesFromConfig(configs);
+    return _sharedProfilesForUi(configs);
   }
 
   static Future<CliApiConfig> loadToolSettings(String toolId) async {
@@ -97,7 +110,8 @@ class CliApiConfigService {
     configs['sharedProfiles'] = _sharedProfilesJson(profiles);
     final bindCodexProfileId = codexSharedProfileId?.trim() ?? '';
     if (bindCodexProfileId.isNotEmpty &&
-        profiles.any((item) => item.sharedProfileId == bindCodexProfileId)) {
+        _sharedProfilesForUi(configs)
+            .any((item) => item.sharedProfileId == bindCodexProfileId)) {
       final tools = _asMap(configs['tools']);
       final currentCodex = _toolSettingsFromJson(
         'codex',
@@ -641,6 +655,16 @@ openclaw_kill_codex_proxy_port
     ];
   }
 
+  static List<CliApiConfig> _sharedProfilesForUi(Map<String, dynamic> config) {
+    final profiles = _sharedProfilesFromConfig(config)
+        .where((profile) => !_isLocalApiProxyProfile(profile))
+        .toList();
+    return <CliApiConfig>[
+      _localApiProxyProfile(),
+      ...profiles,
+    ];
+  }
+
   static CliApiConfig _toolSettingsFromConfig(
     String toolId,
     Map<String, dynamic> config,
@@ -654,7 +678,7 @@ openclaw_kill_codex_proxy_port
     Map<String, dynamic> config,
   ) {
     final toolSettings = _toolSettingsFromConfig(toolId, config);
-    final sharedProfiles = _sharedProfilesFromConfig(config);
+    final sharedProfiles = _sharedProfilesForUi(config);
     final profile = _sharedProfileById(
           sharedProfiles,
           toolSettings.sharedProfileId,
@@ -818,11 +842,18 @@ openclaw_kill_codex_proxy_port
     List<CliApiConfig> profiles,
   ) {
     final normalized = <Map<String, dynamic>>[];
+    var userProfileIndex = 0;
     for (var i = 0; i < profiles.length; i++) {
+      if (_isLocalApiProxyProfile(profiles[i])) {
+        continue;
+      }
+      userProfileIndex += 1;
       final profile = _normalizedSharedProfile(
         profiles[i].copyWith(
           profileName:
-              profiles[i].profileName.trim().isEmpty ? 'API ${i + 1}' : null,
+              profiles[i].profileName.trim().isEmpty
+                  ? 'API $userProfileIndex'
+                  : null,
           sharedProfileId: profiles[i].sharedProfileId.trim().isEmpty
               ? _newSharedProfileId(i)
               : profiles[i].sharedProfileId.trim(),
@@ -917,7 +948,7 @@ openclaw_kill_codex_proxy_port
 
     for (var i = 0; i < sharedProfiles.length; i++) {
       final profile = sharedProfiles[i];
-      if (profile.baseUrl.trim().isEmpty) {
+      if (profile.baseUrl.trim().isEmpty || _isLocalApiProxyProfile(profile)) {
         continue;
       }
       final providerId = _apiProxyProviderId(profile, index: i);
@@ -943,7 +974,8 @@ openclaw_kill_codex_proxy_port
     };
     for (final entry in activeConfigs.entries) {
       final toolConfig = entry.value;
-      if (toolConfig.baseUrl.trim().isEmpty) {
+      if (toolConfig.baseUrl.trim().isEmpty ||
+          _isLocalApiProxyProfile(toolConfig)) {
         continue;
       }
       var providerId = providerIdsBySharedId[toolConfig.sharedProfileId];
@@ -1077,7 +1109,42 @@ openclaw_kill_codex_proxy_port
 
   static String _apiProxyClientProtocol(String protocol) {
     final normalized = _normalizedProtocol(protocol);
-    return normalized == 'gemini' ? 'openai' : normalized;
+    return normalized == 'gemini' || normalized == 'ollama'
+        ? 'openai'
+        : normalized;
+  }
+
+  static CliApiConfig _localApiProxyProfile() {
+    return const CliApiConfig(
+      toolId: 'shared',
+      sharedProfileId: _localApiProxyProfileId,
+      profileName: _localApiProxyProfileName,
+      apiProtocol: 'openai',
+      baseUrl: _localApiProxyBaseUrl,
+      apiKey: _localApiProxyApiKey,
+    );
+  }
+
+  static bool _isLocalApiProxyProfile(CliApiConfig profile) {
+    if (profile.sharedProfileId.trim() == _localApiProxyProfileId) {
+      return true;
+    }
+    return _isLocalApiProxyBaseUrl(profile.baseUrl);
+  }
+
+  static bool _isLocalApiProxyBaseUrl(String value) {
+    final uri = Uri.tryParse(value.trim());
+    if (uri == null) {
+      return false;
+    }
+    final scheme = uri.scheme.toLowerCase();
+    final host = uri.host.toLowerCase();
+    final port = uri.hasPort ? uri.port : (scheme == 'https' ? 443 : 80);
+    final path = _trimTrailingSlash(uri.path.trim());
+    return scheme == 'http' &&
+        (host == '127.0.0.1' || host == 'localhost') &&
+        port == 9999 &&
+        (path.isEmpty || path == '/v1');
   }
 
   static String _buildTerminalThemeSh() {
@@ -3350,7 +3417,11 @@ Rules:
   static String _normalizedProtocol(String protocol) {
     final normalized = protocol.trim().toLowerCase();
     return switch (normalized) {
+      'chat' || 'chat_completions' => 'openai',
+      'response' || 'codex' => 'responses',
+      'responses' => 'responses',
       'anthropic' => 'anthropic',
+      'ollama' => 'ollama',
       'gemini' => 'gemini',
       _ => 'openai',
     };
@@ -3993,6 +4064,20 @@ server.listen(cfg.port, cfg.host);
         return uri;
       }
       return uri.replace(pathSegments: [...segments, 'models']);
+    }
+    if (protocol == 'ollama') {
+      if (segments.length >= 2 &&
+          segments[segments.length - 2] == 'api' &&
+          segments.last == 'tags') {
+        return uri;
+      }
+      if (segments.isNotEmpty && segments.last == 'models') {
+        return uri;
+      }
+      if (segments.isNotEmpty && segments.last == 'v1') {
+        return uri.replace(pathSegments: [...segments, 'models']);
+      }
+      return uri.replace(pathSegments: ['api', 'tags']);
     }
     if (segments.isEmpty) {
       return uri.replace(pathSegments: ['v1', 'models']);
