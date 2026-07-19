@@ -355,8 +355,8 @@ def redact_config(config: dict[str, Any]) -> dict[str, Any]:
     safe.pop("admin_account", None)
     for pid, provider in safe.get("providers", {}).items():
         provider["api_key"] = mask_secret(str(provider.get("api_key") or ""))
-    for field in ("auth_tokens", "admin_tokens"):
-        safe[field] = [mask_secret(str(token)) for token in config.get(field, [])]
+    safe["auth_tokens"] = [str(token) for token in config.get("auth_tokens", [])]
+    safe["admin_tokens"] = [mask_secret(str(token)) for token in config.get("admin_tokens", [])]
     return safe
 
 

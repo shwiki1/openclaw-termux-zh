@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../app.dart';
-import '../models/cli_api_config.dart';
 import '../models/cli_tool.dart';
 import '../services/browser_automation_service.dart';
 import '../services/cli_api_config_service.dart';
@@ -26,7 +25,6 @@ class CliToolsScreen extends StatefulWidget {
 
 class _CliToolsScreenState extends State<CliToolsScreen> {
   List<CliToolStatus> _statuses = const [];
-  List<CliApiConfig> _sharedProfiles = const [];
   bool _loading = true;
 
   @override
@@ -59,16 +57,12 @@ class _CliToolsScreenState extends State<CliToolsScreen> {
     } catch (_) {
       // Status probing should still proceed when the rootfs is not ready yet.
     }
-    final results = await Future.wait<dynamic>([
-      CliToolService.checkAllStatuses(forceRefresh: forceStatusRefresh),
-      CliApiConfigService.loadSharedProfiles(),
-    ]);
-    final statuses = results[0] as List<CliToolStatus>;
-    final sharedProfiles = results[1] as List<CliApiConfig>;
+    final statuses = await CliToolService.checkAllStatuses(
+      forceRefresh: forceStatusRefresh,
+    );
     if (!mounted) return;
     setState(() {
       _statuses = statuses;
-      _sharedProfiles = sharedProfiles;
       _loading = false;
     });
   }
@@ -272,12 +266,6 @@ class _CliToolsScreenState extends State<CliToolsScreen> {
   }
 
   Widget _buildSharedApiCard(ThemeData theme) {
-    final configuredCount =
-        _sharedProfiles.where((profile) => profile.isConfigured).length;
-    final profileSummary = _sharedProfiles.isEmpty
-        ? '暂无旧共享 API 配置'
-        : '旧共享 API：${_sharedProfiles.length} 个，已配置 $configuredCount 个';
-
     return Card(
       clipBehavior: Clip.antiAlias,
       child: Padding(
@@ -371,7 +359,6 @@ class _CliToolsScreenState extends State<CliToolsScreen> {
                       'http://127.0.0.1:9999/v1',
                     ),
                     _apiInfoChip(theme, Icons.key, '默认 Key：sk-123'),
-                    _apiInfoChip(theme, Icons.tune, profileSummary),
                   ],
                 ),
               ],
@@ -556,6 +543,104 @@ class _CliToolsScreenState extends State<CliToolsScreen> {
   }
 }
 
+Widget _buildUsageGuide(ThemeData theme) {
+  return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest.withAlpha(150),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: theme.colorScheme.outlineVariant),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.integration_instructions_outlined,
+                size: 18,
+                color: theme.colorScheme.primary,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  '代理使用说明',
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          SelectableText(
+            'Base URL：${LocalApiProxyService.url}\n'
+            'API Key：sk-123\n'
+            '健康检查：${LocalApiProxyService.healthUrl}\n'
+            'RootFS 路径：${LocalApiProxyService.guestDir}',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+              fontFamily: 'monospace',
+              height: 1.45,
+            ),
+          ),
+          const SizedBox(height: 12),
+          _buildUsagePoint(
+            theme,
+            Icons.power_settings_new,
+            '软件打开后会自动启动中转代理；如果状态异常，点“重启代理”会重新同步内置 api2py 并拉起服务。',
+          ),
+          _buildUsagePoint(
+            theme,
+            Icons.route_outlined,
+            'CLI 工具统一写入本地代理地址，不直接保存上游 Key；上游提供商、模型映射和访问 Token 在“API 管理”页面维护。',
+          ),
+          _buildUsagePoint(
+            theme,
+            Icons.hub_outlined,
+            '原“管理 API”保存时只更新对应 CLI 的模型选择和映射，并把缺失的映射追加到代理配置，避免把本地代理再次作为上游套娃。',
+          ),
+          _buildUsagePoint(
+            theme,
+            Icons.swap_horiz,
+            '支持 OpenAI 兼容、Codex Responses、Anthropic Messages 和 Ollama 协议；获取模型前可在配置里切换协议。',
+          ),
+        ],
+      ),
+  );
+}
+
+Widget _buildUsagePoint(ThemeData theme, IconData icon, String text) {
+  return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 24,
+            height: 24,
+            decoration: BoxDecoration(
+              color: theme.colorScheme.primary.withAlpha(18),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(icon, size: 15, color: theme.colorScheme.primary),
+          ),
+          const SizedBox(width: 9),
+          Expanded(
+            child: Text(
+              text,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+                height: 1.35,
+              ),
+            ),
+          ),
+        ],
+      ),
+  );
+}
+
 class _LocalApiProxyDialog extends StatefulWidget {
   const _LocalApiProxyDialog({required this.onOpenManager});
 
@@ -707,27 +792,7 @@ class _LocalApiProxyDialogState extends State<_LocalApiProxyDialog> {
                 ),
               ),
               const SizedBox(height: 14),
-              Text(
-                '内置 api2py 会在 Ubuntu RootFS 中运行一个本地 OpenAI/Responses/Anthropic 兼容中转服务。',
-                style: theme.textTheme.bodyMedium,
-              ),
-              const SizedBox(height: 10),
-              SelectableText(
-                '代理地址：${LocalApiProxyService.url}\n'
-                '健康检查：${LocalApiProxyService.healthUrl}\n'
-                'RootFS 路径：${LocalApiProxyService.guestDir}',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                  fontFamily: 'monospace',
-                ),
-              ),
-              const SizedBox(height: 10),
-              Text(
-                '软件打开后会自动启动代理。需要刷新进程时点“重启代理”，再点“API 管理”直接进入管理页。原有“管理 API”里保存的提供商和模型会同步写入这个中转代理，各 CLI 工具统一使用 http://127.0.0.1:9999/v1。',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
-              ),
+              _buildUsageGuide(theme),
               if (_status.isNotEmpty) ...[
                 const SizedBox(height: 12),
                 Container(

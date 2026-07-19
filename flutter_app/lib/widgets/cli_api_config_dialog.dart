@@ -167,6 +167,7 @@ class _CliApiConfigDialogState extends State<CliApiConfigDialog> {
       model: _modelController.text,
       reasoningEffort: _reasoningEffort,
       modelMapping: _mappingController.text,
+      apiProtocol: _effectiveModelFetchProtocol,
     );
   }
 

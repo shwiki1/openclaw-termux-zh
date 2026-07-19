@@ -163,17 +163,40 @@ class _SettingsScreenState extends State<SettingsScreen>
 
   Future<void> _refreshPermissionState() async {
     try {
+      final batteryOptimized = await NativeBridge.isBatteryOptimized();
       final storageGranted = await NativeBridge.hasStoragePermission();
       final overlayGranted = await NativeBridge.hasOverlayPermission();
       final floatingFileManagerRunning =
           await NativeBridge.isFloatingFileManagerRunning();
       if (!mounted) return;
       setState(() {
+        _batteryOptimized = batteryOptimized;
         _storageGranted = storageGranted;
         _overlayGranted = overlayGranted;
         _floatingFileManagerRunning = floatingFileManagerRunning;
       });
     } catch (_) {}
+  }
+
+  Future<void> _refreshBatteryOptimizationAfterSettings() async {
+    var previous = _batteryOptimized;
+    for (var attempt = 0; attempt < 6; attempt += 1) {
+      if (attempt > 0) {
+        await Future<void>.delayed(const Duration(milliseconds: 350));
+      }
+      if (!mounted) return;
+      try {
+        final optimized = await NativeBridge.isBatteryOptimized();
+        if (!mounted) return;
+        setState(() => _batteryOptimized = optimized);
+        if (optimized != previous || !optimized) {
+          return;
+        }
+        previous = optimized;
+      } catch (_) {
+        return;
+      }
+    }
   }
 
   @override
@@ -262,9 +285,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                           color: AppColors.statusGreen),
                   onTap: () async {
                     await NativeBridge.requestBatteryOptimization();
-                    // Refresh status after returning from settings
-                    final optimized = await NativeBridge.isBatteryOptimized();
-                    setState(() => _batteryOptimized = optimized);
+                    await _refreshBatteryOptimizationAfterSettings();
                   },
                 ),
                 ListTile(
