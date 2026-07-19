@@ -226,7 +226,7 @@ class CliApiConfigService {
     );
     await writeRootfsFile(
       _localApiProxyConfigPath,
-      _buildLocalApiProxyConfig(allConfigs),
+      await _buildLocalApiProxyConfig(allConfigs),
     );
     await writeRootfsFile(_envPath, _buildGlobalEnvFile());
     await writeRootfsFile(
@@ -886,9 +886,33 @@ openclaw_kill_codex_proxy_port
     ].join('\n');
   }
 
-  static String _buildLocalApiProxyConfig(Map<String, dynamic> config) {
+  static Future<String> _buildLocalApiProxyConfig(
+    Map<String, dynamic> config,
+  ) async {
+    final existingConfig = await _readLocalApiProxyConfig();
+    final proxyConfig = _mergeLocalApiProxyConfig(config, existingConfig);
+    return '${const JsonEncoder.withIndent('  ').convert(proxyConfig)}\n';
+  }
+
+  static Future<Map<String, dynamic>> _readLocalApiProxyConfig() async {
+    try {
+      final content = await NativeBridge.readRootfsFile(_localApiProxyConfigPath);
+      if (content == null || content.trim().isEmpty) {
+        return <String, dynamic>{};
+      }
+      final decoded = jsonDecode(content);
+      return _asMap(decoded);
+    } catch (_) {
+      return <String, dynamic>{};
+    }
+  }
+
+  static Map<String, dynamic> _mergeLocalApiProxyConfig(
+    Map<String, dynamic> config,
+    Map<String, dynamic> existingConfig,
+  ) {
     final sharedProfiles = _sharedProfilesFromConfig(config);
-    final providers = <String, dynamic>{};
+    final providers = _asMap(existingConfig['providers']);
     final providerIdsBySharedId = <String, String>{};
 
     for (var i = 0; i < sharedProfiles.length; i++) {
@@ -898,18 +922,21 @@ openclaw_kill_codex_proxy_port
       }
       final providerId = _apiProxyProviderId(profile, index: i);
       providerIdsBySharedId[profile.sharedProfileId] = providerId;
-      providers[providerId] = <String, dynamic>{
-        'name': profile.profileName.trim().isEmpty
-            ? 'API ${i + 1}'
-            : profile.profileName.trim(),
-        'type': _apiProxyProviderType(profile.effectiveApiProtocol),
-        'base_url': _trimTrailingSlash(profile.baseUrl),
-        'api_key': profile.apiKey.trim(),
-        'enabled': true,
-      };
+      providers[providerId] = _apiProxyProviderJson(
+        profile,
+        fallbackName: 'API ${i + 1}',
+      );
     }
 
-    final mappings = <String, dynamic>{};
+    final mappings = _asMap(existingConfig['model_mappings']);
+    final appManagedAliases = <String>{};
+    final previousAppAliases = _asStringList(
+      existingConfig['openclaw_app_managed_model_aliases'],
+    ).toSet();
+    for (final alias in previousAppAliases) {
+      mappings.remove(alias);
+    }
+
     final activeConfigs = {
       for (final toolId in configurableToolIds)
         toolId: _resolvedToolConfig(toolId, config),
@@ -922,15 +949,10 @@ openclaw_kill_codex_proxy_port
       var providerId = providerIdsBySharedId[toolConfig.sharedProfileId];
       if (providerId == null || !providers.containsKey(providerId)) {
         providerId = _apiProxyProviderId(toolConfig, index: providers.length);
-        providers[providerId] = <String, dynamic>{
-          'name': toolConfig.profileName.trim().isEmpty
-              ? entry.key
-              : toolConfig.profileName.trim(),
-          'type': _apiProxyProviderType(toolConfig.effectiveApiProtocol),
-          'base_url': _trimTrailingSlash(toolConfig.baseUrl),
-          'api_key': toolConfig.apiKey.trim(),
-          'enabled': true,
-        };
+        providers[providerId] = _apiProxyProviderJson(
+          toolConfig,
+          fallbackName: entry.key,
+        );
       }
       final alias = toolConfig.effectiveToolModel.trim();
       final actualModel = toolConfig.model.trim().isNotEmpty
@@ -939,6 +961,7 @@ openclaw_kill_codex_proxy_port
       if (alias.isEmpty || actualModel.isEmpty) {
         continue;
       }
+      appManagedAliases.add(alias);
       mappings[alias] = <String, dynamic>{
         'provider': providerId,
         'model': actualModel,
@@ -946,22 +969,65 @@ openclaw_kill_codex_proxy_port
       };
     }
 
-    final defaultProvider = providers.keys.isEmpty ? '' : providers.keys.first;
-    final proxyConfig = <String, dynamic>{
-      'server': <String, dynamic>{'host': '127.0.0.1', 'port': 9999},
-      'providers': providers,
-      'model_mappings': mappings,
-      'prefix_routes': <String, dynamic>{},
-      'default_provider': defaultProvider,
-      'force_default_provider': false,
-      'auth_tokens': const <String>[],
-      'admin_tokens': const <String>[],
-      'pricing': <String, dynamic>{},
-      'log_max': 500,
-      'debug_requests': false,
-      'allow_local_unauthenticated': true,
-      'admin_account': <String, dynamic>{},
-      'concurrency': <String, dynamic>{
+    final server = _asMap(existingConfig['server']);
+    server['host'] = '127.0.0.1';
+    server['port'] = 9999;
+
+    final proxyConfig = Map<String, dynamic>.from(existingConfig);
+    proxyConfig['server'] = server;
+    proxyConfig['providers'] = providers;
+    proxyConfig['model_mappings'] = mappings;
+    proxyConfig['prefix_routes'] = _asMap(existingConfig['prefix_routes']);
+    proxyConfig['default_provider'] = _selectLocalApiProxyDefaultProvider(
+      existingConfig['default_provider'],
+      providers,
+    );
+    proxyConfig.putIfAbsent('force_default_provider', () => false);
+    proxyConfig['auth_tokens'] = _asList(existingConfig['auth_tokens']);
+    proxyConfig['admin_tokens'] = _asList(existingConfig['admin_tokens']);
+    proxyConfig['pricing'] = _asMap(existingConfig['pricing']);
+    proxyConfig.putIfAbsent('log_max', () => 500);
+    proxyConfig.putIfAbsent('debug_requests', () => false);
+    proxyConfig['allow_local_unauthenticated'] = true;
+    proxyConfig['admin_account'] = _asMap(existingConfig['admin_account']);
+    proxyConfig['concurrency'] = _mergeLocalApiProxyConcurrency(
+      _asMap(existingConfig['concurrency']),
+    );
+    proxyConfig['openclaw_app_managed_model_aliases'] = appManagedAliases.toList()
+      ..sort();
+    return proxyConfig;
+  }
+
+  static Map<String, dynamic> _apiProxyProviderJson(
+    CliApiConfig profile, {
+    required String fallbackName,
+  }) {
+    return <String, dynamic>{
+        'name': profile.profileName.trim().isEmpty
+            ? fallbackName
+            : profile.profileName.trim(),
+        'type': _apiProxyProviderType(profile.effectiveApiProtocol),
+        'base_url': _trimTrailingSlash(profile.baseUrl),
+        'api_key': profile.apiKey.trim(),
+        'enabled': true,
+      };
+  }
+
+  static String _selectLocalApiProxyDefaultProvider(
+    dynamic current,
+    Map<String, dynamic> providers,
+  ) {
+    final defaultProvider = current is String ? current.trim() : '';
+    if (defaultProvider.isNotEmpty && providers.containsKey(defaultProvider)) {
+      return defaultProvider;
+    }
+    return providers.keys.isEmpty ? '' : providers.keys.first;
+  }
+
+  static Map<String, dynamic> _mergeLocalApiProxyConcurrency(
+    Map<String, dynamic> existing,
+  ) {
+    return <String, dynamic>{
         'max_upstream': 64,
         'http_max_connections': 100,
         'http_max_keepalive': 40,
@@ -970,9 +1036,25 @@ openclaw_kill_codex_proxy_port
         'write_queue_size': 1000,
         'max_body_bytes': 8000000,
         'server_limit_concurrency': 96,
-      },
-    };
-    return '${const JsonEncoder.withIndent('  ').convert(proxyConfig)}\n';
+      }..addAll(existing);
+  }
+
+  static List<dynamic> _asList(dynamic value) {
+    if (value is List) {
+      return List<dynamic>.from(value);
+    }
+    return <dynamic>[];
+  }
+
+  static List<String> _asStringList(dynamic value) {
+    if (value is! List) {
+      return <String>[];
+    }
+    return value
+        .whereType<String>()
+        .map((item) => item.trim())
+        .where((item) => item.isNotEmpty)
+        .toList();
   }
 
   static String _apiProxyProviderId(CliApiConfig profile, {required int index}) {

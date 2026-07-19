@@ -15,13 +15,17 @@ class LocalApiProxyBrowserScreen extends StatefulWidget {
 }
 
 class _LocalApiProxyBrowserScreenState
-    extends State<LocalApiProxyBrowserScreen> {
+    extends State<LocalApiProxyBrowserScreen>
+    with AutomaticKeepAliveClientMixin<LocalApiProxyBrowserScreen> {
   late final WebViewController _controller;
   late final TextEditingController _addressController;
   bool _loading = true;
   bool _canGoBack = false;
   bool _canGoForward = false;
   String _serviceMessage = '正在连接本地中转代理...';
+
+  @override
+  bool get wantKeepAlive => true;
 
   @override
   void initState() {
@@ -38,34 +42,25 @@ class _LocalApiProxyBrowserScreenState
   }
 
   Future<void> _openManagerWhenReady() async {
-    setState(() {
-      _loading = true;
-      _serviceMessage = '正在检查本地中转代理...';
-    });
+    _updateServiceState(loading: true, message: '正在检查本地中转代理...');
     var status = await LocalApiProxyService.status();
     if (!status.manageable) {
-      setState(() => _serviceMessage = '正在启动本地中转代理...');
+      _updateServiceState(message: '正在启动本地中转代理...');
       try {
         await LocalApiProxyService.start();
       } catch (error) {
         if (!mounted) return;
-        setState(() {
-          _loading = false;
-          _serviceMessage = '启动失败：$error';
-        });
+        _updateServiceState(loading: false, message: '启动失败：$error');
         return;
       }
       status = await LocalApiProxyService.status();
     }
     if (!mounted) return;
     if (!status.manageable) {
-      setState(() {
-        _loading = false;
-        _serviceMessage = status.message;
-      });
+      _updateServiceState(loading: false, message: status.message);
       return;
     }
-    setState(() => _serviceMessage = status.message);
+    _updateServiceState(message: status.message);
     await _controller.loadRequest(Uri.parse(LocalApiProxyService.url));
   }
 
@@ -73,15 +68,12 @@ class _LocalApiProxyBrowserScreenState
     const params = PlatformWebViewControllerCreationParams();
     final controller = WebViewController.fromPlatformCreationParams(params)
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..setBackgroundColor(Colors.transparent)
+      ..setBackgroundColor(Colors.white)
       ..setNavigationDelegate(
         NavigationDelegate(
           onPageStarted: (url) {
             if (!mounted) return;
-            setState(() {
-              _loading = true;
-              _addressController.text = url;
-            });
+            _updateNavigationState(loading: true, url: url);
           },
           onPageFinished: (url) async {
             await _syncNavigationState(url);
@@ -112,6 +104,32 @@ class _LocalApiProxyBrowserScreenState
     });
   }
 
+  void _updateServiceState({bool? loading, String? message}) {
+    if (!mounted) return;
+    final nextLoading = loading ?? _loading;
+    final nextMessage = message ?? _serviceMessage;
+    if (nextLoading == _loading && nextMessage == _serviceMessage) {
+      return;
+    }
+    setState(() {
+      _loading = nextLoading;
+      _serviceMessage = nextMessage;
+    });
+  }
+
+  void _updateNavigationState({bool? loading, String? url}) {
+    if (!mounted) return;
+    final nextLoading = loading ?? _loading;
+    final nextUrl = url ?? _addressController.text;
+    if (nextLoading == _loading && nextUrl == _addressController.text) {
+      return;
+    }
+    setState(() {
+      _loading = nextLoading;
+      _addressController.text = nextUrl;
+    });
+  }
+
   Future<void> _openAddress() async {
     final raw = _addressController.text.trim();
     if (raw.isEmpty) return;
@@ -121,6 +139,7 @@ class _LocalApiProxyBrowserScreenState
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     final theme = Theme.of(context);
     return Scaffold(
       appBar: AppBar(title: const Text('中转代理管理')),

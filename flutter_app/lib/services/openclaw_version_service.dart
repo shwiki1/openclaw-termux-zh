@@ -85,8 +85,12 @@ class OpenClawReleaseInfo {
 }
 
 class OpenClawVersionService {
-  static const _packageJsonPath =
-      'usr/local/lib/node_modules/openclaw/package.json';
+  static const _packageJsonPaths = [
+    'usr/local/lib/node_modules/openclaw/package.json',
+    'usr/lib/node_modules/openclaw/package.json',
+    'root/.openclaw/node_modules/openclaw/package.json',
+    'opt/openclaw/node_modules/openclaw/package.json',
+  ];
   static const _packageRegistryEndpoint = '/openclaw';
   static const _latestReleaseEndpoint = '/openclaw/latest';
   static const defaultAvailableReleaseLimit = 10;
@@ -305,22 +309,26 @@ class OpenClawVersionService {
   }
 
   Future<String?> readInstalledVersion() async {
-    try {
-      final packageJson = await NativeBridge.readRootfsFile(_packageJsonPath);
-      if (packageJson == null || packageJson.trim().isEmpty) {
-        return null;
-      }
+    for (final path in _packageJsonPaths) {
+      try {
+        final packageJson = await NativeBridge.readRootfsFile(path);
+        if (packageJson == null || packageJson.trim().isEmpty) {
+          continue;
+        }
 
-      final decoded = jsonDecode(packageJson);
-      if (decoded is! Map<String, dynamic>) {
-        return null;
-      }
+        final decoded = jsonDecode(packageJson);
+        if (decoded is! Map<String, dynamic>) {
+          continue;
+        }
 
-      final version = decoded['version'];
-      if (version is String && version.trim().isNotEmpty) {
-        return version.trim();
+        final version = decoded['version'];
+        if (version is String && version.trim().isNotEmpty) {
+          return version.trim();
+        }
+      } catch (_) {
+        continue;
       }
-    } catch (_) {}
+    }
 
     return null;
   }
