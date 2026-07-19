@@ -151,7 +151,7 @@ class _LocalApiProxyBrowserScreenState
     if (platformController is AndroidWebViewController) {
       final params = AndroidWebViewWidgetCreationParams(
         controller: platformController,
-        displayWithHybridComposition: true,
+        displayWithHybridComposition: false,
       );
       return WebViewWidget.fromPlatformCreationParams(params: params);
     }
@@ -166,10 +166,14 @@ class _LocalApiProxyBrowserScreenState
     super.build(context);
     return Scaffold(
       backgroundColor: _background,
+      resizeToAvoidBottomInset: false,
       appBar: AppBar(
-        title: const Text('中转代理管理'),
+        title: const Text(
+          '中转代理管理',
+          style: TextStyle(color: Colors.white),
+        ),
         backgroundColor: _background,
-        foregroundColor: _ink,
+        foregroundColor: Colors.white,
         surfaceTintColor: Colors.transparent,
         elevation: 0,
       ),
@@ -290,27 +294,38 @@ class _LocalApiProxyBrowserScreenState
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
                 child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    _bottomButton(
-                      tooltip: '后退',
-                      onPressed: _canGoBack ? () => _controller.goBack() : null,
-                      icon: Icons.arrow_back,
+                    Expanded(
+                      child: Center(
+                        child: _bottomButton(
+                          tooltip: '后退',
+                          onPressed: _canGoBack
+                              ? () => _controller.goBack()
+                              : null,
+                          icon: Icons.arrow_back,
+                        ),
+                      ),
                     ),
-                    const SizedBox(width: 10),
-                    _bottomButton(
-                      tooltip: '前进',
-                      onPressed: _canGoForward
-                          ? () => _controller.goForward()
-                          : null,
-                      icon: Icons.arrow_forward,
+                    Expanded(
+                      child: Center(
+                        child: _bottomButton(
+                          tooltip: '前进',
+                          onPressed: _canGoForward
+                              ? () => _controller.goForward()
+                              : null,
+                          icon: Icons.arrow_forward,
+                        ),
+                      ),
                     ),
-                    const SizedBox(width: 10),
-                    _bottomButton(
-                      tooltip: '刷新',
-                      onPressed: () => _controller.reload(),
-                      icon: Icons.refresh,
-                      loading: _loading,
+                    Expanded(
+                      child: Center(
+                        child: _bottomButton(
+                          tooltip: '刷新',
+                          onPressed: () => _controller.reload(),
+                          icon: Icons.refresh,
+                          loading: _loading,
+                        ),
+                      ),
                     ),
                   ],
                 ),

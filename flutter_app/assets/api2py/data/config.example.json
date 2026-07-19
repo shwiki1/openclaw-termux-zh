@@ -8,7 +8,9 @@
   "prefix_routes": {},
   "default_provider": "",
   "force_default_provider": false,
-  "auth_tokens": [],
+  "auth_tokens": [
+    "sk-123"
+  ],
   "admin_tokens": [],
   "pricing": {},
   "log_max": 500,

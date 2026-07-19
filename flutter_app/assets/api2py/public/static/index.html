@@ -136,6 +136,8 @@ tailwind.config = {
   }
   .mapping-scroll {
     overflow: auto;
+    height: min(62vh, 620px);
+    min-height: 360px;
     max-height: min(62vh, 620px);
     scrollbar-gutter: stable;
   }
@@ -164,6 +166,7 @@ tailwind.config = {
     transition: border-color .2s, box-shadow .2s, background .2s;
   }
   .mapping-row input { font-family: "JetBrains Mono", "Fira Code", Consolas, monospace; }
+  .mapping-row .dark-select.open { z-index: 120; }
   .mapping-row input:focus, .mapping-row select:focus {
     outline: none; border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,.12); background: #0d1320;
   }
@@ -217,7 +220,7 @@ tailwind.config = {
   }
   @media (max-width: 640px) {
     .mapping-table { min-width: 900px; }
-    .mapping-scroll { max-height: 58vh; }
+    .mapping-scroll { height: min(58vh, 520px); min-height: 300px; max-height: min(58vh, 520px); }
   }
 
   /* ── modal ── */

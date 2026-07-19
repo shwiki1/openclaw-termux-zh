@@ -36,6 +36,7 @@ class _CliApiConfigDialogState extends State<CliApiConfigDialog> {
   List<CliApiModelOption> _availableModels = const [];
   String _reasoningEffort = '';
   String _sharedProfileId = '';
+  String _modelFetchProtocol = '';
   bool _loading = true;
   bool _saving = false;
   bool _loadingModels = false;
@@ -66,6 +67,7 @@ class _CliApiConfigDialogState extends State<CliApiConfigDialog> {
           requested: settings.sharedProfileId,
           profiles: profiles,
         );
+        _modelFetchProtocol = _protocolForProfileId(_sharedProfileId, profiles);
         _loading = false;
       });
     } catch (error) {
@@ -111,6 +113,28 @@ class _CliApiConfigDialogState extends State<CliApiConfigDialog> {
     return null;
   }
 
+  String get _effectiveModelFetchProtocol {
+    final selected = _selectedSharedProfile;
+    final protocol = _modelFetchProtocol.trim();
+    if (protocol.isNotEmpty) {
+      return protocol;
+    }
+    return selected?.effectiveApiProtocol ?? 'openai';
+  }
+
+  String _protocolForProfileId(String profileId, List<CliApiConfig> profiles) {
+    final id = profileId.trim();
+    if (id.isEmpty) {
+      return '';
+    }
+    for (final profile in profiles) {
+      if (profile.sharedProfileId == id) {
+        return profile.effectiveApiProtocol;
+      }
+    }
+    return '';
+  }
+
   Future<void> _openSharedProfilesManager() async {
     final savedProfileId = await CliApiProfilesDialog.show(context);
     if (savedProfileId == null) {
@@ -131,6 +155,8 @@ class _CliApiConfigDialogState extends State<CliApiConfigDialog> {
     setState(() {
       _sharedProfiles = profiles;
       _sharedProfileId = selectedProfileId;
+      _modelFetchProtocol = _protocolForProfileId(selectedProfileId, profiles);
+      _availableModels = const [];
     });
   }
 
@@ -161,7 +187,7 @@ class _CliApiConfigDialogState extends State<CliApiConfigDialog> {
         toolId: widget.tool.id,
         baseUrl: profile.baseUrl,
         apiKey: profile.apiKey,
-        apiProtocol: profile.effectiveApiProtocol,
+        apiProtocol: _effectiveModelFetchProtocol,
       );
       if (!mounted) return;
       setState(() {
@@ -404,6 +430,10 @@ class _CliApiConfigDialogState extends State<CliApiConfigDialog> {
                                 : (value) {
                                     setState(() {
                                       _sharedProfileId = value ?? '';
+                                      _modelFetchProtocol = _protocolForProfileId(
+                                        _sharedProfileId,
+                                        _sharedProfiles,
+                                      );
                                       _availableModels = const [];
                                     });
                                   },
@@ -450,6 +480,32 @@ class _CliApiConfigDialogState extends State<CliApiConfigDialog> {
                                   style: theme.textTheme.bodySmall?.copyWith(
                                     color: theme.colorScheme.onSurfaceVariant,
                                   ),
+                                ),
+                                const SizedBox(height: 10),
+                                DropdownButtonFormField<String>(
+                                  initialValue: _effectiveModelFetchProtocol,
+                                  isExpanded: true,
+                                  decoration: const InputDecoration(
+                                    labelText: '获取模型协议',
+                                    border: OutlineInputBorder(),
+                                    isDense: true,
+                                  ),
+                                  items: [
+                                    for (final entry in CliApiConfigService
+                                        .supportedApiProtocols.entries)
+                                      DropdownMenuItem<String>(
+                                        value: entry.key,
+                                        child: Text(entry.value),
+                                      ),
+                                  ],
+                                  onChanged: _saving || _loadingModels
+                                      ? null
+                                      : (value) {
+                                          setState(() {
+                                            _modelFetchProtocol = value ?? '';
+                                            _availableModels = const [];
+                                          });
+                                        },
                                 ),
                               ],
                             ),

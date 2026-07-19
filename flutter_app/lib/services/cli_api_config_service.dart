@@ -55,7 +55,7 @@ class CliApiConfigService {
   static const _localApiProxyBaseUrl = 'http://127.0.0.1:9999/v1';
   static const _localApiProxyProfileId = 'openclaw-local-api-proxy';
   static const _localApiProxyProfileName = '本地中转代理';
-  static const _localApiProxyApiKey = 'openclaw-local-proxy';
+  static const _localApiProxyApiKey = 'sk-123';
   static const _localApiProxyConfigPath =
       '/root/.openclaw/api2py/data/config.json';
   static const _codeBuddyModelsPath = '/root/.codebuddy/models.json';
@@ -1083,7 +1083,10 @@ openclaw_kill_codex_proxy_port
       providers,
     );
     proxyConfig.putIfAbsent('force_default_provider', () => false);
-    proxyConfig['auth_tokens'] = _asList(existingConfig['auth_tokens']);
+    final authTokens = _asStringList(existingConfig['auth_tokens']);
+    proxyConfig['auth_tokens'] = authTokens.isEmpty
+        ? <String>[_localApiProxyApiKey]
+        : authTokens;
     proxyConfig['admin_tokens'] = _asList(existingConfig['admin_tokens']);
     proxyConfig['pricing'] = _asMap(existingConfig['pricing']);
     proxyConfig.putIfAbsent('log_max', () => 500);
@@ -1481,7 +1484,7 @@ esac
         ..add('export CODEBUDDY_API_KEY=${_shQuote(apiKey)}')
         ..add('export CHINESE_LLM_API_KEY=${_shQuote(apiKey)}');
     } else if (toolId == 'codex' && openAiBaseUrl.isNotEmpty) {
-      lines.add('export OPENAI_API_KEY=${_shQuote('openclaw-local-proxy')}');
+      lines.add('export OPENAI_API_KEY=${_shQuote(_localApiProxyApiKey)}');
     }
     if (openAiBaseUrl.isNotEmpty) {
       lines
@@ -1852,7 +1855,7 @@ esac
     final effectiveApiKey = apiKey.isNotEmpty
         ? apiKey
         : useApiAuth
-            ? 'openclaw-local-proxy'
+            ? _localApiProxyApiKey
             : '';
     return '${const JsonEncoder.withIndent('  ').convert(<String, dynamic>{
           if (effectiveApiKey.isNotEmpty) 'OPENAI_API_KEY': effectiveApiKey,

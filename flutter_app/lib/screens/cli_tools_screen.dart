@@ -274,25 +274,26 @@ class _CliToolsScreenState extends State<CliToolsScreen> {
   Widget _buildSharedApiCard(ThemeData theme) {
     final configuredCount =
         _sharedProfiles.where((profile) => profile.isConfigured).length;
-    final summary = _sharedProfiles.isEmpty
-        ? '推荐先启动本地中转代理，在代理管理页维护上游 API、模型映射和访问 Token。旧共享 API 入口仍保留用于兼容已配置工具。'
-        : '本地中转代理可统一接管 API 转发；旧共享 API 中还有 ${_sharedProfiles.length} 个配置，其中 ${configuredCount} 个已填写连接信息。';
+    final profileSummary = _sharedProfiles.isEmpty
+        ? '暂无旧共享 API 配置'
+        : '旧共享 API：${_sharedProfiles.length} 个，已配置 $configuredCount 个';
 
     return Card(
+      clipBehavior: Clip.antiAlias,
       child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+        padding: const EdgeInsets.all(18),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final compact = constraints.maxWidth < 520;
+            final actions = Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              alignment: compact ? WrapAlignment.start : WrapAlignment.end,
               children: [
-                Expanded(
-                  child: Text(
-                    'API 接入',
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
+                FilledButton.icon(
+                  onPressed: _loading ? null : _showLocalApiProxyDialog,
+                  icon: const Icon(Icons.hub_outlined),
+                  label: const Text('中转代理'),
                 ),
                 OutlinedButton.icon(
                   onPressed: _loading ? null : _manageSharedApis,
@@ -300,25 +301,107 @@ class _CliToolsScreenState extends State<CliToolsScreen> {
                   label: const Text('管理 API'),
                 ),
               ],
-            ),
-            const SizedBox(height: 10),
-            Align(
-              alignment: Alignment.centerRight,
-              child: FilledButton.icon(
-                onPressed: _loading ? null : _showLocalApiProxyDialog,
-                icon: const Icon(Icons.hub_outlined),
-                label: const Text('中转代理'),
-              ),
-            ),
-            const SizedBox(height: 10),
-            Text(
-              summary,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-          ],
+            );
+            final titleBlock = Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 36,
+                      height: 36,
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.primaryContainer,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Icon(
+                        Icons.route_outlined,
+                        color: theme.colorScheme.onPrimaryContainer,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Flexible(
+                      child: Text(
+                        'API 接入',
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  '本地中转代理会自动启动在 127.0.0.1:9999，用来统一维护上游 API、模型映射和访问 Token；CLI 工具默认通过 /v1 入口调用代理。',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            );
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                compact
+                    ? Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          titleBlock,
+                          const SizedBox(height: 12),
+                          actions,
+                        ],
+                      )
+                    : Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(child: titleBlock),
+                          const SizedBox(width: 16),
+                          actions,
+                        ],
+                      ),
+                const SizedBox(height: 14),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    _apiInfoChip(
+                      theme,
+                      Icons.link,
+                      'http://127.0.0.1:9999/v1',
+                    ),
+                    _apiInfoChip(theme, Icons.key, '默认 Key：sk-123'),
+                    _apiInfoChip(theme, Icons.tune, profileSummary),
+                  ],
+                ),
+              ],
+            );
+          },
         ),
+      ),
+    );
+  }
+
+  Widget _apiInfoChip(ThemeData theme, IconData icon, String label) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest.withAlpha(150),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: theme.colorScheme.outlineVariant),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: theme.colorScheme.onSurfaceVariant),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ],
       ),
     );
   }
