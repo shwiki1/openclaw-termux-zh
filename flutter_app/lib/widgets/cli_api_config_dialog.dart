@@ -64,16 +64,14 @@ class _CliApiConfigDialogState extends State<CliApiConfigDialog> {
         requested: settings.sharedProfileId,
         profiles: profiles,
       );
-      var modelFetchProtocol = settings.apiProtocol.trim().isNotEmpty
-          ? settings.apiProtocol.trim()
-          : _protocolForProfileId(selectedProfileId, profiles);
-      if (_isLocalApiProxyProfileId(selectedProfileId, profiles)) {
-        final proxyProtocol = await CliApiConfigService.loadLocalApiProxyModelProtocol(
-          settings.effectiveToolModel,
-        );
-        if (proxyProtocol.trim().isNotEmpty) {
-          modelFetchProtocol = proxyProtocol.trim();
-        }
+      var modelFetchProtocol = _protocolForProfileId(selectedProfileId, profiles);
+      final proxyProtocol = await CliApiConfigService.loadLocalApiProxyModelProtocol(
+        settings.effectiveToolModel,
+      );
+      if (proxyProtocol.trim().isNotEmpty) {
+        modelFetchProtocol = proxyProtocol.trim();
+      } else if (settings.apiProtocol.trim().isNotEmpty) {
+        modelFetchProtocol = settings.apiProtocol.trim();
       }
       if (!mounted) return;
       _applySettings(settings);
@@ -366,8 +364,7 @@ class _CliApiConfigDialogState extends State<CliApiConfigDialog> {
     try {
       final settings = _toolSettings();
       await CliApiConfigService.saveToolSettings(settings);
-      if (_modelFetchProtocolTouched &&
-          _isLocalApiProxyProfileId(settings.sharedProfileId)) {
+      if (_modelFetchProtocolTouched) {
         await CliApiConfigService.updateLocalApiProxyModelProtocol(
           modelAlias: settings.effectiveToolModel,
           apiProtocol: _effectiveModelFetchProtocol,

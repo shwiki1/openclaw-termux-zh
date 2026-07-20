@@ -147,7 +147,14 @@ class CliApiConfigService {
     final configs = await _loadAll();
     final tools = _asMap(configs['tools']);
     configs['tools'] = tools;
-    tools[config.toolId] = _toolSettingsJson(config);
+    final profile = _sharedProfileById(
+      _sharedProfilesForUi(configs),
+      config.sharedProfileId,
+    );
+    final normalized = profile != null && _isLocalApiProxyProfile(profile)
+        ? config.copyWith(apiProtocol: '')
+        : config;
+    tools[config.toolId] = _toolSettingsJson(normalized);
     await _persistConfig(configs);
   }
 
@@ -806,6 +813,7 @@ openclaw_kill_codex_proxy_port
         (toolSettings.sharedProfileId.trim().isEmpty && sharedProfiles.length == 1
             ? sharedProfiles.single
             : null);
+    final profileIsLocalProxy = profile != null && _isLocalApiProxyProfile(profile);
     return CliApiConfig(
       toolId: toolId,
       sharedProfileId: toolSettings.sharedProfileId.trim().isNotEmpty
@@ -814,10 +822,12 @@ openclaw_kill_codex_proxy_port
       profileName: toolSettings.profileName.trim().isNotEmpty
           ? toolSettings.profileName
           : (profile?.profileName ?? ''),
-      apiProtocol: _preferNonEmpty(
-        toolSettings.apiProtocol,
-        profile?.effectiveApiProtocol ?? '',
-      ),
+      apiProtocol: profileIsLocalProxy
+          ? (profile?.effectiveApiProtocol ?? '')
+          : _preferNonEmpty(
+              toolSettings.apiProtocol,
+              profile?.effectiveApiProtocol ?? '',
+            ),
       baseUrl: _preferNonEmpty(toolSettings.baseUrl, profile?.baseUrl ?? ''),
       apiKey: _preferNonEmpty(toolSettings.apiKey, profile?.apiKey ?? ''),
       model: _preferNonEmpty(toolSettings.model, profile?.model ?? ''),
@@ -985,17 +995,18 @@ openclaw_kill_codex_proxy_port
   }
 
   static Map<String, dynamic> _toolSettingsJson(CliApiConfig config) {
+    final localProxy = _isLocalApiProxyBaseUrl(config.baseUrl);
     return <String, dynamic>{
-      'sharedProfileId': config.sharedProfileId.trim(),
-      'baseUrl': config.baseUrl.trim(),
-      'apiKey': config.apiKey.trim(),
-      'model': config.model.trim(),
-      'reasoningEffort': config.reasoningEffort.trim(),
-      'modelMapping': config.modelMapping.trim(),
-      'codexModelMapping': config.modelMapping.trim(),
-      'apiProtocol': config.apiProtocol.trim(),
-      'profileName': config.profileName.trim(),
-    };
+        'sharedProfileId': config.sharedProfileId.trim(),
+        'baseUrl': config.baseUrl.trim(),
+        'apiKey': config.apiKey.trim(),
+        'model': config.model.trim(),
+        'reasoningEffort': config.reasoningEffort.trim(),
+        'modelMapping': config.modelMapping.trim(),
+        'codexModelMapping': config.modelMapping.trim(),
+        'apiProtocol': localProxy ? '' : config.apiProtocol.trim(),
+        'profileName': config.profileName.trim(),
+      };
   }
 
   static String _preferNonEmpty(String primary, String fallback) {
@@ -1116,15 +1127,16 @@ openclaw_kill_codex_proxy_port
         config,
       ).apiProtocol.trim();
       final existingProtocol = _stringValue(existingMapping['protocol']).trim();
+      final effectiveProtocol = existingProtocol.isNotEmpty
+          ? _apiProxyClientProtocol(existingProtocol)
+          : (explicitProtocol.isNotEmpty
+              ? _apiProxyClientProtocol(explicitProtocol)
+              : _defaultLocalApiProxyClientProtocol(entry.key));
       mappings[alias] = <String, dynamic>{
         ...existingMapping,
         'provider': providerId,
         'model': actualModel,
-        'protocol': explicitProtocol.isNotEmpty
-            ? _apiProxyClientProtocol(explicitProtocol)
-            : (existingProtocol.isNotEmpty
-                ? _apiProxyClientProtocol(existingProtocol)
-                : _defaultLocalApiProxyClientProtocol(entry.key)),
+        'protocol': effectiveProtocol,
       };
     }
 
