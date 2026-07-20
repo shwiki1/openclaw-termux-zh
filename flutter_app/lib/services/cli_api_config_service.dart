@@ -56,6 +56,7 @@ class CliApiConfigService {
   static const _localApiProxyProfileId = 'openclaw-local-api-proxy';
   static const _localApiProxyProfileName = '本地中转代理';
   static const _localApiProxyApiKey = 'sk-123';
+  static const _codeBuddyLocalModelAlias = 'openclaw-codebuddy-model';
   static const _localApiProxyConfigPath =
       '/root/.openclaw/api2py/data/config.json';
   static const _codeBuddyModelsPath = '/root/.codebuddy/models.json';
@@ -1113,10 +1114,10 @@ openclaw_kill_codex_proxy_port
           existingProvider: _asMapOrNull(providers[providerId]),
         );
       }
-      final alias = toolConfig.effectiveToolModel.trim();
+      final alias = _runtimeToolModelAlias(entry.key, toolConfig);
       final actualModel = toolConfig.model.trim().isNotEmpty
           ? toolConfig.model.trim()
-          : alias;
+          : toolConfig.effectiveToolModel.trim();
       if (alias.isEmpty || actualModel.isEmpty) {
         continue;
       }
@@ -1546,7 +1547,7 @@ esac
     final baseUrl = config.baseUrl.trim();
     final apiKey = config.apiKey.trim();
     final serviceModel = config.model.trim();
-    final toolModel = config.effectiveToolModel;
+    final toolModel = _runtimeToolModelAlias(toolId, config);
     final effort = config.reasoningEffort.trim();
     final openAiBaseUrl = baseUrl.isNotEmpty ? _localApiProxyBaseUrl : '';
     final protocol = _normalizedProtocol(config.effectiveApiProtocol);
@@ -1635,7 +1636,7 @@ esac
             'availableModels': const <String>[],
           })}\n';
     }
-    final model = config.effectiveToolModel;
+    final model = _runtimeToolModelAlias('codebuddy', config);
     final baseUrl = config.baseUrl.trim().isEmpty ? '' : _localApiProxyBaseUrl;
     final modelId = model.isEmpty ? 'openclaw-model' : model;
     final payload = <String, dynamic>{
@@ -1669,18 +1670,19 @@ esac
             },
           })}\n';
     }
+    final modelAlias = _runtimeToolModelAlias('codebuddy', config);
     final payload = <String, dynamic>{
       'env': {
         if (config.apiKey.trim().isNotEmpty)
           'CODEBUDDY_API_KEY': config.apiKey.trim(),
         if (config.baseUrl.trim().isNotEmpty)
           'CODEBUDDY_BASE_URL': _localApiProxyBaseUrl,
-        if (config.effectiveToolModel.isNotEmpty) ...{
-          'OPENCLAW_MODEL': config.effectiveToolModel,
-          'CODEBUDDY_MODEL': config.effectiveToolModel,
-          'CODEBUDDY_BIG_SLOW_MODEL': config.effectiveToolModel,
-          'CODEBUDDY_SMALL_FAST_MODEL': config.effectiveToolModel,
-          'CODEBUDDY_CODE_SUBAGENT_MODEL': config.effectiveToolModel,
+        if (modelAlias.isNotEmpty) ...{
+          'OPENCLAW_MODEL': modelAlias,
+          'CODEBUDDY_MODEL': modelAlias,
+          'CODEBUDDY_BIG_SLOW_MODEL': modelAlias,
+          'CODEBUDDY_SMALL_FAST_MODEL': modelAlias,
+          'CODEBUDDY_CODE_SUBAGENT_MODEL': modelAlias,
         },
         if (config.baseUrl.trim().isEmpty)
           'CODEBUDDY_INTERNET_ENVIRONMENT': 'internal',
@@ -3583,6 +3585,17 @@ Rules:
       'gemini' => 'GEMINI_API_KEY',
       _ => 'OPENAI_API_KEY',
     };
+  }
+
+  static String _runtimeToolModelAlias(String toolId, CliApiConfig config) {
+    final model = config.effectiveToolModel.trim();
+    if (toolId == 'codebuddy' &&
+        model.isNotEmpty &&
+        config.baseUrl.trim().isNotEmpty &&
+        !_isLocalApiProxyProfile(config)) {
+      return _codeBuddyLocalModelAlias;
+    }
+    return model;
   }
 
   static bool _geminiUsesCustomModelRouting(CliApiConfig config) {
