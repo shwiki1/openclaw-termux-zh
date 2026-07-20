@@ -37,6 +37,7 @@ class _CliApiConfigDialogState extends State<CliApiConfigDialog> {
   String _reasoningEffort = '';
   String _sharedProfileId = '';
   String _modelFetchProtocol = '';
+  bool _modelFetchProtocolTouched = false;
   bool _loading = true;
   bool _saving = false;
   bool _loadingModels = false;
@@ -59,15 +60,28 @@ class _CliApiConfigDialogState extends State<CliApiConfigDialog> {
     try {
       final settings = await CliApiConfigService.loadToolSettings(widget.tool.id);
       final profiles = await CliApiConfigService.loadSharedProfiles();
+      final selectedProfileId = _pickSharedProfileId(
+        requested: settings.sharedProfileId,
+        profiles: profiles,
+      );
+      var modelFetchProtocol = settings.apiProtocol.trim().isNotEmpty
+          ? settings.apiProtocol.trim()
+          : _protocolForProfileId(selectedProfileId, profiles);
+      if (_isLocalApiProxyProfileId(selectedProfileId, profiles)) {
+        final proxyProtocol = await CliApiConfigService.loadLocalApiProxyModelProtocol(
+          settings.effectiveToolModel,
+        );
+        if (proxyProtocol.trim().isNotEmpty) {
+          modelFetchProtocol = proxyProtocol.trim();
+        }
+      }
       if (!mounted) return;
       _applySettings(settings);
       setState(() {
         _sharedProfiles = profiles;
-        _sharedProfileId = _pickSharedProfileId(
-          requested: settings.sharedProfileId,
-          profiles: profiles,
-        );
-        _modelFetchProtocol = _protocolForProfileId(_sharedProfileId, profiles);
+        _sharedProfileId = selectedProfileId;
+        _modelFetchProtocol = modelFetchProtocol;
+        _modelFetchProtocolTouched = false;
         _loading = false;
       });
     } catch (error) {
@@ -135,6 +149,22 @@ class _CliApiConfigDialogState extends State<CliApiConfigDialog> {
     return '';
   }
 
+  bool _isLocalApiProxyProfileId(
+    String profileId, [
+    List<CliApiConfig>? profiles,
+  ]) {
+    final id = profileId.trim();
+    if (id.isEmpty) {
+      return false;
+    }
+    for (final profile in profiles ?? _sharedProfiles) {
+      if (profile.sharedProfileId == id) {
+        return CliApiConfigService.isBuiltinLocalApiProxyProfile(profile);
+      }
+    }
+    return false;
+  }
+
   Future<void> _openSharedProfilesManager() async {
     final savedProfileId = await CliApiProfilesDialog.show(context);
     if (savedProfileId == null) {
@@ -156,6 +186,7 @@ class _CliApiConfigDialogState extends State<CliApiConfigDialog> {
       _sharedProfiles = profiles;
       _sharedProfileId = selectedProfileId;
       _modelFetchProtocol = _protocolForProfileId(selectedProfileId, profiles);
+      _modelFetchProtocolTouched = false;
       _availableModels = const [];
     });
   }
@@ -167,7 +198,10 @@ class _CliApiConfigDialogState extends State<CliApiConfigDialog> {
       model: _modelController.text,
       reasoningEffort: _reasoningEffort,
       modelMapping: _mappingController.text,
-      apiProtocol: _effectiveModelFetchProtocol,
+      apiProtocol:
+          _isLocalApiProxyProfileId(sharedProfileId ?? _sharedProfileId)
+              ? ''
+              : (_modelFetchProtocolTouched ? _effectiveModelFetchProtocol : ''),
     );
   }
 
@@ -330,7 +364,15 @@ class _CliApiConfigDialogState extends State<CliApiConfigDialog> {
     });
 
     try {
-      await CliApiConfigService.saveToolSettings(_toolSettings());
+      final settings = _toolSettings();
+      await CliApiConfigService.saveToolSettings(settings);
+      if (_modelFetchProtocolTouched &&
+          _isLocalApiProxyProfileId(settings.sharedProfileId)) {
+        await CliApiConfigService.updateLocalApiProxyModelProtocol(
+          modelAlias: settings.effectiveToolModel,
+          apiProtocol: _effectiveModelFetchProtocol,
+        );
+      }
       if (!mounted) return;
       Navigator.of(context).pop(true);
     } catch (error) {
@@ -435,6 +477,7 @@ class _CliApiConfigDialogState extends State<CliApiConfigDialog> {
                                         _sharedProfileId,
                                         _sharedProfiles,
                                       );
+                                      _modelFetchProtocolTouched = false;
                                       _availableModels = const [];
                                     });
                                   },
@@ -504,6 +547,7 @@ class _CliApiConfigDialogState extends State<CliApiConfigDialog> {
                                       : (value) {
                                           setState(() {
                                             _modelFetchProtocol = value ?? '';
+                                            _modelFetchProtocolTouched = true;
                                             _availableModels = const [];
                                           });
                                         },

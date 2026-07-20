@@ -151,6 +151,54 @@ class CliApiConfigService {
     await _persistConfig(configs);
   }
 
+  static Future<String> loadLocalApiProxyModelProtocol(String modelAlias) async {
+    final alias = modelAlias.trim();
+    if (alias.isEmpty) {
+      return '';
+    }
+    final proxyConfig = await _readLocalApiProxyConfig();
+    final mappings = _asMap(proxyConfig['model_mappings']);
+    final mapping = _asMapOrNull(mappings[alias]);
+    if (mapping == null || mapping.isEmpty) {
+      return '';
+    }
+    final protocol = _stringValue(mapping['protocol']).trim();
+    if (protocol.isNotEmpty) {
+      return _apiProxyClientProtocol(protocol);
+    }
+    final provider = _asMapOrNull(
+      _asMap(proxyConfig['providers'])[mapping['provider']],
+    );
+    return _apiProxyClientProtocol(_stringValue(provider?['type']));
+  }
+
+  static Future<void> updateLocalApiProxyModelProtocol({
+    required String modelAlias,
+    required String apiProtocol,
+  }) async {
+    final alias = modelAlias.trim();
+    final protocol = _apiProxyClientProtocol(apiProtocol);
+    if (alias.isEmpty || protocol.isEmpty) {
+      return;
+    }
+    final proxyConfig = await _readLocalApiProxyConfig();
+    final mappings = _asMap(proxyConfig['model_mappings']);
+    final mapping = _asMap(mappings[alias]);
+    if (mapping.isEmpty) {
+      return;
+    }
+    mapping['protocol'] = protocol;
+    mappings[alias] = mapping;
+    proxyConfig['model_mappings'] = mappings;
+    final ok = await NativeBridge.writeRootfsFile(
+      _localApiProxyConfigPath,
+      '${const JsonEncoder.withIndent('  ').convert(proxyConfig)}\n',
+    );
+    if (!ok) {
+      throw Exception('RootFS 配置写入失败：$_localApiProxyConfigPath');
+    }
+  }
+
   static Future<void> restoreToolDefaultConfig(String toolId) async {
     final normalizedToolId = toolId.trim();
     if (!configurableToolIds.contains(normalizedToolId)) {
@@ -1028,6 +1076,7 @@ openclaw_kill_codex_proxy_port
       providers[providerId] = _apiProxyProviderJson(
         profile,
         fallbackName: 'API ${i + 1}',
+        existingProvider: _asMapOrNull(providers[providerId]),
       );
     }
 
@@ -1050,6 +1099,7 @@ openclaw_kill_codex_proxy_port
         providers[providerId] = _apiProxyProviderJson(
           toolConfig,
           fallbackName: entry.key,
+          existingProvider: _asMapOrNull(providers[providerId]),
         );
       }
       final alias = toolConfig.effectiveToolModel.trim();
@@ -1061,11 +1111,20 @@ openclaw_kill_codex_proxy_port
       }
       appManagedAliases.add(alias);
       final existingMapping = _asMap(mappings[alias]);
+      final explicitProtocol = _toolSettingsFromConfig(
+        entry.key,
+        config,
+      ).apiProtocol.trim();
+      final existingProtocol = _stringValue(existingMapping['protocol']).trim();
       mappings[alias] = <String, dynamic>{
         ...existingMapping,
         'provider': providerId,
         'model': actualModel,
-        'protocol': _apiProxyClientProtocol(toolConfig.effectiveApiProtocol),
+        'protocol': explicitProtocol.isNotEmpty
+            ? _apiProxyClientProtocol(explicitProtocol)
+            : (existingProtocol.isNotEmpty
+                ? _apiProxyClientProtocol(existingProtocol)
+                : _defaultLocalApiProxyClientProtocol(entry.key)),
       };
     }
 
@@ -1104,12 +1163,16 @@ openclaw_kill_codex_proxy_port
   static Map<String, dynamic> _apiProxyProviderJson(
     CliApiConfig profile, {
     required String fallbackName,
+    Map<String, dynamic>? existingProvider,
   }) {
+    final existingType = _stringValue(existingProvider?['type']).trim();
     return <String, dynamic>{
         'name': profile.profileName.trim().isEmpty
             ? fallbackName
             : profile.profileName.trim(),
-        'type': _apiProxyProviderType(profile.effectiveApiProtocol),
+        'type': existingType.isNotEmpty
+            ? _apiProxyProviderType(existingType)
+            : _apiProxyProviderType(profile.effectiveApiProtocol),
         'base_url': _trimTrailingSlash(profile.baseUrl),
         'api_key': profile.apiKey.trim(),
         'enabled': true,
@@ -1183,6 +1246,10 @@ openclaw_kill_codex_proxy_port
     return normalized == 'gemini' || normalized == 'ollama'
         ? 'openai'
         : normalized;
+  }
+
+  static String _defaultLocalApiProxyClientProtocol(String toolId) {
+    return toolId == 'codex' ? 'responses' : 'openai';
   }
 
   static CliApiConfig _localApiProxyProfile() {

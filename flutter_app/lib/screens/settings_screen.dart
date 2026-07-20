@@ -50,6 +50,8 @@ class _SettingsScreenState extends State<SettingsScreen>
   bool _persistentGatewayLogs = false;
   bool _checkingUpdate = false;
   bool _updatingBonjour = false;
+  bool _waitingBatteryOptimizationReturn = false;
+  int _batteryOptimizationRefreshToken = 0;
 
   @override
   void initState() {
@@ -68,6 +70,10 @@ class _SettingsScreenState extends State<SettingsScreen>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed && mounted) {
       _refreshPermissionState();
+      if (_waitingBatteryOptimizationReturn) {
+        _waitingBatteryOptimizationReturn = false;
+        _refreshBatteryOptimizationAfterSettings();
+      }
     }
   }
 
@@ -179,20 +185,34 @@ class _SettingsScreenState extends State<SettingsScreen>
   }
 
   Future<void> _refreshBatteryOptimizationAfterSettings() async {
-    var previous = _batteryOptimized;
-    for (var attempt = 0; attempt < 6; attempt += 1) {
-      if (attempt > 0) {
-        await Future<void>.delayed(const Duration(milliseconds: 350));
+    final token = ++_batteryOptimizationRefreshToken;
+    const delays = <Duration>[
+      Duration.zero,
+      Duration(milliseconds: 250),
+      Duration(milliseconds: 500),
+      Duration(milliseconds: 900),
+      Duration(milliseconds: 1400),
+      Duration(seconds: 2),
+      Duration(seconds: 3),
+      Duration(seconds: 4),
+    ];
+
+    for (final delay in delays) {
+      if (delay > Duration.zero) {
+        await Future<void>.delayed(delay);
       }
+      if (token != _batteryOptimizationRefreshToken) return;
       if (!mounted) return;
       try {
         final optimized = await NativeBridge.isBatteryOptimized();
+        if (token != _batteryOptimizationRefreshToken) return;
         if (!mounted) return;
-        setState(() => _batteryOptimized = optimized);
-        if (optimized != previous || !optimized) {
+        if (_batteryOptimized != optimized) {
+          setState(() => _batteryOptimized = optimized);
+        }
+        if (!optimized) {
           return;
         }
-        previous = optimized;
       } catch (_) {
         return;
       }
@@ -284,8 +304,14 @@ class _SettingsScreenState extends State<SettingsScreen>
                       : const Icon(Icons.check_circle,
                           color: AppColors.statusGreen),
                   onTap: () async {
+                    _waitingBatteryOptimizationReturn = true;
                     await NativeBridge.requestBatteryOptimization();
-                    await _refreshBatteryOptimizationAfterSettings();
+                    if (mounted) {
+                      await Future<void>.delayed(
+                        const Duration(milliseconds: 500),
+                      );
+                      await _refreshBatteryOptimizationAfterSettings();
+                    }
                   },
                 ),
                 ListTile(
