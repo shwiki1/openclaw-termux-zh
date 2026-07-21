@@ -1011,12 +1011,27 @@ fi
 run_root rm -rf \
   "$ROOTFS_DIR/var/lib/apt/lists/"* \
   "$ROOTFS_DIR/var/cache/apt/archives/"*.deb \
+  "$ROOTFS_DIR/var/log/"* \
   "$ROOTFS_DIR/root/.npm/_logs" \
+  "$ROOTFS_DIR/root/.npm/_cacache" \
   "$ROOTFS_DIR/root/.cache" \
   "$ROOTFS_DIR/tmp/npm-cache" \
   "$ROOTFS_DIR/tmp/npm-tmp" \
   "$ROOTFS_DIR/tmp/"* \
-  "$ROOTFS_DIR/var/tmp/"*
+  "$ROOTFS_DIR/var/tmp/"* \
+  "$ROOTFS_DIR/usr/share/doc/"* \
+  "$ROOTFS_DIR/usr/share/man/"* \
+  "$ROOTFS_DIR/usr/share/info/"*
+
+run_root find "$ROOTFS_DIR" -type d -name '__pycache__' -prune -exec rm -rf {} +
+run_root find "$ROOTFS_DIR" -type f \( -name '*.pyc' -o -name '*.pyo' -o -name '*.js.map' \) -delete
+
+run_root find "$ROOTFS_DIR" -path '*/node_modules/*' -type d \
+  \( -name test -o -name tests -o -name example -o -name examples -o -name doc -o -name docs \) \
+  -prune -exec rm -rf {} +
+run_root find "$ROOTFS_DIR" -path '*/node_modules/*' -type f \
+  \( -name '*.test.ts' -o -name '*.test.js' -o -name '*.spec.ts' -o -name '*.spec.js' \) \
+  -delete
 
 run_root tee "$ROOTFS_DIR/etc/openclaw-prebuilt-rootfs" >/dev/null <<EOF
 format=openclaw-prebuilt-rootfs
