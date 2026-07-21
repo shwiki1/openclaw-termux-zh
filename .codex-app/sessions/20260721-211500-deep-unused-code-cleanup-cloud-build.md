@@ -28,21 +28,22 @@
 - `git diff --check` passed.
 
 ## Cloud Build
-- Cloud build not launched yet at the time this handoff was written; next step is to commit/push the cleanup and watch the GitHub Actions run.
-- Expected next logical Android build must be greater than `203`; the workflow derives this from existing release/workflow history.
+- Cleanup commit `c8a87a3384edf27350e7f4125f679363ec0d87b0` was pushed to GitHub branch `codex-terminal-ime-lag-fix`.
+- GitHub Actions run `29867482912` completed successfully in about 8 minutes. It selected semantic `8.5.0`, display `8.5`, Android build `204`, restored and verified the prebuilt `basic-resource` RootFS, skipped RootFS build/publish, passed Flutter analyze, built the arm64 APK, verified APK native PRoot binaries, collected artifacts, and uploaded GitHub artifact `ciyuanxia-apks`. No Gitee upload step ran.
 
 ## Version And Artifacts
 - Latest published GitHub Release remains `5.4 / 173`.
-- Latest GitHub artifact candidate before this cleanup remains `8.4 / 203` from Actions run `29740833706`.
-- Latest local APK before this cleanup remains `dist/github-run-29740833706/CiYuanXia-v8.4-203-arm64-v8a.apk`, SHA-256 `138036ffcfe0a740d8f2dc0785c592ded3fdec39cbeb2e8c7191cbdf6f7dbf36`.
-- The cleanup cloud validation build must use logical build `> 203` and reuse the prebuilt `basic-resource` RootFS.
+- Latest GitHub artifact candidate after this cleanup is `8.5 / 204` from Actions run `29867482912`, head SHA `c8a87a3384edf27350e7f4125f679363ec0d87b0`.
+- GitHub artifact `ciyuanxia-apks` ID `8509966202`, digest `sha256:0efb1d1438808a284c6591a2a1835cf809426006cbd72db13671c9f7764074b3`, artifact size `311437095` bytes.
+- Local artifact path: `dist/github-run-29867482912/ciyuanxia-apks.zip`; ZIP SHA-256 `0efb1d1438808a284c6591a2a1835cf809426006cbd72db13671c9f7764074b3`; `unzip -t` passed.
+- Local APK path: `dist/github-run-29867482912/CiYuanXia-v8.5-204-arm64-v8a.apk`; size `325175770` bytes; APK SHA-256 `42d29e264f4a92b4829121b4ac9c79f5465596fd22240e6826e9f7810f336675`.
+- APK inspection confirmed api2py frontend/backend assets, `data/config.example.json`, offline Tailwind/Lucide assets, and `openclaw-rootfs-noble-arm64.tar.gz` are present.
 
 ## Known Risks
 - Local Flutter/Dart/adb tooling remains unavailable; Android compile validation depends on GitHub Actions.
 - The workflow still does not run `flutter test`; it runs Flutter analyze and APK packaging in cloud.
-- Device smoke for `8.4 / 203` and any new cleanup candidate remains required.
+- Device smoke for `8.5 / 204` remains required.
 
 ## Next Actions
-- Commit and push the cleanup to `codex-terminal-ime-lag-fix`.
-- Watch the triggered GitHub Actions APK build, record run id/version/build/artifact details, and download/verify the artifact if successful.
-- If the cloud build fails, patch the minimal issue and produce a fresh build number for the retry.
+- Device-smoke `8.5 / 204` on Android, especially CodeBuddy through the local api2py relay and the prior proxy/API-management regression list.
+- Future APK builds must use logical build `> 204` and continue to reuse the prebuilt `basic-resource` RootFS unless the user explicitly requests a RootFS rebuild.
