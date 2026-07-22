@@ -15,32 +15,28 @@ class OpenSourceLicensesScreen extends StatefulWidget {
 class _OpenSourceLicensesScreenState extends State<OpenSourceLicensesScreen> {
   final _service = OpenSourceLicenseService();
 
-  late Future<String> _repositoryIndexFuture;
-  Future<String>? _noticesFuture;
+  late Future<_OpenSourceDocuments> _documentsFuture;
 
   @override
   void initState() {
     super.initState();
-    _loadDocuments();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      setState(_loadFullNotices);
-    });
+    _documentsFuture = _loadDocuments();
   }
 
-  void _loadDocuments() {
-    _repositoryIndexFuture = _service.loadRepositoryIndex();
-    _noticesFuture = null;
-  }
-
-  void _loadFullNotices() {
-    _noticesFuture = _service.loadOpenSourceNotices();
+  Future<_OpenSourceDocuments> _loadDocuments() async {
+    final values = await Future.wait([
+      _service.loadRepositoryIndex(),
+      _service.loadOpenSourceNotices(),
+    ]);
+    return _OpenSourceDocuments(
+      repositories: values[0],
+      notices: values[1],
+    );
   }
 
   void _retry() {
     setState(() {
-      _loadDocuments();
-      _loadFullNotices();
+      _documentsFuture = _loadDocuments();
     });
   }
 
@@ -52,98 +48,102 @@ class _OpenSourceLicensesScreenState extends State<OpenSourceLicensesScreen> {
       appBar: AppBar(
         title: Text(l10n.t('settingsOpenSourceLicensesPageTitle')),
       ),
-      body: ListView(
-        padding: ResponsiveLayout.pagePadding(context),
-        children: [
-          ResponsiveLayout.constrainContent(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                FutureBuilder<String>(
-                  future: _repositoryIndexFuture,
-                  builder: (context, snapshot) {
-                    return _DocumentSection(
-                      title: l10n.t('settingsOpenSourceLicensesRepositoryIndex'),
-                      data: snapshot.data,
-                      loading: snapshot.connectionState != ConnectionState.done,
-                      error: snapshot.hasError,
-                      onRetry: _retry,
-                    );
-                  },
+      body: FutureBuilder<_OpenSourceDocuments>(
+        future: _documentsFuture,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState != ConnectionState.done) {
+            return Center(
+              child: _LoadingMessage(
+                label: l10n.t('settingsOpenSourceLicensesLoading'),
+              ),
+            );
+          }
+
+          if (snapshot.hasError) {
+            return Center(child: _ErrorMessage(onRetry: _retry));
+          }
+
+          final documents = snapshot.data;
+          if (documents == null || documents.isEmpty) {
+            return Center(child: Text(l10n.t('settingsOpenSourceLicensesEmpty')));
+          }
+
+          return ListView(
+            padding: ResponsiveLayout.pagePadding(context),
+            children: [
+              ResponsiveLayout.constrainContent(
+                child: _LicenseDocument(
+                  repositoriesTitle:
+                      l10n.t('settingsOpenSourceLicensesRepositoryIndex'),
+                  noticesTitle: l10n.t('settingsOpenSourceLicensesNotices'),
+                  repositories: documents.repositories,
+                  notices: documents.notices,
                 ),
-                const SizedBox(height: 12),
-                FutureBuilder<String>(
-                  future: _noticesFuture,
-                  builder: (context, snapshot) {
-                    return _DocumentSection(
-                      title: l10n.t('settingsOpenSourceLicensesPageTitle'),
-                      data: snapshot.data,
-                      loading: _noticesFuture == null ||
-                          snapshot.connectionState != ConnectionState.done,
-                      error: snapshot.hasError,
-                      onRetry: _retry,
-                    );
-                  },
-                ),
-              ],
-            ),
-          ),
-        ],
+              ),
+            ],
+          );
+        },
       ),
     );
   }
 }
 
-class _DocumentSection extends StatelessWidget {
-  const _DocumentSection({
-    required this.title,
-    required this.data,
-    required this.loading,
-    required this.error,
-    required this.onRetry,
+class _OpenSourceDocuments {
+  const _OpenSourceDocuments({
+    required this.repositories,
+    required this.notices,
   });
 
-  final String title;
-  final String? data;
-  final bool loading;
-  final bool error;
-  final VoidCallback onRetry;
+  final String repositories;
+  final String notices;
+
+  bool get isEmpty => repositories.trim().isEmpty && notices.trim().isEmpty;
+}
+
+class _LicenseDocument extends StatelessWidget {
+  const _LicenseDocument({
+    required this.repositoriesTitle,
+    required this.noticesTitle,
+    required this.repositories,
+    required this.notices,
+  });
+
+  final String repositoriesTitle;
+  final String noticesTitle;
+  final String repositories;
+  final String notices;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final l10n = context.l10n;
-    final text = data?.trim() ?? '';
+    final textStyle = theme.textTheme.bodySmall?.copyWith(
+      fontFamily: 'DejaVuSansMono',
+      height: 1.4,
+    );
 
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: SelectionArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              title,
-              style: theme.textTheme.titleSmall?.copyWith(
+              repositoriesTitle,
+              style: theme.textTheme.titleMedium?.copyWith(
                 fontWeight: FontWeight.w700,
               ),
             ),
-            const SizedBox(height: 12),
-            if (loading)
-              _LoadingMessage(
-                label: l10n.t('settingsOpenSourceLicensesLoading'),
-              )
-            else if (error)
-              _ErrorMessage(onRetry: onRetry)
-            else if (text.isEmpty)
-              Text(l10n.t('settingsOpenSourceLicensesEmpty'))
-            else
-              SelectableText(
-                text,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  fontFamily: 'DejaVuSansMono',
-                  height: 1.4,
-                ),
+            const SizedBox(height: 10),
+            SelectableText(repositories.trim(), style: textStyle),
+            const SizedBox(height: 24),
+            Text(
+              noticesTitle,
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w700,
               ),
+            ),
+            const SizedBox(height: 10),
+            SelectableText(notices.trim(), style: textStyle),
           ],
         ),
       ),

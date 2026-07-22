@@ -31,6 +31,7 @@ const Map<String, String> appStringsZhHant = {
   'settingsOpenSourceLicensesLoading': '正在載入開源授權文件...',
   'settingsOpenSourceLicensesEmpty': '暫無可顯示的開源授權文字。',
   'settingsOpenSourceLicensesRepositoryIndex': '開源倉庫地址',
+  'settingsOpenSourceLicensesNotices': '完整授權說明',
   'settingsOpenSourceLicensesLoadFailed': '載入開源授權失敗',
   'setupWizardTitle': '開始配置 CLI 執行環境',
   'setupWizardIntroIdle':

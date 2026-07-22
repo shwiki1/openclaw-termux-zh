@@ -31,6 +31,7 @@ const Map<String, String> appStringsJa = {
   'settingsOpenSourceLicensesLoading': 'オープンソースライセンス文書を読み込み中...',
   'settingsOpenSourceLicensesEmpty': '表示できるオープンソースライセンス文書はありません。',
   'settingsOpenSourceLicensesRepositoryIndex': 'リポジトリアドレス',
+  'settingsOpenSourceLicensesNotices': '完全なライセンス通知',
   'settingsOpenSourceLicensesLoadFailed': 'オープンソースライセンスの読み込みに失敗しました',
   'setupWizardTitle': 'CLI ランタイムのセットアップ',
   'setupWizardIntroIdle':
