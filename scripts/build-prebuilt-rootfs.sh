@@ -1022,7 +1022,7 @@ run_root rm -rf \
   "$ROOTFS_DIR/usr/share/man/"* \
   "$ROOTFS_DIR/usr/share/info/"*
 
-run_root find "$ROOTFS_DIR/usr/share/doc" -type f ! -name copyright -delete
+run_root find "$ROOTFS_DIR/usr/share/doc" \( -type f -o -type l \) ! -name copyright -delete
 run_root find "$ROOTFS_DIR/usr/share/doc" -type d -empty -delete
 
 run_root find "$ROOTFS_DIR" -type d -name '__pycache__' -prune -exec rm -rf {} +
