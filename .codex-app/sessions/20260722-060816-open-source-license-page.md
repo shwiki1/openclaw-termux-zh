@@ -38,13 +38,14 @@
 - Cloud build selected install-visible `8.9`, semantic `8.9.0`, Android build `208`.
 - APK artifact: `CiYuanXia-v8.9-208-arm64-v8a.apk`.
 - GitHub artifact: `ciyuanxia-apks`, ID `8527787649`, digest `sha256:5f3de2a9d1b0a4e32cd9a02ddf5a9db6dd74ae928066e5798c9ccf5e2c0bc0fd`, size `291012601` bytes.
-- Local download path started at `dist/github-run-29915338517/ciyuanxia-apks.zip` but was stopped at 6.1 MiB because artifact API throughput was around 100-130 KiB/s.
+- Local ZIP: `dist/github-run-29915338517/ciyuanxia-apks.zip`, SHA-256 `5f3de2a9d1b0a4e32cd9a02ddf5a9db6dd74ae928066e5798c9ccf5e2c0bc0fd`, matching the GitHub artifact digest; `unzip -t` passed.
+- Extracted APK: `dist/github-run-29915338517/CiYuanXia-v8.9-208-arm64-v8a.apk`, size `304758635` bytes, SHA-256 `9c81532663e728153e6fa45131f19772920e6228fd03a996fd5eeba3bef8cb2d`.
+- APK asset inspection confirmed `assets/flutter_assets/assets/open_source/OPEN_SOURCE_REPOSITORIES.md`, `OPEN_SOURCE_NOTICES.md`, `OPEN_SOURCE_SOURCES.md`, `THIRD_PARTY_NOTICES.md`, the RootFS archive, and required arm64 PRoot native libraries are present and pass `unzip -t`.
 - Next fresh cloud build must use logical build `> 208`.
 
 ## Known Risks
 - Local Flutter analyze/test, APK compile, emulator/device visual smoke, and packaged-asset verification were not run because Flutter/Dart/adb are unavailable locally. GitHub Actions did run Flutter analyze and APK packaging successfully.
-- APK-level verification of `8.9 / 208` is pending because the local artifact download was too slow; resume the partial ZIP with `curl -L -C -` before inspecting packaged assets.
+- Android device smoke is still pending; local artifact and APK asset verification passed.
 
 ## Next Actions
-- Resume and complete the `8.9 / 208` artifact download, then verify the APK includes `assets/flutter_assets/assets/open_source/OPEN_SOURCE_REPOSITORIES.md` along with the existing notice/source files.
 - Device-smoke Settings -> Open Source Licenses on Android: confirm it opens a page, shows repository addresses first, then renders the full licenses below without the old popup lag.
