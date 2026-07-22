@@ -232,26 +232,25 @@ jobs:
             exit 1
           fi
           echo "Detected latest published Android build: ${LATEST_RELEASE_BUILD}"
-          LATEST_WORKFLOW_BUILD="$(
+          detect_latest_workflow_build() {
+            workflow_name="$1"
             gh run list \
               --repo "${GITHUB_REPOSITORY}" \
-              --workflow "Build CiYuanXia Apps" \
+              --workflow "$workflow_name" \
               --json databaseId,status,conclusion \
-              --limit 20 \
-              --jq '.[] | select(.status == "completed") | .databaseId' \
+              --limit 40 \
+              --jq '.[] | select(.status == "completed") | .databaseId' 2>/dev/null \
               | while read -r run_id; do
                   [ -n "$run_id" ] || continue
-                  build="$(
-                    gh run view "$run_id" --repo "${GITHUB_REPOSITORY}" --log 2>/dev/null \
-                      | sed -nE 's/.*Selected next Android build: ([0-9]+).*/\1/p' \
-                      | tail -n 1
-                  )"
-                  if [[ "$build" =~ ^[0-9]+$ ]]; then
-                    echo "$build"
-                    break
-                  fi
+                  gh run view "$run_id" --repo "${GITHUB_REPOSITORY}" --log 2>/dev/null \
+                    | sed -nE 's/.*Selected next Android build: ([0-9]+).*/\1/p'
                 done
-          )"
+          }
+          LATEST_WORKFLOW_BUILD="$({
+            detect_latest_workflow_build "${GITHUB_WORKFLOW}"
+            detect_latest_workflow_build "Build CiYuanXia Apps"
+            detect_latest_workflow_build "Build OpenClaw Apps"
+          } | sed -nE '/^[0-9]+$/p' | sort -n | tail -n 1)"
           if ! [[ "$LATEST_WORKFLOW_BUILD" =~ ^[0-9]+$ ]]; then
             echo "WARNING: Unable to determine the latest successful workflow Android build from recent logs."
             LATEST_WORKFLOW_BUILD=0
