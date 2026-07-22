@@ -19,6 +19,7 @@ import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
+import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
@@ -3878,6 +3879,124 @@ class FloatingFileManagerService : Service() {
         fun next(): SortMode {
             val values = values()
             return values[(ordinal + 1) % values.size]
+        }
+    }
+
+    private data class MediaInfo(
+        val title: String?,
+        val artist: String?,
+        val album: String?,
+        val durationMs: Long,
+        val bitrate: Int,
+        val sampleRate: Int,
+        val embeddedArt: ByteArray?,
+    ) {
+        fun summaryLines(file: File): List<String> {
+            return buildList {
+                add("文件: ${file.name}")
+                title?.takeIf { it.isNotBlank() }?.let { add("标题: $it") }
+                artist?.takeIf { it.isNotBlank() }?.let { add("艺术家: $it") }
+                album?.takeIf { it.isNotBlank() }?.let { add("专辑: $it") }
+                add("时长: ${MediaToolbox.formatDuration(durationMs)}")
+                if (bitrate > 0) {
+                    add("码率: ${bitrate / 1000} kbps")
+                }
+                if (sampleRate > 0) {
+                    add("采样率: $sampleRate Hz")
+                }
+                add("大小: ${formatFileSize(file.length())}")
+                add("修改时间: ${formatTimestamp(file.lastModified())}")
+                add("路径: ${file.absolutePath}")
+            }
+        }
+
+        private fun formatFileSize(size: Long): String {
+            if (size < 1024L) {
+                return "$size B"
+            }
+            val units = arrayOf("KB", "MB", "GB", "TB")
+            var value = size.toDouble() / 1024.0
+            var unitIndex = 0
+            while (value >= 1024.0 && unitIndex < units.lastIndex) {
+                value /= 1024.0
+                unitIndex++
+            }
+            return "%.1f %s".format(Locale.ROOT, value, units[unitIndex])
+        }
+
+        private fun formatTimestamp(timestamp: Long): String {
+            return SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date(timestamp))
+        }
+    }
+
+    private data class MediaOperationResult(
+        val success: Boolean,
+        val message: String,
+    )
+
+    private object MediaToolbox {
+        fun readMediaInfo(file: File): MediaInfo {
+            val retriever = MediaMetadataRetriever()
+            try {
+                retriever.setDataSource(file.absolutePath)
+                return MediaInfo(
+                    title = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_TITLE),
+                    artist = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ARTIST),
+                    album = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ALBUM),
+                    durationMs = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L,
+                    bitrate = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_BITRATE)?.toIntOrNull() ?: 0,
+                    sampleRate = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                        retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_SAMPLERATE)?.toIntOrNull() ?: 0
+                    } else {
+                        0
+                    },
+                    embeddedArt = retriever.embeddedPicture,
+                )
+            } finally {
+                retriever.release()
+            }
+        }
+
+        fun formatDuration(durationMs: Long): String {
+            if (durationMs <= 0L) {
+                return "--:--"
+            }
+            val totalSeconds = durationMs / 1000L
+            val hours = totalSeconds / 3600L
+            val minutes = (totalSeconds % 3600L) / 60L
+            val seconds = totalSeconds % 60L
+            return if (hours > 0L) {
+                "%d:%02d:%02d".format(Locale.ROOT, hours, minutes, seconds)
+            } else {
+                "%02d:%02d".format(Locale.ROOT, minutes, seconds)
+            }
+        }
+
+        fun convertAudioToMp3(@Suppress("UNUSED_PARAMETER") source: File, @Suppress("UNUSED_PARAMETER") target: File): MediaOperationResult {
+            return unavailableConversionResult()
+        }
+
+        fun convertAudioToM4a(@Suppress("UNUSED_PARAMETER") source: File, @Suppress("UNUSED_PARAMETER") target: File): MediaOperationResult {
+            return unavailableConversionResult()
+        }
+
+        fun extractAudioFromVideo(@Suppress("UNUSED_PARAMETER") source: File, @Suppress("UNUSED_PARAMETER") target: File): MediaOperationResult {
+            return unavailableConversionResult()
+        }
+
+        fun convertVideoToMp4(@Suppress("UNUSED_PARAMETER") source: File, @Suppress("UNUSED_PARAMETER") target: File): MediaOperationResult {
+            return unavailableConversionResult()
+        }
+
+        fun extractVideoFrame(@Suppress("UNUSED_PARAMETER") source: File, @Suppress("UNUSED_PARAMETER") target: File): MediaOperationResult {
+            return unavailableConversionResult()
+        }
+
+        private fun unavailableConversionResult(): MediaOperationResult {
+            return MediaOperationResult(
+                success = false,
+                message = "当前版本未内置媒体转码组件",
+            )
         }
     }
 
