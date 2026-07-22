@@ -7,6 +7,7 @@ import '../constants.dart';
 import '../l10n/app_localizations.dart';
 import '../models/runtime_install_options.dart';
 import '../models/setup_state.dart';
+import 'install_status_message_formatter.dart';
 import 'native_bridge.dart';
 
 class BootstrapService {
