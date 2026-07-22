@@ -519,6 +519,10 @@ const Map<String, String> appStringsJa = {
   'settingsOpenSourceLicenses': 'オープンソースライセンス',
   'settingsOpenSourceLicensesSubtitle':
       'サードパーティ通知、GPL/LGPL のソース提供、依存関係ライセンスを表示します',
+  'settingsOpenSourceLicensesPageTitle': 'オープンソースライセンス',
+  'settingsOpenSourceLicensesLoading': 'オープンソースライセンス文書を読み込み中...',
+  'settingsOpenSourceLicensesEmpty': '表示できるオープンソースライセンス文書がありません。',
+  'settingsOpenSourceLicensesRepositoryIndex': 'リポジトリ URL',
   'settingsOpenSourceLicensesLoadFailed': 'オープンソースライセンスを読み込めませんでした',
   'settingsPlayStore': 'Play ストア',
   'settingsEmail': 'メール',

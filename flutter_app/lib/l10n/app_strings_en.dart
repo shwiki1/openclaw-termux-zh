@@ -922,6 +922,10 @@ const Map<String, String> appStringsEn = {
   'settingsOpenSourceLicenses': 'Open Source Licenses',
   'settingsOpenSourceLicensesSubtitle':
       'View third-party notices, GPL/LGPL source offers, and package licenses',
+  'settingsOpenSourceLicensesPageTitle': 'Open Source Licenses',
+  'settingsOpenSourceLicensesLoading': 'Loading open source license documents...',
+  'settingsOpenSourceLicensesEmpty': 'No open source license text is available.',
+  'settingsOpenSourceLicensesRepositoryIndex': 'Repository addresses',
   'settingsOpenSourceLicensesLoadFailed': 'Failed to load open source licenses',
   'settingsPlayStore': 'Play Store',
   'settingsEmail': 'Email',

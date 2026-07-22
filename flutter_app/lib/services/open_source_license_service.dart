@@ -2,11 +2,18 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 class OpenSourceLicenseService {
+  static const repositoryIndexAsset =
+      'assets/open_source/OPEN_SOURCE_REPOSITORIES.md';
+
   static const _noticeAssets = <String>[
     'assets/open_source/OPEN_SOURCE_NOTICES.md',
     'assets/open_source/THIRD_PARTY_NOTICES.md',
     'assets/open_source/OPEN_SOURCE_SOURCES.md',
   ];
+
+  Future<String> loadRepositoryIndex() {
+    return rootBundle.loadString(repositoryIndexAsset);
+  }
 
   Future<String> loadOpenSourceNotices() async {
     final buffer = StringBuffer();

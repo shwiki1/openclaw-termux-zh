@@ -49,6 +49,7 @@ flutter:
     - assets/api2py/public/static/lib/
     - assets/api2py/scripts/
     - assets/sample_configs/openclaw/
+    - assets/open_source/OPEN_SOURCE_REPOSITORIES.md
     - assets/open_source/OPEN_SOURCE_NOTICES.md
     - assets/open_source/THIRD_PARTY_NOTICES.md
     - assets/open_source/OPEN_SOURCE_SOURCES.md
