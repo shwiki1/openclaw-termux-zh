@@ -28,19 +28,23 @@
 - `python3 /data/data/com.termux/files/home/.codex/skills/app-development-governor/scripts/check_dependency_licenses.py --project .` found 0 unknown npm direct licenses.
 
 ## Cloud Build
-- No cloud build was triggered for this local UI follow-up.
-- Latest cloud candidate remains `8.8 / 207` from run `29888947739`.
-- Next fresh cloud build must use logical build `> 207`.
+- Pushed local source commit `4feb891` through the GitHub API to branch `codex-terminal-ime-lag-fix`, producing remote commit `0cf953090b11c963feacdb4fd29d8b327a897591`.
+- GitHub Actions run `29915338517` completed successfully from the push event.
+- RootFS restore/verify passed from `basic-resource`; RootFS build and publish steps were skipped.
+- Flutter analyze, arm64 APK build, APK PRoot native-library verification, artifact collection, and artifact upload passed.
+- Release publication was skipped because this was not a publish-release run.
 
 ## Version And Artifacts
-- No version bump and no cloud build were performed in this follow-up.
-- Latest cloud candidate remains `8.8 / 207` from run `29888947739`.
-- Next fresh cloud build must use logical build `> 207`.
+- Cloud build selected install-visible `8.9`, semantic `8.9.0`, Android build `208`.
+- APK artifact: `CiYuanXia-v8.9-208-arm64-v8a.apk`.
+- GitHub artifact: `ciyuanxia-apks`, ID `8527787649`, digest `sha256:5f3de2a9d1b0a4e32cd9a02ddf5a9db6dd74ae928066e5798c9ccf5e2c0bc0fd`, size `291012601` bytes.
+- Local download path started at `dist/github-run-29915338517/ciyuanxia-apks.zip` but was stopped at 6.1 MiB because artifact API throughput was around 100-130 KiB/s.
+- Next fresh cloud build must use logical build `> 208`.
 
 ## Known Risks
-- Local Flutter analyze/test, APK compile, emulator/device visual smoke, and packaged-asset verification were not run because Flutter/Dart/adb are unavailable locally.
-- This UI change is local source only until the next GitHub Actions build packages it.
+- Local Flutter analyze/test, APK compile, emulator/device visual smoke, and packaged-asset verification were not run because Flutter/Dart/adb are unavailable locally. GitHub Actions did run Flutter analyze and APK packaging successfully.
+- APK-level verification of `8.9 / 208` is pending because the local artifact download was too slow; resume the partial ZIP with `curl -L -C -` before inspecting packaged assets.
 
 ## Next Actions
-- On the next cloud build, verify the APK includes `assets/flutter_assets/assets/open_source/OPEN_SOURCE_REPOSITORIES.md` along with the existing notice/source files.
+- Resume and complete the `8.9 / 208` artifact download, then verify the APK includes `assets/flutter_assets/assets/open_source/OPEN_SOURCE_REPOSITORIES.md` along with the existing notice/source files.
 - Device-smoke Settings -> Open Source Licenses on Android: confirm it opens a page, shows repository addresses first, then renders the full licenses below without the old popup lag.
