@@ -31,6 +31,7 @@ class BootstrapManager(
     private val configDir get() = "$filesDir/config"
     private val libDir get() = "$filesDir/lib"
     private val nativeRuntimeDir get() = "$filesDir/native"
+    private val workspaceRootDir get() = File(rootfsDir, "root/openclaw-cli-workspace")
     private val workspacePermissionMarkerName = ".android-permissions-v3"
 
     fun setupDirectories() {
