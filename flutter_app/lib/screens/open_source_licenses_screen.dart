@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 
 import '../l10n/app_localizations.dart';
 import '../services/open_source_license_service.dart';
@@ -138,10 +137,12 @@ class _DocumentSection extends StatelessWidget {
             else if (text.isEmpty)
               Text(l10n.t('settingsOpenSourceLicensesEmpty'))
             else
-              MarkdownBody(
-                data: text,
-                selectable: true,
-                styleSheet: _markdownStyleSheet(theme),
+              SelectableText(
+                text,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  fontFamily: 'DejaVuSansMono',
+                  height: 1.4,
+                ),
               ),
           ],
         ),
@@ -200,25 +201,4 @@ class _ErrorMessage extends StatelessWidget {
       ],
     );
   }
-}
-
-MarkdownStyleSheet _markdownStyleSheet(ThemeData theme) {
-  final monospace = theme.textTheme.bodySmall?.copyWith(
-    fontFamily: 'DejaVuSansMono',
-    height: 1.35,
-  );
-
-  return MarkdownStyleSheet.fromTheme(theme).copyWith(
-    h1: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
-    h2: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
-    h3: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
-    p: theme.textTheme.bodySmall?.copyWith(height: 1.4),
-    listBullet: theme.textTheme.bodySmall,
-    code: monospace,
-    codeblockDecoration: BoxDecoration(
-      color: theme.colorScheme.surfaceContainerHighest.withAlpha(140),
-      borderRadius: BorderRadius.circular(8),
-      border: Border.all(color: theme.dividerColor.withAlpha(120)),
-    ),
-  );
 }

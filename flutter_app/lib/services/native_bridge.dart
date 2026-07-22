@@ -264,6 +264,26 @@ class NativeBridge {
     return await _channel.invokeMethod('hasStoragePermission');
   }
 
+  static Future<bool> hasOverlayPermission() async {
+    return await _channel.invokeMethod('hasOverlayPermission');
+  }
+
+  static Future<bool> requestOverlayPermission() async {
+    return await _channel.invokeMethod('requestOverlayPermission');
+  }
+
+  static Future<bool> startFloatingFileManager() async {
+    return await _channel.invokeMethod('startFloatingFileManager');
+  }
+
+  static Future<bool> stopFloatingFileManager() async {
+    return await _channel.invokeMethod('stopFloatingFileManager');
+  }
+
+  static Future<bool> isFloatingFileManagerRunning() async {
+    return await _channel.invokeMethod('isFloatingFileManagerRunning');
+  }
+
   static Future<String> getExternalStoragePath() async {
     return await _channel.invokeMethod('getExternalStoragePath');
   }

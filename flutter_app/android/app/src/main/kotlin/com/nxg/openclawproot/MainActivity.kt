@@ -571,6 +571,40 @@ class MainActivity : FlutterActivity() {
                 "hasStoragePermission" -> {
                     result.success(hasSharedStoragePermission())
                 }
+                "hasOverlayPermission" -> {
+                    result.success(hasOverlayPermission())
+                }
+                "requestOverlayPermission" -> {
+                    try {
+                        requestOverlayPermission()
+                        result.success(hasOverlayPermission())
+                    } catch (e: Exception) {
+                        result.error("OVERLAY_PERMISSION_ERROR", e.message, null)
+                    }
+                }
+                "startFloatingFileManager" -> {
+                    try {
+                        if (!hasOverlayPermission()) {
+                            result.error("OVERLAY_PERMISSION", "Overlay permission is required", null)
+                        } else {
+                            FloatingFileManagerService.start(applicationContext)
+                            result.success(true)
+                        }
+                    } catch (e: Exception) {
+                        result.error("FLOATING_FILE_MANAGER_ERROR", e.message, null)
+                    }
+                }
+                "stopFloatingFileManager" -> {
+                    try {
+                        FloatingFileManagerService.stop(applicationContext)
+                        result.success(true)
+                    } catch (e: Exception) {
+                        result.error("FLOATING_FILE_MANAGER_ERROR", e.message, null)
+                    }
+                }
+                "isFloatingFileManagerRunning" -> {
+                    result.success(FloatingFileManagerService.running)
+                }
                 "getExternalStoragePath" -> {
                     result.success(Environment.getExternalStorageDirectory().absolutePath)
                 }
@@ -792,6 +826,21 @@ class MainActivity : FlutterActivity() {
                 this,
                 Manifest.permission.READ_EXTERNAL_STORAGE
             ) == PackageManager.PERMISSION_GRANTED
+        }
+    }
+
+    private fun hasOverlayPermission(): Boolean {
+        return Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(this)
+    }
+
+    private fun requestOverlayPermission() {
+        if (hasOverlayPermission()) return
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            val intent = Intent(
+                Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                Uri.parse("package:$packageName")
+            )
+            startActivity(intent)
         }
     }
 

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../l10n/app_localizations.dart';
 import '../widgets/status_card.dart';
 import 'cli_tools_screen.dart';
+import 'settings_screen.dart';
 import 'terminal_screen.dart';
 
 class DashboardScreen extends StatelessWidget {
@@ -22,6 +23,13 @@ class DashboardScreen extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         title: Text(l10n.t('appName')),
+        actions: [
+          IconButton(
+            tooltip: l10n.t('settingsTitle'),
+            icon: const Icon(Icons.settings_outlined),
+            onPressed: () => _openScreen(context, const SettingsScreen()),
+          ),
+        ],
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),

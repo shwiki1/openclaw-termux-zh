@@ -1101,18 +1101,27 @@ openclaw_kill_codex_proxy_port
     };
     for (final entry in activeConfigs.entries) {
       final toolConfig = entry.value;
-      if (toolConfig.baseUrl.trim().isEmpty ||
-          _isLocalApiProxyProfile(toolConfig)) {
+      if (toolConfig.baseUrl.trim().isEmpty) {
         continue;
       }
-      var providerId = providerIdsBySharedId[toolConfig.sharedProfileId];
-      if (providerId == null || !providers.containsKey(providerId)) {
+      final usesLocalProxy = _isLocalApiProxyProfile(toolConfig);
+      var providerId = usesLocalProxy
+          ? _providerIdForLocalProxyMapping(
+              existingConfig['default_provider'],
+              providers,
+            )
+          : providerIdsBySharedId[toolConfig.sharedProfileId];
+      if (!usesLocalProxy &&
+          (providerId == null || !providers.containsKey(providerId))) {
         providerId = _apiProxyProviderId(toolConfig, index: providers.length);
         providers[providerId] = _apiProxyProviderJson(
           toolConfig,
           fallbackName: entry.key,
           existingProvider: _asMapOrNull(providers[providerId]),
         );
+      }
+      if (providerId == null || providerId.isEmpty) {
+        continue;
       }
       final alias = _runtimeToolModelAlias(entry.key, toolConfig);
       final actualModel = toolConfig.model.trim().isNotEmpty
@@ -1201,6 +1210,17 @@ openclaw_kill_codex_proxy_port
       return defaultProvider;
     }
     return providers.keys.isEmpty ? '' : providers.keys.first;
+  }
+
+  static String? _providerIdForLocalProxyMapping(
+    dynamic current,
+    Map<String, dynamic> providers,
+  ) {
+    final defaultProvider = current is String ? current.trim() : '';
+    if (defaultProvider.isNotEmpty && providers.containsKey(defaultProvider)) {
+      return defaultProvider;
+    }
+    return providers.keys.isEmpty ? null : providers.keys.first;
   }
 
   static Map<String, dynamic> _mergeLocalApiProxyConcurrency(
