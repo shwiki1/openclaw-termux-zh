@@ -9,6 +9,7 @@ const Map<String, String> appStringsJa = {
   'commonInstalled': 'インストール済み',
   'commonNotInstalled': '未インストール',
   'commonCancel': 'キャンセル',
+  'commonClose': '閉じる',
   'commonContinue': '続行',
   'commonCopy': 'コピー',
   'commonCopiedToClipboard': 'クリップボードにコピーしました',
@@ -515,6 +516,10 @@ const Map<String, String> appStringsJa = {
   'settingsGithub': 'GitHub',
   'settingsContact': '連絡先',
   'settingsLicense': 'ライセンス',
+  'settingsOpenSourceLicenses': 'オープンソースライセンス',
+  'settingsOpenSourceLicensesSubtitle':
+      'サードパーティ通知、GPL/LGPL のソース提供、依存関係ライセンスを表示します',
+  'settingsOpenSourceLicensesLoadFailed': 'オープンソースライセンスを読み込めませんでした',
   'settingsPlayStore': 'Play ストア',
   'settingsEmail': 'メール',
   'settingsCheckForUpdates': '更新を確認',

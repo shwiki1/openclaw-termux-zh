@@ -10,6 +10,7 @@ import '../providers/gateway_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/node_provider.dart';
 import '../services/native_bridge.dart';
+import '../services/open_source_license_service.dart';
 import '../services/preferences_service.dart';
 import '../services/provider_config_service.dart';
 import '../services/update_flow_service.dart';
@@ -49,6 +50,7 @@ class _SettingsScreenState extends State<SettingsScreen>
   bool _floatingFileManagerRunning = false;
   bool _persistentGatewayLogs = false;
   bool _checkingUpdate = false;
+  bool _loadingOpenSourceLicenses = false;
   bool _updatingBonjour = false;
   bool _waitingBatteryOptimizationReturn = false;
   int _batteryOptimizationRefreshToken = 0;
@@ -572,9 +574,19 @@ class _SettingsScreenState extends State<SettingsScreen>
                   ),
                 ),
                 ListTile(
-                  title: Text(l10n.t('settingsLicense')),
-                  subtitle: const Text(AppConstants.license),
+                  title: Text(l10n.t('settingsOpenSourceLicenses')),
+                  subtitle: Text(l10n.t('settingsOpenSourceLicensesSubtitle')),
                   leading: const Icon(Icons.description),
+                  trailing: _loadingOpenSourceLicenses
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.chevron_right),
+                  onTap: _loadingOpenSourceLicenses
+                      ? null
+                      : _showOpenSourceLicenseDialog,
                 ),
                 Visibility(
                   visible: _showOrgSection,
@@ -641,6 +653,49 @@ class _SettingsScreenState extends State<SettingsScreen>
       );
     } finally {
       if (mounted) setState(() => _checkingUpdate = false);
+    }
+  }
+
+  Future<void> _showOpenSourceLicenseDialog() async {
+    final l10n = context.l10n;
+    setState(() => _loadingOpenSourceLicenses = true);
+    try {
+      final notices = await OpenSourceLicenseService().loadOpenSourceNotices();
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) {
+          final theme = Theme.of(dialogContext);
+          return AlertDialog(
+            title: Text(l10n.t('settingsOpenSourceLicenses')),
+            content: SizedBox(
+              width: double.maxFinite,
+              child: SingleChildScrollView(
+                child: SelectableText(
+                  notices,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    fontFamily: 'DejaVuSansMono',
+                    height: 1.35,
+                  ),
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(),
+                child: Text(l10n.t('commonClose')),
+              ),
+            ],
+          );
+        },
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(l10n.t('settingsOpenSourceLicensesLoadFailed'))),
+      );
+    } finally {
+      if (mounted) setState(() => _loadingOpenSourceLicenses = false);
     }
   }
 

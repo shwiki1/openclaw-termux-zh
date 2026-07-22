@@ -9,6 +9,7 @@ const Map<String, String> appStringsEn = {
   'commonInstalled': 'Installed',
   'commonNotInstalled': 'Not installed',
   'commonCancel': 'Cancel',
+  'commonClose': 'Close',
   'commonContinue': 'Continue',
   'commonCopy': 'Copy',
   'commonCopiedToClipboard': 'Copied to clipboard',
@@ -918,6 +919,10 @@ const Map<String, String> appStringsEn = {
   'settingsGithub': 'GitHub',
   'settingsContact': 'Contact',
   'settingsLicense': 'License',
+  'settingsOpenSourceLicenses': 'Open Source Licenses',
+  'settingsOpenSourceLicensesSubtitle':
+      'View third-party notices, GPL/LGPL source offers, and package licenses',
+  'settingsOpenSourceLicensesLoadFailed': 'Failed to load open source licenses',
   'settingsPlayStore': 'Play Store',
   'settingsEmail': 'Email',
   'settingsCheckForUpdates': 'Check for Updates',
