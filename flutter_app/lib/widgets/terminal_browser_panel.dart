@@ -273,7 +273,7 @@ class _TerminalBrowserPanelState extends State<TerminalBrowserPanel>
           <div class="example">在当前页面查找下载按钮，滚动到它的位置并截图。</div>
         </div>
 
-        <p class="note">默认不会自动打开 OpenClaw Gateway 控制台。只有你输入网址，或 Codex 工具发起打开请求时，浏览器才会访问目标网页。</p>
+        <p class="note">默认不会自动打开任何控制台。只有你输入网址，或 Codex 工具发起打开请求时，浏览器才会访问目标网页。</p>
       </section>
     </main>
   </body>
@@ -286,7 +286,7 @@ class _TerminalBrowserPanelState extends State<TerminalBrowserPanel>
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>OpenClaw Browser Self Test</title>
+    <title>CiYuanXia Browser Self Test</title>
     <style>
       :root { color-scheme: dark; }
       html, body {
@@ -992,7 +992,7 @@ class _TerminalBrowserPanelState extends State<TerminalBrowserPanel>
     final tab = _activeTab;
     _setTabLoadingState(
       tab,
-      title: 'OpenClaw Browser Self Test',
+      title: 'CiYuanXia Browser Self Test',
       url: 'about:blank',
       error: '',
       loading: true,

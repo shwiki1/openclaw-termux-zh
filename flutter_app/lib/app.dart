@@ -5,8 +5,6 @@ import 'package:provider/provider.dart';
 import 'l10n/app_localizations.dart';
 import 'providers/locale_provider.dart';
 import 'providers/setup_provider.dart';
-import 'providers/gateway_provider.dart';
-import 'providers/node_provider.dart';
 import 'screens/splash_screen.dart';
 import 'widgets/responsive_layout.dart';
 
@@ -47,14 +45,6 @@ class OpenClawApp extends StatelessWidget {
       providers: [
         ChangeNotifierProvider(create: (_) => LocaleProvider()..load()),
         ChangeNotifierProvider(create: (_) => SetupProvider()),
-        ChangeNotifierProvider(create: (_) => GatewayProvider()),
-        ChangeNotifierProxyProvider<GatewayProvider, NodeProvider>(
-          create: (_) => NodeProvider(),
-          update: (_, gatewayProvider, nodeProvider) {
-            nodeProvider!.onGatewayStateChanged(gatewayProvider.state);
-            return nodeProvider;
-          },
-        ),
       ],
       child: Consumer<LocaleProvider>(
         builder: (context, localeProvider, _) => MaterialApp(

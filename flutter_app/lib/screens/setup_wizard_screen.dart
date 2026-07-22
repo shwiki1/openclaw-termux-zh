@@ -2,24 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../constants.dart';
 import '../l10n/app_localizations.dart';
-import '../models/openclaw_install_options.dart';
+import '../models/runtime_install_options.dart';
 import '../models/setup_state.dart';
 import '../providers/setup_provider.dart';
-import '../services/backup_service.dart';
-import '../services/bundled_sample_config_service.dart';
 import '../services/cli_api_config_service.dart';
 import '../services/install_status_message_formatter.dart';
 import '../services/native_bridge.dart';
-import '../services/openclaw_version_service.dart';
 import '../services/preferences_service.dart';
-import '../services/provider_config_service.dart';
-import '../services/snapshot_service.dart';
 import '../widgets/cli_api_profiles_dialog.dart';
-import '../widgets/openclaw_release_selector.dart';
 import '../widgets/progress_step.dart';
 import '../widgets/responsive_layout.dart';
 import 'dashboard_screen.dart';
-import 'onboarding_screen.dart';
 
 class SetupWizardScreen extends StatefulWidget {
   final bool resumeCompletionChoice;
@@ -34,17 +27,9 @@ class SetupWizardScreen extends StatefulWidget {
 }
 
 class _SetupWizardScreenState extends State<SetupWizardScreen> {
-  final OpenClawVersionService _versionService = OpenClawVersionService();
-
   bool _started = false;
   bool _resolvingExistingSetupState = false;
   bool _didRestoreCompletedSetupState = false;
-  bool _installOpenClaw = true;
-  List<OpenClawReleaseInfo> _availableReleases = const [];
-  OpenClawReleaseInfo? _latestRelease;
-  OpenClawReleaseInfo? _selectedRelease;
-  bool _loadingReleaseOptions = false;
-  String? _releaseOptionsError;
   final TextEditingController _prebuiltRootfsUrlController =
       TextEditingController();
   final TextEditingController _ubuntuRootfsUrlController =
@@ -63,7 +48,6 @@ class _SetupWizardScreenState extends State<SetupWizardScreen> {
   void initState() {
     super.initState();
     _resolvingExistingSetupState = widget.resumeCompletionChoice;
-    _loadOpenClawReleaseOptions();
     _loadCliApiConfigStatus();
     if (widget.resumeCompletionChoice) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -78,52 +62,6 @@ class _SetupWizardScreenState extends State<SetupWizardScreen> {
     _ubuntuRootfsUrlController.dispose();
     _nodeArchiveUrlController.dispose();
     super.dispose();
-  }
-
-  Future<void> _loadOpenClawReleaseOptions() async {
-    if (mounted) {
-      setState(() => _loadingReleaseOptions = true);
-    }
-
-    try {
-      final latestRelease = await _versionService.fetchLatestRelease();
-      List<OpenClawReleaseInfo> availableReleases;
-      String? releaseOptionsError;
-      try {
-        availableReleases = await _versionService.fetchAvailableReleases();
-      } catch (e) {
-        availableReleases = [latestRelease];
-        releaseOptionsError = '$e';
-      }
-      final mergedReleases =
-          _mergeAvailableReleases(availableReleases, latestRelease);
-      final preferredVersion = _selectedRelease?.version;
-      final selectedRelease =
-          _findReleaseByVersion(mergedReleases, preferredVersion) ??
-              _findReleaseByVersion(mergedReleases, latestRelease.version) ??
-              _findReleaseByVersion(
-                mergedReleases,
-                defaultRecommendedOpenClawReleaseVersion,
-              ) ??
-              latestRelease;
-
-      if (!mounted) return;
-      setState(() {
-        _latestRelease = latestRelease;
-        _availableReleases = mergedReleases;
-        _selectedRelease = selectedRelease;
-        _releaseOptionsError = releaseOptionsError;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _releaseOptionsError = '$e';
-      });
-    } finally {
-      if (mounted) {
-        setState(() => _loadingReleaseOptions = false);
-      }
-    }
   }
 
   Future<PreferencesService> _loadPrefs() async {
@@ -166,16 +104,6 @@ class _SetupWizardScreenState extends State<SetupWizardScreen> {
     );
   }
 
-  Future<void> _completeIfGatewayConfigured() async {
-    final gatewayConfigured =
-        await ProviderConfigService.hasRequiredGatewayConfig();
-    if (!mounted || !gatewayConfigured) {
-      return;
-    }
-
-    await _finishSetupFlow();
-  }
-
   Future<void> _beginSetup(SetupProvider provider) async {
     final l10n = context.l10n;
     final prebuiltRootfsUrl = _prebuiltRootfsUrlController.text.trim();
@@ -208,8 +136,7 @@ class _SetupWizardScreenState extends State<SetupWizardScreen> {
       _started = true;
     });
     await provider.runSetup(
-      selectedOpenClawRelease: _selectedRelease ?? _latestRelease,
-      installOptions: OpenClawInstallOptions(
+      installOptions: RuntimeInstallOptions(
         prebuiltRootfsUrl: _selectedPrebuiltRootfsArchivePath == null
             ? prebuiltRootfsUrl
             : null,
@@ -220,7 +147,6 @@ class _SetupWizardScreenState extends State<SetupWizardScreen> {
         nodeArchiveUrl:
             _selectedNodeArchivePath == null ? nodeArchiveUrl : null,
         nodeArchivePath: _selectedNodeArchivePath,
-        installOpenClaw: _installOpenClaw,
       ),
     );
 
@@ -233,7 +159,8 @@ class _SetupWizardScreenState extends State<SetupWizardScreen> {
     } catch (_) {
       // CLI config can be applied later from the CLI tools page.
     }
-    await _setPendingSetupChoice(true);
+      await _setPendingSetupChoice(true);
+      await _finishSetupFlow();
   }
 
   bool _validateOptionalBootstrapUrl({
@@ -328,289 +255,6 @@ class _SetupWizardScreenState extends State<SetupWizardScreen> {
     }
   }
 
-  Future<void> _openOpenClawReleasePicker() async {
-    final l10n = context.l10n;
-    final releases = _availableReleases;
-    final latestRelease = _latestRelease;
-    final selectedRelease = _selectedRelease ?? latestRelease;
-    if (releases.isEmpty || selectedRelease == null) {
-      return;
-    }
-
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (sheetContext) {
-        OpenClawReleaseInfo currentSelection = selectedRelease;
-
-        return StatefulBuilder(
-          builder: (context, setSheetState) {
-            final theme = Theme.of(context);
-            return FractionallySizedBox(
-              heightFactor: 0.88,
-              child: SafeArea(
-                top: false,
-                child: Padding(
-                  padding: EdgeInsets.fromLTRB(
-                    20,
-                    0,
-                    20,
-                    16 + MediaQuery.viewInsetsOf(context).bottom,
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              l10n.t('setupWizardSelectVersion'),
-                              style: theme.textTheme.titleMedium?.copyWith(
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                          ),
-                          IconButton(
-                            tooltip:
-                                MaterialLocalizations.of(context)
-                                    .closeButtonTooltip,
-                            onPressed: () => Navigator.of(sheetContext).pop(),
-                            icon: const Icon(Icons.close),
-                          ),
-                        ],
-                      ),
-                      Text(
-                        l10n.t('openClawReleaseListLimitHint'),
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
-                          height: 1.35,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      Expanded(
-                        child: SingleChildScrollView(
-                          child: OpenClawReleaseSelector(
-                            releases: releases,
-                            selectedRelease: currentSelection,
-                            latestRelease: latestRelease,
-                            enabled: true,
-                            onChanged: (release) {
-                              setState(() => _selectedRelease = release);
-                              setSheetState(() {
-                                currentSelection = release;
-                              });
-                            },
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
-
-  Future<void> _importSnapshotAndContinue() async {
-    final l10n = context.l10n;
-    try {
-      final picked = await BackupService.pickBackupForRestore(
-        emptyFileMessage: l10n.t('settingsSnapshotFileEmpty'),
-        unsupportedFileMessage: l10n.t('settingsBackupUnsupportedFile'),
-        invalidWorkspaceBackupMessage:
-            l10n.t('settingsBackupInvalidWorkspaceArchive'),
-      );
-      if (picked == null || !mounted) {
-        return;
-      }
-
-      final currentOpenClawVersion =
-          await _versionService.readInstalledVersion();
-      final compatibility = picked.compatibility(
-        currentAppVersion: AppConstants.fullVersion,
-        currentOpenClawVersion: currentOpenClawVersion,
-      );
-      final shouldContinue = switch (picked.kind) {
-        BackupImportKind.config => await _confirmConfigImport(),
-        BackupImportKind.legacySnapshot => compatibility == null
-            ? true
-            : await _confirmSnapshotImportIfNeeded(compatibility),
-        BackupImportKind.workspace =>
-          await _confirmWorkspaceImportIfNeeded(compatibility),
-      };
-      if (!shouldContinue) {
-        return;
-      }
-
-      await picked.restore(restoreNodeEnabled: false);
-
-      final gatewayConfigured =
-          await ProviderConfigService.hasRequiredGatewayConfig();
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            l10n.t('settingsSnapshotRestored', {'file': picked.fileName}),
-          ),
-        ),
-      );
-
-      if (gatewayConfigured) {
-        await _finishSetupFlow();
-        return;
-      }
-
-      await _goToOnboarding();
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(l10n.t('settingsImportFailed', {'error': e})),
-        ),
-      );
-    }
-  }
-
-  Future<bool> _confirmConfigImport() async {
-    final l10n = context.l10n;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text(l10n.t('settingsBackupImportConfigWarningTitle')),
-        content: Text(l10n.t('settingsBackupImportConfigWarningBody')),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: Text(l10n.t('commonCancel')),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: Text(l10n.t('commonContinue')),
-          ),
-        ],
-      ),
-    );
-
-    return confirmed ?? false;
-  }
-
-  Future<bool> _confirmSnapshotImportIfNeeded(
-    SnapshotCompatibility compatibility,
-  ) async {
-    if (!compatibility.requiresConfirmation || !mounted) {
-      return true;
-    }
-
-    final l10n = context.l10n;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text(l10n.t('settingsSnapshotVersionWarningTitle')),
-        content: SingleChildScrollView(
-          child: Text(_buildSnapshotImportWarningMessage(l10n, compatibility)),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: Text(l10n.t('commonCancel')),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: Text(l10n.t('commonContinue')),
-          ),
-        ],
-      ),
-    );
-
-    return confirmed ?? false;
-  }
-
-  Future<bool> _confirmWorkspaceImportIfNeeded(
-    SnapshotCompatibility? compatibility,
-  ) async {
-    final l10n = context.l10n;
-    final lines = <String>[
-      l10n.t('settingsBackupImportWorkspaceWarningBody'),
-    ];
-
-    if (compatibility != null && compatibility.requiresConfirmation) {
-      lines
-        ..add('')
-        ..add(_buildSnapshotImportWarningMessage(l10n, compatibility));
-    }
-
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text(l10n.t('settingsBackupImportWorkspaceWarningTitle')),
-        content: SingleChildScrollView(
-          child: Text(lines.join('\n')),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: Text(l10n.t('commonCancel')),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: Text(l10n.t('commonContinue')),
-          ),
-        ],
-      ),
-    );
-
-    return confirmed ?? false;
-  }
-
-  String _buildSnapshotImportWarningMessage(
-    AppLocalizations l10n,
-    SnapshotCompatibility compatibility,
-  ) {
-    final unknown = l10n.t('commonUnknown');
-    final lines = <String>[
-      l10n.t('settingsSnapshotVersionWarningIntro'),
-    ];
-
-    if (compatibility.hasMissingVersionInfo) {
-      lines.add(l10n.t('settingsSnapshotVersionWarningMissing'));
-    }
-    if (compatibility.hasAppVersionMismatch) {
-      lines.add(l10n.t('settingsSnapshotVersionWarningAppMismatch'));
-    }
-    if (compatibility.hasOpenClawVersionMismatch) {
-      lines.add(l10n.t('settingsSnapshotVersionWarningOpenClawMismatch'));
-    }
-
-    lines.add('');
-    lines.add(
-      l10n.t('settingsSnapshotVersionSnapshotApp', {
-        'version': compatibility.snapshotAppVersion ?? unknown,
-      }),
-    );
-    lines.add(
-      l10n.t('settingsSnapshotVersionCurrentApp', {
-        'version': compatibility.currentAppVersion ?? unknown,
-      }),
-    );
-    lines.add(
-      l10n.t('settingsSnapshotVersionSnapshotOpenClaw', {
-        'version': compatibility.snapshotOpenClawVersion ?? unknown,
-      }),
-    );
-    lines.add(
-      l10n.t('settingsSnapshotVersionCurrentOpenClaw', {
-        'version': compatibility.currentOpenClawVersion ?? unknown,
-      }),
-    );
-
-    return lines.join('\n');
-  }
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -690,40 +334,14 @@ class _SetupWizardScreenState extends State<SetupWizardScreen> {
                   if (state.isComplete) ...[
                     SizedBox(
                       width: double.infinity,
-                      child: OutlinedButton.icon(
-                        onPressed: _openCliApiConfig,
-                        icon: const Icon(Icons.tune),
-                        label: const Text('配置第三方 API（可选）'),
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    SizedBox(
-                      width: double.infinity,
                       child: FilledButton.icon(
-                        onPressed: _handleConfigureApi,
-                        icon: const Icon(Icons.arrow_forward),
-                        label: Text(l10n.t('setupWizardConfigureApiKeys')),
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    SizedBox(
-                      width: double.infinity,
-                      child: OutlinedButton.icon(
-                        onPressed: _importSnapshotAndContinue,
-                        icon: const Icon(Icons.download_done_outlined),
-                        label: Text(l10n.t('settingsImportSnapshot')),
+                        onPressed: _finishSetupFlow,
+                        icon: const Icon(Icons.dashboard_outlined),
+                        label: Text(l10n.t('dashboardTitle')),
                       ),
                     ),
                   ] else if (!isResolvingCompletionChoice &&
                       (!_started || state.hasError)) ...[
-                    _buildOpenClawInstallSwitch(theme, provider.isRunning),
-                    const SizedBox(height: 12),
-                    _buildVersionSelector(
-                      theme,
-                      l10n,
-                      provider.isRunning || !_installOpenClaw,
-                    ),
-                    const SizedBox(height: 12),
                     _buildBootstrapResourceConfigButton(
                       theme,
                       l10n,
@@ -757,22 +375,6 @@ class _SetupWizardScreenState extends State<SetupWizardScreen> {
                   if (!_started && !state.isComplete) ...[
                     const SizedBox(height: 10),
                     _buildSetupRequirement(theme, l10n),
-                  ],
-                  if (!_started &&
-                      !state.isComplete &&
-                      _releaseOptionsError != null) ...[
-                    const SizedBox(height: 8),
-                    Center(
-                      child: Text(
-                        l10n.t('gatewayVersionListFailed', {
-                          'error': _releaseOptionsError,
-                        }),
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.error,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                    ),
                   ],
                   const SizedBox(height: 14),
                   Center(
@@ -889,15 +491,6 @@ class _SetupWizardScreenState extends State<SetupWizardScreen> {
       (3, l10n.t('setupWizardStepInstallNode'), SetupStep.installingNode),
       (
         4,
-        l10n.t('setupWizardStepInstallOpenClawWithSize', {
-          'size': _selectedRelease?.unpackedSizeLabel ??
-              _latestRelease?.unpackedSizeLabel ??
-              AppConstants.openClawEstimatedSize,
-        }),
-        SetupStep.installingOpenClaw
-      ),
-      (
-        5,
         l10n.t('setupWizardStepConfigureBypass'),
         SetupStep.configuringBypass
       ),
@@ -923,7 +516,7 @@ class _SetupWizardScreenState extends State<SetupWizardScreen> {
     if (state.isComplete) {
       stepWidgets.add(
         ProgressStep(
-          stepNumber: 6,
+          stepNumber: 5,
           label: l10n.t('setupWizardComplete'),
           isComplete: true,
         ),
@@ -1115,210 +708,6 @@ class _SetupWizardScreenState extends State<SetupWizardScreen> {
     );
   }
 
-  Widget _buildOpenClawInstallSwitch(ThemeData theme, bool disableSelection) {
-    final fillColor =
-        theme.inputDecorationTheme.fillColor ?? theme.colorScheme.surface;
-    return Material(
-      color: fillColor,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(8),
-        side: BorderSide(color: theme.colorScheme.outlineVariant),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: SwitchListTile(
-        value: _installOpenClaw,
-        onChanged: disableSelection
-            ? null
-            : (value) {
-                setState(() => _installOpenClaw = value);
-              },
-        secondary: Icon(
-          Icons.cloud_sync_outlined,
-          color: disableSelection
-              ? theme.disabledColor
-              : theme.colorScheme.primary,
-        ),
-        title: const Text('安装 OpenClaw 网关'),
-        subtitle: const Text('可选；关闭后仍会完成 Ubuntu、Node.js 和 CLI 运行环境安装'),
-      ),
-    );
-  }
-
-  Widget _buildVersionSelector(
-    ThemeData theme,
-    AppLocalizations l10n,
-    bool disableSelection,
-  ) {
-    final latestRelease = _latestRelease;
-    final selectedRelease = _selectedRelease ?? latestRelease;
-    final availableReleases = _availableReleases;
-    final canSelectVersions =
-        availableReleases.isNotEmpty && selectedRelease != null;
-
-    final fillColor =
-        theme.inputDecorationTheme.fillColor ?? theme.colorScheme.surface;
-    final titleColor =
-        disableSelection ? theme.disabledColor : theme.colorScheme.onSurface;
-    final subtitleColor = disableSelection
-        ? theme.disabledColor
-        : theme.colorScheme.onSurfaceVariant;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          l10n.t('setupWizardSelectVersion'),
-          style: theme.textTheme.labelMedium?.copyWith(
-            color: theme.colorScheme.onSurfaceVariant,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-        const SizedBox(height: 6),
-        Material(
-          color: fillColor,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8),
-            side: BorderSide(color: theme.colorScheme.outlineVariant),
-          ),
-          clipBehavior: Clip.antiAlias,
-          child: InkWell(
-            onTap: disableSelection || !canSelectVersions
-                ? null
-                : _openOpenClawReleasePicker,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(12, 11, 6, 11),
-              child: Row(
-                children: [
-                  Container(
-                    width: 34,
-                    height: 34,
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.primary.withAlpha(18),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    alignment: Alignment.center,
-                    child: Icon(
-                      Icons.new_releases_outlined,
-                      color: disableSelection
-                          ? theme.disabledColor
-                          : theme.colorScheme.primary,
-                      size: 20,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          selectedRelease == null
-                              ? l10n.t('openClawReleaseListEmpty')
-                              : formatOpenClawReleaseLabel(
-                                  l10n,
-                                  selectedRelease.version,
-                                  latestVersion: latestRelease?.version,
-                                ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.labelLarge?.copyWith(
-                            color: titleColor,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                        const SizedBox(height: 3),
-                        Text(
-                          selectedRelease == null
-                              ? l10n.t('openClawReleaseListLimitHint')
-                              : l10n.t('setupWizardSelectedVersionHint', {
-                                  'version': selectedRelease.version,
-                                  'size': selectedRelease.unpackedSizeLabel ??
-                                      AppConstants.openClawEstimatedSize,
-                                }),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: subtitleColor,
-                            height: 1.25,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  IconButton(
-                    tooltip: l10n.t('gatewayCheckUpdate'),
-                    onPressed: disableSelection
-                        ? null
-                        : _loadOpenClawReleaseOptions,
-                    icon: _loadingReleaseOptions
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.refresh),
-                    color: subtitleColor,
-                  ),
-                  Icon(
-                    Icons.chevron_right,
-                    color: subtitleColor,
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-        if (selectedRelease?.nodeRequirement != null) ...[
-          const SizedBox(height: 6),
-          Text(
-            l10n.t('gatewayNodeRequirementHint', {
-              'requirement': selectedRelease!.nodeRequirement,
-            }),
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-          ),
-        ],
-      ],
-    );
-  }
-
-  List<OpenClawReleaseInfo> _mergeAvailableReleases(
-    List<OpenClawReleaseInfo> releases,
-    OpenClawReleaseInfo latestRelease,
-  ) {
-    final releasesByVersion = <String, OpenClawReleaseInfo>{
-      latestRelease.version: latestRelease,
-      for (final release in releases) release.version: release,
-    };
-
-    final merged = releasesByVersion.values.toList()
-      ..sort((a, b) => OpenClawVersionService.compareVersions(
-            b.version,
-            a.version,
-          ));
-    if (merged.length > OpenClawVersionService.defaultAvailableReleaseLimit) {
-      return merged.sublist(0, OpenClawVersionService.defaultAvailableReleaseLimit);
-    }
-    return merged;
-  }
-
-  OpenClawReleaseInfo? _findReleaseByVersion(
-    List<OpenClawReleaseInfo> releases,
-    String? version,
-  ) {
-    if (version == null || version.trim().isEmpty) {
-      return null;
-    }
-
-    for (final release in releases) {
-      if (release.version == version) {
-        return release;
-      }
-    }
-    return null;
-  }
-
   String _localizedSetupMessage(AppLocalizations l10n, String? message) {
     return InstallStatusMessageFormatter.localize(l10n, message);
   }
@@ -1327,120 +716,6 @@ class _SetupWizardScreenState extends State<SetupWizardScreen> {
     return InstallStatusMessageFormatter.localizeDetail(l10n, detail);
   }
 
-  Future<void> _handleConfigureApi() async {
-    final installedVersion = await _versionService.readInstalledVersion();
-    final configVersion = installedVersion?.trim().isNotEmpty == true
-        ? installedVersion
-        : (_selectedRelease ?? _latestRelease)?.version;
-    final sample = await BundledSampleConfigService.loadForVersion(
-      configVersion,
-    );
-
-    if (!mounted || sample == null) {
-      await _goToOnboarding();
-      return;
-    }
-
-    final choice = await _showBundledSampleConfigDialog(sample.version);
-    if (!mounted || choice == null) {
-      return;
-    }
-
-    switch (choice) {
-      case _BundledConfigChoice.useSample:
-        await _applyBundledSampleConfig(sample);
-        break;
-      case _BundledConfigChoice.useTerminalOnboarding:
-        await _goToOnboarding();
-        break;
-    }
-  }
-
-  Future<_BundledConfigChoice?> _showBundledSampleConfigDialog(
-    String version,
-  ) async {
-    final l10n = context.l10n;
-    return showDialog<_BundledConfigChoice>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text(l10n.t('setupWizardSampleConfigDialogTitle')),
-        content: Text(
-          l10n.t('setupWizardSampleConfigDialogBody', {'version': version}),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: Text(l10n.t('commonCancel')),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext)
-                .pop(_BundledConfigChoice.useTerminalOnboarding),
-            child: Text(l10n.t('setupWizardSampleConfigTerminalOnboarding')),
-          ),
-          FilledButton(
-            onPressed: () =>
-                Navigator.of(dialogContext).pop(_BundledConfigChoice.useSample),
-            child: Text(l10n.t('setupWizardSampleConfigUseSample')),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _applyBundledSampleConfig(BundledSampleConfig sample) async {
-    final l10n = context.l10n;
-
-    try {
-      await BundledSampleConfigService.apply(sample);
-      await ProviderConfigService.ensureGatewayDefaults();
-
-      if (!mounted) return;
-
-      final acknowledged = await showDialog<bool>(
-        context: context,
-        builder: (dialogContext) => AlertDialog(
-          title: Text(l10n.t('setupWizardSampleConfigAppliedTitle')),
-          content: Text(
-            l10n.t(
-              'setupWizardSampleConfigAppliedBody',
-              {'version': sample.version},
-            ),
-          ),
-          actions: [
-            FilledButton(
-              onPressed: () => Navigator.of(dialogContext).pop(true),
-              child: Text(l10n.t('setupWizardSampleConfigGoDashboard')),
-            ),
-          ],
-        ),
-      );
-
-      if (acknowledged == true) {
-        await _finishSetupFlow();
-      }
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            l10n.t('setupWizardSampleConfigApplyFailed', {'error': e}),
-          ),
-        ),
-      );
-      await _goToOnboarding();
-    }
-  }
-
-  Future<void> _goToOnboarding() async {
-    await Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => const OnboardingScreen(),
-      ),
-    );
-
-    if (!mounted) return;
-    await _completeIfGatewayConfigured();
-  }
 }
 
 class _BootstrapResourceConfig {
@@ -1827,9 +1102,4 @@ class _BootstrapResourceConfigScreenState
       ),
     );
   }
-}
-
-enum _BundledConfigChoice {
-  useSample,
-  useTerminalOnboarding,
 }

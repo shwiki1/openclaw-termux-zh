@@ -618,7 +618,7 @@ write_openai_compatible_agent() {
 #!/usr/bin/env node
 const readline = require("readline");
 
-const displayName = process.env.OPENCLAW_TOOL_NAME || "OpenClaw OpenAI Bridge";
+const displayName = process.env.OPENCLAW_TOOL_NAME || "CiYuanXia OpenAI Bridge";
 const version = process.env.OPENCLAW_BRIDGE_VERSION || "1.0.0";
 
 if (process.argv.includes("--version") || process.argv.includes("-v")) {
@@ -713,7 +713,7 @@ rl.on("line", async (line) => {
   rl.prompt();
 });
 OPENCLAW_OPENAI_BRIDGE
-  sed -i "s/OpenClaw OpenAI Bridge/$display_name/g" "$script_path"
+  sed -i "s/CiYuanXia OpenAI Bridge/$display_name/g" "$script_path"
   chmod 0755 "$script_path"
   cat > "/usr/local/bin/$bin_name" <<OPENCLAW_OPENAI_BRIDGE_WRAPPER
 #!/bin/sh
@@ -767,7 +767,7 @@ const rl = readline.createInterface({
 const messages = [
   {
     role: "system",
-    content: `${displayName} running inside OpenClaw. Reply concisely and help with coding or shell tasks.`,
+    content: `${displayName} runs inside Ubuntu hosted by an Android app through PRoot. Reply concisely and help with coding or shell tasks.`,
   },
 ];
 

@@ -63,7 +63,7 @@ manifest_path, expected_fingerprint, expected_asset_name = sys.argv[1:4]
 with open(manifest_path, "r", encoding="utf-8") as handle:
     data = json.load(handle)
 
-if data.get("format") != "openclaw-prebuilt-rootfs-manifest":
+if data.get("format") != "ciyuanxia-prebuilt-rootfs-manifest":
     raise SystemExit("Unsupported prebuilt rootfs manifest format")
 if data.get("asset_name") != expected_asset_name:
     raise SystemExit("Manifest asset_name does not match expected rootfs asset")

@@ -168,7 +168,7 @@ class TerminalService {
   static Future<void> _ensureTerminalShellProfile() async {
     try {
       final profile = [
-        '# OpenClaw terminal profile. This file is managed by the app.',
+        '# CiYuanXia terminal profile. This file is managed by the app.',
         r'export TERM="${TERM:-xterm-256color}"',
         r'export COLORTERM="${COLORTERM:-truecolor}"',
         'export CLICOLOR=1',

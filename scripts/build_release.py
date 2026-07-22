@@ -316,7 +316,7 @@ def print_summary(
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="构建 OpenClaw Android arm64-v8a 发布 APK，并整理到 release/v版本 目录。")
+    parser = argparse.ArgumentParser(description="构建 CiYuanXia Android arm64-v8a 发布 APK，并整理到 release/v版本 目录。")
     parser.add_argument("--version", help="可选覆盖发布版本号，例如 2.5 或 2.5.0；默认按当前锚点和构建号自动推导")
     parser.add_argument("--build-number", help="Android 构建号，例如 144；默认使用当前 pubspec 构建号 +1")
     parser.add_argument("--output-dir", help="自定义输出目录，默认是 release/v版本")
@@ -368,7 +368,7 @@ def main() -> int:
     )
 
     print("=" * 60)
-    print("OpenClaw 发布构建脚本")
+    print("CiYuanXia 发布构建脚本")
     print(f"项目目录: {ROOT_DIR}")
     print(f"Flutter 目录: {FLUTTER_DIR}")
     print(f"当前 pubspec: {current_version_text}")

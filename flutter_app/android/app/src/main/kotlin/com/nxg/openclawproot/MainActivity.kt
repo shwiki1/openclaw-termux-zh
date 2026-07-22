@@ -14,17 +14,11 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.PowerManager
 import android.provider.Settings
-import androidx.core.content.FileProvider
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import android.app.Activity
 import android.content.Context
 import android.os.Environment
-import android.hardware.Sensor
-import android.hardware.SensorEvent
-import android.hardware.SensorEventListener
-import android.hardware.SensorManager
-import android.media.projection.MediaProjectionManager
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
@@ -39,26 +33,15 @@ import java.io.File
 
 class MainActivity : FlutterActivity() {
     private val CHANNEL = "com.agent.cyx/native"
-    private val EVENT_CHANNEL = "com.agent.cyx/gateway_logs"
     private val SETUP_LOG_EVENT_CHANNEL = "com.agent.cyx/setup_logs"
 
     private lateinit var bootstrapManager: BootstrapManager
     private lateinit var processManager: ProcessManager
     private var setupLogSink: EventChannel.EventSink? = null
-    private var screenCaptureResult: MethodChannel.Result? = null
-    private var screenCaptureDurationMs: Long = 5000L
-    private var snapshotPickResult: MethodChannel.Result? = null
     private var snapshotSaveResult: MethodChannel.Result? = null
     private var pendingSnapshotContent: String? = null
     private var pendingSnapshotName: String? = null
-    private var backupPickResult: MethodChannel.Result? = null
     private var bootstrapArchivePickResult: MethodChannel.Result? = null
-    private var workspaceBackupSaveResult: MethodChannel.Result? = null
-    private var pendingWorkspaceBackupName: String? = null
-    private var pendingWorkspaceBackupAppVersion: String? = null
-    private var pendingWorkspaceBackupOpenClawVersion: String? = null
-    private var pendingApkInstallResult: MethodChannel.Result? = null
-    private var pendingApkInstallPath: String? = null
     private var pendingStoragePermissionResult: MethodChannel.Result? = null
     private var pendingNativeTerminalResult: MethodChannel.Result? = null
     private var setupDone = false
@@ -142,7 +125,7 @@ class MainActivity : FlutterActivity() {
                     val command = call.argument<String>("command")
                     val timeout = call.argument<Int>("timeout")?.toLong() ?: 900L
                     val keepForeground = call.argument<Boolean>("keepForeground") ?: false
-                    val foregroundText = call.argument<String>("foregroundText") ?: "Running OpenClaw task..."
+                    val foregroundText = call.argument<String>("foregroundText") ?: "Running CLI task..."
                     if (command != null) {
                         Thread {
                             try {
@@ -165,26 +148,6 @@ class MainActivity : FlutterActivity() {
                         result.error("INVALID_ARGS", "command required", null)
                     }
                 }
-                "startGateway" -> {
-                    try {
-                        GatewayService.start(applicationContext)
-                        result.success(true)
-                    } catch (e: Exception) {
-                        result.error("SERVICE_ERROR", e.message, null)
-                    }
-                }
-                "stopGateway" -> {
-                    Thread {
-                        try {
-                            val stopped = GatewayService.stopAndWait(applicationContext)
-                            runOnUiThread { result.success(stopped) }
-                        } catch (e: Exception) {
-                            runOnUiThread {
-                                result.error("SERVICE_ERROR", e.message, null)
-                            }
-                        }
-                    }.start()
-                }
                 "startLocalApiProxy" -> {
                     try {
                         LocalApiProxyForegroundService.start(applicationContext)
@@ -203,28 +166,6 @@ class MainActivity : FlutterActivity() {
                 }
                 "isLocalApiProxyRunning" -> {
                     result.success(LocalApiProxyForegroundService.isRunning)
-                }
-                "isGatewayRunning" -> {
-                    Thread {
-                        try {
-                            val running = GatewayService.isProcessAlive()
-                            runOnUiThread { result.success(running) }
-                        } catch (e: Exception) {
-                            runOnUiThread {
-                                result.error("SERVICE_ERROR", e.message, null)
-                            }
-                        }
-                    }.start()
-                }
-                "isGatewayLogPersistenceEnabled" -> {
-                    result.success(
-                        GatewayLogPersistence.isEnabled(applicationContext)
-                    )
-                }
-                "setGatewayLogPersistenceEnabled" -> {
-                    val enabled = call.argument<Boolean>("enabled") ?: false
-                    GatewayLogPersistence.setEnabled(applicationContext, enabled)
-                    result.success(true)
                 }
                 "startTerminalService" -> {
                     try {
@@ -352,154 +293,6 @@ class MainActivity : FlutterActivity() {
                 }
                 "isTerminalServiceRunning" -> {
                     result.success(TerminalSessionService.isRunning)
-                }
-                "startNodeService" -> {
-                    try {
-                        NodeForegroundService.start(applicationContext)
-                        result.success(true)
-                    } catch (e: Exception) {
-                        result.error("SERVICE_ERROR", e.message, null)
-                    }
-                }
-                "stopNodeService" -> {
-                    try {
-                        NodeForegroundService.stop(applicationContext)
-                        result.success(true)
-                    } catch (e: Exception) {
-                        result.error("SERVICE_ERROR", e.message, null)
-                    }
-                }
-                "isNodeServiceRunning" -> {
-                    result.success(NodeForegroundService.isRunning)
-                }
-                "updateNodeNotification" -> {
-                    val text = call.argument<String>("text") ?: "Node connected"
-                    NodeForegroundService.updateStatus(text)
-                    result.success(true)
-                }
-                "startCpolarService" -> {
-                    val binaryPath = call.argument<String>("binaryPath")
-                    val configPath = call.argument<String>("configPath")
-                    val logPath = call.argument<String>("logPath")
-                    val webPort = call.argument<Int>("webPort") ?: 9200
-
-                    if (binaryPath != null && configPath != null && logPath != null) {
-                        try {
-                            CpolarForegroundService.start(
-                                applicationContext,
-                                binaryPath,
-                                configPath,
-                                logPath,
-                                webPort
-                            )
-                            result.success(true)
-                        } catch (e: Exception) {
-                            result.error("SERVICE_ERROR", e.message, null)
-                        }
-                    } else {
-                        result.error(
-                            "INVALID_ARGS",
-                            "binaryPath, configPath, and logPath required",
-                            null
-                        )
-                    }
-                }
-                "stopCpolarService" -> {
-                    try {
-                        CpolarForegroundService.stop(applicationContext)
-                        result.success(true)
-                    } catch (e: Exception) {
-                        result.error("SERVICE_ERROR", e.message, null)
-                    }
-                }
-                "isCpolarServiceRunning" -> {
-                    result.success(CpolarForegroundService.isRunning)
-                }
-                "startLocalModelService" -> {
-                    val binaryPath = call.argument<String>("binaryPath")
-                    val modelPath = call.argument<String>("modelPath")
-                    val logPath = call.argument<String>("logPath")
-                    val port = call.argument<Int>("port") ?: 18080
-                    val alias = call.argument<String>("alias") ?: "local-model"
-                    val contextSize = call.argument<Int>("contextSize") ?: 4096
-                    val threads = call.argument<Int>("threads") ?: 4
-                    val threadsBatch = call.argument<Int>("threadsBatch") ?: threads
-                    val batchSize = call.argument<Int>("batchSize") ?: 512
-                    val ubatchSize = call.argument<Int>("ubatchSize") ?: minOf(batchSize, 256)
-
-                    if (binaryPath != null && modelPath != null && logPath != null) {
-                        try {
-                            LocalModelForegroundService.start(
-                                applicationContext,
-                                binaryPath,
-                                modelPath,
-                                logPath,
-                                port,
-                                alias,
-                                contextSize,
-                                threads,
-                                threadsBatch,
-                                batchSize,
-                                ubatchSize
-                            )
-                            result.success(true)
-                        } catch (e: Exception) {
-                            result.error("SERVICE_ERROR", e.message, null)
-                        }
-                    } else {
-                        result.error(
-                            "INVALID_ARGS",
-                            "binaryPath, modelPath, and logPath required",
-                            null
-                        )
-                    }
-                }
-                "stopLocalModelService" -> {
-                    try {
-                        LocalModelForegroundService.stop(applicationContext)
-                        result.success(true)
-                    } catch (e: Exception) {
-                        result.error("SERVICE_ERROR", e.message, null)
-                    }
-                }
-                "isLocalModelServiceRunning" -> {
-                    result.success(LocalModelForegroundService.isRunning)
-                }
-                "getLocalModelRuntimeStats" -> {
-                    Thread {
-                        try {
-                            val stats = LocalModelForegroundService.snapshotRuntimeStats(applicationContext)
-                            runOnUiThread { result.success(stats) }
-                        } catch (e: Exception) {
-                            runOnUiThread { result.error("SERVICE_ERROR", e.message, null) }
-                        }
-                    }.start()
-                }
-                "startSshd" -> {
-                    val port = call.argument<Int>("port") ?: 8022
-                    try {
-                        SshForegroundService.start(applicationContext, port)
-                        result.success(true)
-                    } catch (e: Exception) {
-                        result.error("SERVICE_ERROR", e.message, null)
-                    }
-                }
-                "stopSshd" -> {
-                    try {
-                        SshForegroundService.stop(applicationContext)
-                        result.success(true)
-                    } catch (e: Exception) {
-                        result.error("SERVICE_ERROR", e.message, null)
-                    }
-                }
-                "isSshdRunning" -> {
-                    result.success(SshForegroundService.isRunning)
-                }
-                "getSshdPort" -> {
-                    result.success(SshForegroundService.currentPort)
-                }
-                "getDeviceIps" -> {
-                    result.success(SshForegroundService.getDeviceIps())
                 }
                 "setRootPassword" -> {
                     val password = call.argument<String>("password")
@@ -662,18 +455,6 @@ class MainActivity : FlutterActivity() {
                         result.error("INVALID_ARGS", "url required", null)
                     }
                 }
-                "pickSnapshotFile" -> {
-                    snapshotPickResult = result
-                    val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
-                        addCategory(Intent.CATEGORY_OPENABLE)
-                        type = "*/*"
-                        putExtra(
-                            Intent.EXTRA_MIME_TYPES,
-                            arrayOf("application/json", "text/json", "text/plain")
-                        )
-                    }
-                    startActivityForResult(intent, SNAPSHOT_PICK_REQUEST)
-                }
                 "saveSnapshotFile" -> {
                     val suggestedName = call.argument<String>("suggestedName")
                     val content = call.argument<String>("content")
@@ -695,25 +476,6 @@ class MainActivity : FlutterActivity() {
                         startActivityForResult(intent, SNAPSHOT_SAVE_REQUEST)
                     }
                 }
-                "pickBackupFile" -> {
-                    backupPickResult = result
-                    val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
-                        addCategory(Intent.CATEGORY_OPENABLE)
-                        type = "*/*"
-                        putExtra(
-                            Intent.EXTRA_MIME_TYPES,
-                            arrayOf(
-                                "application/json",
-                                "text/json",
-                                "text/plain",
-                                "application/zip",
-                                "application/x-zip-compressed",
-                                "application/octet-stream"
-                            )
-                        )
-                    }
-                    startActivityForResult(intent, BACKUP_PICK_REQUEST)
-                }
                 "pickBootstrapArchiveFile" -> {
                     bootstrapArchivePickResult = result
                     val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
@@ -733,71 +495,6 @@ class MainActivity : FlutterActivity() {
                     }
                     startActivityForResult(intent, BOOTSTRAP_ARCHIVE_PICK_REQUEST)
                 }
-                "exportWorkspaceBackup" -> {
-                    val suggestedName = call.argument<String>("suggestedName")
-                    val appVersion = call.argument<String>("appVersion")
-                    val openClawVersion = call.argument<String>("openClawVersion")
-                    if (suggestedName.isNullOrBlank() || appVersion.isNullOrBlank()) {
-                        result.error(
-                            "INVALID_ARGS",
-                            "suggestedName and appVersion required",
-                            null
-                        )
-                    } else {
-                        workspaceBackupSaveResult = result
-                        pendingWorkspaceBackupName = suggestedName
-                        pendingWorkspaceBackupAppVersion = appVersion
-                        pendingWorkspaceBackupOpenClawVersion = openClawVersion
-                        val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
-                            addCategory(Intent.CATEGORY_OPENABLE)
-                            type = "application/zip"
-                            putExtra(Intent.EXTRA_TITLE, suggestedName)
-                        }
-                        startActivityForResult(intent, WORKSPACE_BACKUP_SAVE_REQUEST)
-                    }
-                }
-                "inspectWorkspaceBackup" -> {
-                    val path = call.argument<String>("path")
-                    if (path != null) {
-                        Thread {
-                            try {
-                                val metadata = bootstrapManager.inspectWorkspaceBackup(path)
-                                runOnUiThread { result.success(metadata) }
-                            } catch (e: Exception) {
-                                runOnUiThread {
-                                    result.error(
-                                        "WORKSPACE_BACKUP_INSPECT_ERROR",
-                                        e.message,
-                                        null
-                                    )
-                                }
-                            }
-                        }.start()
-                    } else {
-                        result.error("INVALID_ARGS", "path required", null)
-                    }
-                }
-                "restoreWorkspaceBackup" -> {
-                    val path = call.argument<String>("path")
-                    if (path != null) {
-                        Thread {
-                            try {
-                                bootstrapManager.restoreWorkspaceBackup(path)
-                                runOnUiThread { result.success(true) }
-                            } catch (e: Exception) {
-                                runOnUiThread {
-                                    result.error(
-                                        "WORKSPACE_BACKUP_RESTORE_ERROR",
-                                        e.message,
-                                        null
-                                    )
-                                }
-                            }
-                        }.start()
-                    } else {
-                        result.error("INVALID_ARGS", "path required", null)
-                    }
-                }
                 "copyToClipboard" -> {
                     val text = call.argument<String>("text")
                     if (text != null) {
@@ -806,26 +503,6 @@ class MainActivity : FlutterActivity() {
                         result.success(true)
                     } else {
                         result.error("INVALID_ARGS", "text required", null)
-                    }
-                }
-                "requestScreenCapture" -> {
-                    val durationMs = call.argument<Int>("durationMs")?.toLong() ?: 5000L
-                    screenCaptureResult = result
-                    screenCaptureDurationMs = durationMs
-                    ScreenCaptureService.clearResult()
-                    val projectionManager =
-                        getSystemService(MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
-                    startActivityForResult(
-                        projectionManager.createScreenCaptureIntent(),
-                        SCREEN_CAPTURE_REQUEST
-                    )
-                }
-                "stopScreenCapture" -> {
-                    try {
-                        stopService(Intent(applicationContext, ScreenCaptureService::class.java))
-                        result.success(true)
-                    } catch (e: Exception) {
-                        result.error("SERVICE_ERROR", e.message, null)
                     }
                 }
                 "vibrate" -> {
@@ -894,54 +571,8 @@ class MainActivity : FlutterActivity() {
                 "hasStoragePermission" -> {
                     result.success(hasSharedStoragePermission())
                 }
-                "hasOverlayPermission" -> {
-                    result.success(hasOverlayPermission())
-                }
-                "requestOverlayPermission" -> {
-                    try {
-                        requestOverlayPermission()
-                        result.success(hasOverlayPermission())
-                    } catch (e: Exception) {
-                        result.error("OVERLAY_PERMISSION_ERROR", e.message, null)
-                    }
-                }
-                "startFloatingFileManager" -> {
-                    try {
-                        if (!hasOverlayPermission()) {
-                            result.error("OVERLAY_PERMISSION", "Overlay permission is required", null)
-                        } else {
-                            FloatingFileManagerService.start(applicationContext)
-                            result.success(true)
-                        }
-                    } catch (e: Exception) {
-                        result.error("FLOATING_FILE_MANAGER_ERROR", e.message, null)
-                    }
-                }
-                "stopFloatingFileManager" -> {
-                    try {
-                        FloatingFileManagerService.stop(applicationContext)
-                        result.success(true)
-                    } catch (e: Exception) {
-                        result.error("FLOATING_FILE_MANAGER_ERROR", e.message, null)
-                    }
-                }
-                "isFloatingFileManagerRunning" -> {
-                    result.success(FloatingFileManagerService.running)
-                }
                 "getExternalStoragePath" -> {
                     result.success(Environment.getExternalStorageDirectory().absolutePath)
-                }
-                "installApk" -> {
-                    val apkPath = call.argument<String>("apkPath")
-                    if (apkPath != null) {
-                        try {
-                            installApk(apkPath, result)
-                        } catch (e: Exception) {
-                            result.error("APK_INSTALL_ERROR", e.message, null)
-                        }
-                    } else {
-                        result.error("INVALID_ARGS", "apkPath required", null)
-                    }
                 }
                 "readRootfsFile" -> {
                     val path = call.argument<String>("path")
@@ -1007,67 +638,6 @@ class MainActivity : FlutterActivity() {
                         result.success(true)
                     }
                 }
-                "readSensor" -> {
-                    val sensorType = call.argument<String>("sensor") ?: "accelerometer"
-                    Thread {
-                        try {
-                            val sensorManager =
-                                getSystemService(Context.SENSOR_SERVICE) as SensorManager
-                            val type = when (sensorType) {
-                                "accelerometer" -> Sensor.TYPE_ACCELEROMETER
-                                "gyroscope" -> Sensor.TYPE_GYROSCOPE
-                                "magnetometer" -> Sensor.TYPE_MAGNETIC_FIELD
-                                "barometer" -> Sensor.TYPE_PRESSURE
-                                else -> Sensor.TYPE_ACCELEROMETER
-                            }
-                            val sensor = sensorManager.getDefaultSensor(type)
-                            if (sensor == null) {
-                                runOnUiThread {
-                                    result.error("SENSOR_ERROR", "Sensor $sensorType not available", null)
-                                }
-                                return@Thread
-                            }
-                            var received = false
-                            val listener = object : SensorEventListener {
-                                override fun onSensorChanged(event: SensorEvent?) {
-                                    if (received || event == null) return
-                                    received = true
-                                    sensorManager.unregisterListener(this)
-                                    val data = hashMapOf<String, Any>(
-                                        "sensor" to sensorType,
-                                        "timestamp" to event.timestamp,
-                                        "accuracy" to event.accuracy
-                                    )
-                                    when (sensorType) {
-                                        "accelerometer", "gyroscope", "magnetometer" -> {
-                                            data["x"] = event.values[0].toDouble()
-                                            data["y"] = event.values[1].toDouble()
-                                            data["z"] = event.values[2].toDouble()
-                                        }
-                                        "barometer" -> {
-                                            data["pressure"] = event.values[0].toDouble()
-                                        }
-                                    }
-                                    runOnUiThread { result.success(data) }
-                                }
-                                override fun onAccuracyChanged(s: Sensor?, accuracy: Int) {}
-                            }
-                            sensorManager.registerListener(
-                                listener, sensor, SensorManager.SENSOR_DELAY_NORMAL
-                            )
-                            // Timeout after 3 seconds
-                            Thread.sleep(3000)
-                            if (!received) {
-                                sensorManager.unregisterListener(listener)
-                                runOnUiThread {
-                                    result.error("SENSOR_ERROR", "Sensor read timed out", null)
-                                }
-                            }
-                        } catch (e: Exception) {
-                            runOnUiThread { result.error("SENSOR_ERROR", e.message, null) }
-                        }
-                    }.start()
-                }
                 else -> {
                     result.notImplemented()
                 }
@@ -1076,17 +646,6 @@ class MainActivity : FlutterActivity() {
 
         createUrlNotificationChannel()
         requestNotificationPermission()
-
-        EventChannel(flutterEngine.dartExecutor.binaryMessenger, EVENT_CHANNEL).setStreamHandler(
-            object : EventChannel.StreamHandler {
-                override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
-                    GatewayService.logSink = events
-                }
-                override fun onCancel(arguments: Any?) {
-                    GatewayService.logSink = null
-                }
-            }
-        )
 
         EventChannel(
             flutterEngine.dartExecutor.binaryMessenger,
@@ -1122,7 +681,7 @@ class MainActivity : FlutterActivity() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 URL_CHANNEL_ID,
-                "OpenClaw URLs",
+                "CLI URLs",
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
                 description = "Notifications for detected URLs"
@@ -1225,46 +784,6 @@ class MainActivity : FlutterActivity() {
         manager.notify(urlNotificationId++, notification)
     }
 
-    private fun installApk(apkPath: String, result: MethodChannel.Result) {
-        val apkFile = File(apkPath)
-        if (!apkFile.exists()) {
-            throw IllegalArgumentException("APK not found: $apkPath")
-        }
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
-            !packageManager.canRequestPackageInstalls()
-        ) {
-            pendingApkInstallResult = result
-            pendingApkInstallPath = apkPath
-
-            val intent = Intent(
-                Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
-                Uri.parse("package:$packageName")
-            )
-            startActivityForResult(intent, INSTALL_UNKNOWN_APP_SOURCES_REQUEST)
-            return
-        }
-
-        launchApkInstaller(apkFile)
-        result.success(true)
-    }
-
-    private fun launchApkInstaller(apkFile: File) {
-        val apkUri = FileProvider.getUriForFile(
-            this,
-            "$packageName.fileprovider",
-            apkFile
-        )
-
-        val installIntent = Intent(Intent.ACTION_VIEW).apply {
-            setDataAndType(apkUri, "application/vnd.android.package-archive")
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        }
-
-        startActivity(installIntent)
-    }
-
     private fun hasSharedStoragePermission(): Boolean {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             Environment.isExternalStorageManager()
@@ -1273,21 +792,6 @@ class MainActivity : FlutterActivity() {
                 this,
                 Manifest.permission.READ_EXTERNAL_STORAGE
             ) == PackageManager.PERMISSION_GRANTED
-        }
-    }
-
-    private fun hasOverlayPermission(): Boolean {
-        return Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(this)
-    }
-
-    private fun requestOverlayPermission() {
-        if (hasOverlayPermission()) return
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            val intent = Intent(
-                Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                Uri.parse("package:$packageName")
-            )
-            startActivity(intent)
         }
     }
 
@@ -1316,106 +820,6 @@ class MainActivity : FlutterActivity() {
         ) {
             pendingNativeTerminalResult?.success(resultCode == Activity.RESULT_OK)
             pendingNativeTerminalResult = null
-            return
-        }
-
-        if (requestCode == INSTALL_UNKNOWN_APP_SOURCES_REQUEST) {
-            val pendingResult = pendingApkInstallResult
-            val pendingPath = pendingApkInstallPath
-            pendingApkInstallResult = null
-            pendingApkInstallPath = null
-
-            if (pendingResult == null || pendingPath == null) {
-                return
-            }
-
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
-                !packageManager.canRequestPackageInstalls()
-            ) {
-                pendingResult.error(
-                    "APK_INSTALL_PERMISSION_DENIED",
-                    "Install unknown apps permission not granted.",
-                    null
-                )
-                return
-            }
-
-            try {
-                val apkFile = File(pendingPath)
-                if (!apkFile.exists()) {
-                    pendingResult.error(
-                        "APK_INSTALL_ERROR",
-                        "APK not found: $pendingPath",
-                        null
-                    )
-                    return
-                }
-
-                launchApkInstaller(apkFile)
-                pendingResult.success(true)
-            } catch (e: Exception) {
-                pendingResult.error("APK_INSTALL_ERROR", e.message, null)
-            }
-            return
-        }
-
-        if (requestCode == SCREEN_CAPTURE_REQUEST) {
-            if (resultCode == Activity.RESULT_OK && data != null) {
-                val intent = Intent(applicationContext, ScreenCaptureService::class.java).apply {
-                    putExtra("resultCode", resultCode)
-                    putExtra("data", data)
-                    putExtra("durationMs", screenCaptureDurationMs)
-                }
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    startForegroundService(intent)
-                } else {
-                    startService(intent)
-                }
-                // Poll for result
-                Thread {
-                    val startTime = System.currentTimeMillis()
-                    val timeout = screenCaptureDurationMs + 5000L
-                    while (ScreenCaptureService.resultPath == null &&
-                        System.currentTimeMillis() - startTime < timeout
-                    ) {
-                        Thread.sleep(200)
-                    }
-                    val path = ScreenCaptureService.resultPath
-                    runOnUiThread {
-                        screenCaptureResult?.success(path)
-                        screenCaptureResult = null
-                    }
-                }.start()
-            } else {
-                screenCaptureResult?.success(null)
-                screenCaptureResult = null
-            }
-            return
-        }
-
-        if (requestCode == SNAPSHOT_PICK_REQUEST) {
-            if (resultCode == Activity.RESULT_OK && data?.data != null) {
-                try {
-                    val uri = data.data!!
-                    val content = contentResolver.openInputStream(uri)
-                        ?.bufferedReader()
-                        ?.use { it.readText() }
-                    val name = uri.lastPathSegment?.substringAfterLast('/') ?: "snapshot.json"
-                    snapshotPickResult?.success(
-                        hashMapOf(
-                            "name" to name,
-                            "content" to content
-                        )
-                    )
-                } catch (e: Exception) {
-                    snapshotPickResult?.error("SNAPSHOT_PICK_ERROR", e.message, null)
-                } finally {
-                    snapshotPickResult = null
-                }
-            } else {
-                snapshotPickResult?.success(null)
-                snapshotPickResult = null
-            }
             return
         }
 
@@ -1449,43 +853,6 @@ class MainActivity : FlutterActivity() {
                 }
             } else {
                 pendingResult.success(null)
-            }
-            return
-        }
-
-        if (requestCode == BACKUP_PICK_REQUEST) {
-            val pendingResult = backupPickResult
-            if (pendingResult == null) {
-                return
-            }
-
-            if (resultCode == Activity.RESULT_OK && data?.data != null) {
-                val uri = data.data!!
-                Thread {
-                    try {
-                        val fallbackName =
-                            uri.lastPathSegment?.substringAfterLast('/') ?: "backup"
-                        val name = queryDisplayName(uri, fallbackName)
-                        val cached = copyUriToCache(uri, name)
-                        runOnUiThread {
-                            pendingResult.success(
-                                hashMapOf(
-                                    "name" to name,
-                                    "path" to cached.absolutePath
-                                )
-                            )
-                        }
-                    } catch (e: Exception) {
-                        runOnUiThread {
-                            pendingResult.error("BACKUP_PICK_ERROR", e.message, null)
-                        }
-                    } finally {
-                        backupPickResult = null
-                    }
-                }.start()
-            } else {
-                pendingResult.success(null)
-                backupPickResult = null
             }
             return
         }
@@ -1528,57 +895,6 @@ class MainActivity : FlutterActivity() {
             return
         }
 
-        if (requestCode == WORKSPACE_BACKUP_SAVE_REQUEST) {
-            val pendingResult = workspaceBackupSaveResult
-            val pendingName = pendingWorkspaceBackupName
-            val pendingAppVersion = pendingWorkspaceBackupAppVersion
-            val pendingOpenClawVersion = pendingWorkspaceBackupOpenClawVersion
-            workspaceBackupSaveResult = null
-            pendingWorkspaceBackupName = null
-            pendingWorkspaceBackupAppVersion = null
-            pendingWorkspaceBackupOpenClawVersion = null
-
-            if (pendingResult == null || pendingName == null || pendingAppVersion == null) {
-                return
-            }
-
-            if (resultCode == Activity.RESULT_OK && data?.data != null) {
-                val uri = data.data!!
-                Thread {
-                    try {
-                        contentResolver.openOutputStream(uri, "w")?.use { output ->
-                            bootstrapManager.exportWorkspaceBackup(
-                                output = output,
-                                appVersion = pendingAppVersion,
-                                openClawVersion = pendingOpenClawVersion
-                            )
-                        } ?: throw IllegalStateException(
-                            "Unable to open destination for writing"
-                        )
-
-                        runOnUiThread {
-                            pendingResult.success(
-                                hashMapOf(
-                                    "name" to queryDisplayName(uri, pendingName),
-                                    "uri" to uri.toString()
-                                )
-                            )
-                        }
-                    } catch (e: Exception) {
-                        runOnUiThread {
-                            pendingResult.error(
-                                "WORKSPACE_BACKUP_SAVE_ERROR",
-                                e.message,
-                                null
-                            )
-                        }
-                    }
-                }.start()
-            } else {
-                pendingResult.success(null)
-            }
-            return
-        }
     }
 
     override fun onRequestPermissionsResult(

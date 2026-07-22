@@ -11,7 +11,7 @@ import java.io.InputStreamReader
  * Manages proot process execution, matching Termux proot-distro as closely
  * as possible. Two command modes:
  *   - Install mode (buildInstallCommand): matches proot-distro's run_proot_cmd()
- *   - Gateway mode (buildGatewayCommand): matches proot-distro's command_login()
+ *   - Login mode (buildLoginCommand): matches proot-distro's command_login()
  */
 class ProcessManager(
     private val filesDir: String,
@@ -75,7 +75,7 @@ class ProcessManager(
     )
 
     // ================================================================
-    // Common proot flags shared by both install and gateway modes.
+    // Common proot flags shared by install and login modes.
     // Matches proot-distro's bind mounts exactly.
     // ================================================================
     /**
@@ -272,11 +272,11 @@ class ProcessManager(
     }
 
     // ================================================================
-    // GATEWAY MODE 鈥?matches proot-distro's command_login()
-    // Used for: running openclaw gateway (long-lived Node.js process).
+    // LOGIN MODE: matches proot-distro's command_login().
+    // Used for long-lived RootFS processes such as the local API proxy.
     // Full featured: --sysvipc, full uname struct, more guest env vars.
     // ================================================================
-    fun buildGatewayCommand(command: String): List<String> {
+    fun buildLoginCommand(command: String): List<String> {
         val flags = commonProotFlags().toMutableList()
         val arch = ArchUtils.getArch()
         // Map to uname -m format
@@ -441,11 +441,11 @@ class ProcessManager(
     }
 
     // ================================================================
-    // Start a long-lived gateway process (gateway mode).
+    // Start a long-lived RootFS process with login-mode environment.
     // Uses full proot-distro command_login() style configuration.
     // ================================================================
     fun startProotProcess(command: String): Process {
-        val cmd = buildGatewayCommand(command)
+        val cmd = buildLoginCommand(command)
         val env = prootEnv()
 
         val pb = ProcessBuilder(cmd)

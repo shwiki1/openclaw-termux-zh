@@ -22,9 +22,8 @@ See `OPEN_SOURCE_SOURCES.md` in this asset directory.
 - PRoot is distributed under GPL-2.0-or-later as an independent runtime tool.
   The app does not modify PRoot source; corresponding upstream source and build
   provenance are recorded in `OPEN_SOURCE_SOURCES.md`.
-- libtalloc and FFmpegKit/FFmpeg libraries are distributed under LGPL-family
-  terms. The app does not modify those libraries; replacement/rebuild guidance
-  and source locations are recorded in `OPEN_SOURCE_SOURCES.md`.
+- libtalloc is distributed under LGPL-family terms. The app does not modify
+  that library; source locations are recorded in `OPEN_SOURCE_SOURCES.md`.
 - The bundled Ubuntu RootFS is an aggregate of packages under mixed open-source
   licenses. Package copyright files are retained under `/usr/share/doc` in the
   generated RootFS where practical, and source repository locations are recorded

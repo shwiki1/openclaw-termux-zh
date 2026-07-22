@@ -1,8 +1,7 @@
 import 'package:flutter/foundation.dart';
-import '../models/openclaw_install_options.dart';
+import '../models/runtime_install_options.dart';
 import '../models/setup_state.dart';
 import '../services/bootstrap_service.dart';
-import '../services/openclaw_version_service.dart';
 
 class SetupProvider extends ChangeNotifier {
   final BootstrapService _bootstrapService = BootstrapService();
@@ -19,15 +18,13 @@ class SetupProvider extends ChangeNotifier {
   }
 
   Future<void> runSetup({
-    OpenClawReleaseInfo? selectedOpenClawRelease,
-    OpenClawInstallOptions installOptions = const OpenClawInstallOptions(),
+    RuntimeInstallOptions installOptions = const RuntimeInstallOptions(),
   }) async {
     if (_isRunning) return;
     _isRunning = true;
     notifyListeners();
 
     await _bootstrapService.runFullSetup(
-      selectedOpenClawRelease: selectedOpenClawRelease,
       installOptions: installOptions,
       onProgress: (state) {
         _state = state;

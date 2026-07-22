@@ -1,7 +1,7 @@
 {
   "name": "ciyuanxia",
   "version": "2.5.0",
-  "description": "次元虾 OpenClaw Android integration with PRoot runtime support",
+  "description": "次元虾 Android CLI runtime integration with PRoot support",
   "main": "lib/index.js",
   "type": "module",
   "bin": {

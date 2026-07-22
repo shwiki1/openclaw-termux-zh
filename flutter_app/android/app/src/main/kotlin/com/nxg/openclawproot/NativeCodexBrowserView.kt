@@ -3802,7 +3802,7 @@ class NativeCodexBrowserView(
         val tab = activeTabOrNull() ?: return callback(snapshot(ok = false, message = "Browser page is unavailable."))
         tab.loading = true
         tab.error = ""
-        tab.title = "OpenClaw Browser Self Test"
+        tab.title = "CiYuanXia Browser Self Test"
         tab.webView.loadDataWithBaseURL(
             "https://browser.openclaw.local/self-test",
             SELF_TEST_HTML,
@@ -4818,7 +4818,7 @@ class NativeCodexBrowserView(
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>OpenClaw Browser Self Test</title>
+    <title>CiYuanXia Browser Self Test</title>
     <style>
       :root { color-scheme: dark; }
       html, body { margin: 0; min-height: 100%; background: #0a0a0a; color: #f7f7f7; font-family: sans-serif; }

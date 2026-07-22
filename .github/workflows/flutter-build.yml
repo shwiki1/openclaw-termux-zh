@@ -1,4 +1,4 @@
-name: Build OpenClaw Apps
+name: Build CiYuanXia Apps
 
 on:
   push:
@@ -80,7 +80,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends binutils curl gzip qemu-user-static unzip xz-utils zstd
 
-      - name: Restore bundled OpenClaw rootfs
+      - name: Restore bundled CiYuanXia rootfs
         id: restore_rootfs
         env:
           GH_TOKEN: ${{ github.token }}
@@ -104,7 +104,7 @@ jobs:
             fi
           fi
 
-      - name: Build bundled OpenClaw rootfs
+      - name: Build bundled CiYuanXia rootfs
         if: ${{ steps.restore_rootfs.outputs.restored != 'true' && (vars.BUILD_BUNDLED_ROOTFS == 'true' || (github.event_name == 'workflow_dispatch' && inputs.rebuild_rootfs)) }}
         run: |
           set -euo pipefail
@@ -120,7 +120,7 @@ jobs:
           echo "Bundled rootfs size: ${SIZE_MB} MB"
           sudo rm -rf .tmp/prebuilt-rootfs .tmp/rootfs-cache
 
-      - name: Publish bundled OpenClaw rootfs
+      - name: Publish bundled CiYuanXia rootfs
         if: ${{ steps.restore_rootfs.outputs.restored != 'true' && (vars.BUILD_BUNDLED_ROOTFS == 'true' || (github.event_name == 'workflow_dispatch' && inputs.rebuild_rootfs) || (github.ref == 'refs/heads/main' && github.event_name == 'push')) }}
         env:
           GH_TOKEN: ${{ github.token }}
@@ -128,7 +128,7 @@ jobs:
           set -euo pipefail
           bash scripts/publish-prebuilt-rootfs-asset.sh --arch arm64 --release-tag basic-resource
 
-      - name: Verify bundled OpenClaw rootfs
+      - name: Verify bundled CiYuanXia rootfs
         run: |
           set -euo pipefail
           ROOTFS=flutter_app/assets/bootstrap/openclaw-rootfs-noble-arm64.tar.gz
@@ -235,7 +235,7 @@ jobs:
           LATEST_WORKFLOW_BUILD="$(
             gh run list \
               --repo "${GITHUB_REPOSITORY}" \
-              --workflow "Build OpenClaw Apps" \
+              --workflow "Build CiYuanXia Apps" \
               --json databaseId,status,conclusion \
               --limit 20 \
               --jq '.[] | select(.status == "completed") | .databaseId' \

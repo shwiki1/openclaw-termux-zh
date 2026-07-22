@@ -1,12 +1,12 @@
 #!/bin/bash
-# Build the OpenClaw Flutter APK for arm64-v8a only.
+# Build the CiYuanXia Flutter APK for arm64-v8a only.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$SCRIPT_DIR/.."
 FLUTTER_DIR="$PROJECT_DIR/flutter_app"
 
-echo "=== OpenClaw APK Build ==="
+echo "=== CiYuanXia APK Build ==="
 echo ""
 
 # Step 1: Fetch proot binaries if not present

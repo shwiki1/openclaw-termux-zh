@@ -1,4 +1,4 @@
-﻿package com.agent.cyx
+package com.agent.cyx
 
 import android.app.Notification
 import android.app.NotificationChannel
@@ -13,6 +13,7 @@ import android.os.PowerManager
 
 class TerminalSessionService : Service() {
     companion object {
+        const val CHANNEL_ID = "ciyuanxia_terminal"
         const val NOTIFICATION_ID = 2
         var isRunning = false
             private set
@@ -78,7 +79,7 @@ class TerminalSessionService : Service() {
         val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
         wakeLock = powerManager.newWakeLock(
             PowerManager.PARTIAL_WAKE_LOCK,
-            "OpenClaw::TerminalWakeLock"
+            "CiYuanXia::TerminalWakeLock"
         )
         wakeLock?.acquire(24 * 60 * 60 * 1000L) // 24 hours max
     }
@@ -93,11 +94,11 @@ class TerminalSessionService : Service() {
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
-                GatewayService.CHANNEL_ID,
-                "OpenClaw Gateway",
+                CHANNEL_ID,
+                "CiYuanXia Terminal",
                 NotificationManager.IMPORTANCE_LOW
             ).apply {
-                description = "Keeps the OpenClaw gateway running in the background"
+                description = "Keeps active terminal sessions running"
             }
             val manager = getSystemService(NotificationManager::class.java)
             manager.createNotificationChannel(channel)
@@ -112,8 +113,8 @@ class TerminalSessionService : Service() {
         )
 
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            Notification.Builder(this, GatewayService.CHANNEL_ID)
-                .setContentTitle("OpenClaw Terminal")
+            Notification.Builder(this, CHANNEL_ID)
+                .setContentTitle("CiYuanXia Terminal")
                 .setContentText("Terminal session active")
                 .setSmallIcon(android.R.drawable.ic_menu_manage)
                 .setContentIntent(pendingIntent)
@@ -122,7 +123,7 @@ class TerminalSessionService : Service() {
         } else {
             @Suppress("DEPRECATION")
             Notification.Builder(this)
-                .setContentTitle("OpenClaw Terminal")
+                .setContentTitle("CiYuanXia Terminal")
                 .setContentText("Terminal session active")
                 .setSmallIcon(android.R.drawable.ic_menu_manage)
                 .setContentIntent(pendingIntent)

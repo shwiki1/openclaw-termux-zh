@@ -67,7 +67,7 @@ if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
   else
     gh release create "$RELEASE_TAG" \
       --title "basic-resource" \
-      --notes "Reusable prebuilt rootfs assets for OpenClaw cloud builds." \
+      --notes "Reusable prebuilt rootfs assets for CiYuanXia cloud builds." \
       >/dev/null
   fi
 elif [[ -f "$NOTES_FILE" ]]; then

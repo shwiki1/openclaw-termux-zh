@@ -5,7 +5,7 @@
 - Traditional scripts use an amber code icon/border to distinguish them from the accent-colored Codex automation cards. Both surfaces retain explicit labels, empty states, and destructive-action confirmations.
 
 ## Design Direction
-Operational Android utility app for managing an OpenClaw runtime. Existing screens are dashboard/control-panel oriented, not landing-page oriented. Preserve dense, scannable controls, clear status, explicit loading/error states, and mobile-first ergonomics.
+Operational Android utility app for managing a CLI/runtime environment, local API relay, terminal, and Codex browser automation. The main dashboard is intentionally reduced to CLI tools and terminal only. Preserve dense, scannable controls, clear status, explicit loading/error states, and mobile-first ergonomics. Do not restore OpenClaw onboarding, AI-provider cards, gateway controls, message-platform cards, config-editor cards, settings, packages, local-model, backup, node, cpolar, SSH, or gateway log shortcuts unless the user explicitly asks for those surfaces again.
 
 ## Tokens
 - Color: `AppColors` in `flutter_app/lib/app.dart`; red accent `#DC2626`, dark backgrounds `#0A0A0A/#121212/#1A1A1A`, light backgrounds `#FFFFFF/#F9F9F9`, status green/amber/red/grey.
@@ -22,8 +22,8 @@ Operational Android utility app for managing an OpenClaw runtime. Existing scree
 - Native browser script-library sub-dialogs should use the same dense dark workbench chrome as the main assistant: icon header, framed content region, icon+text action buttons, visible destructive styling, and in-dialog close/cancel actions. Do not add raw AlertDialog title/message/positive-button popups for page snapshots, script details, import/edit forms, delete confirmations, run confirmations, variable prompts, or run logs.
 - `NativeTerminalActivity` owns the ordinary CLI top chrome and must apply system-bar/IME insets at the activity root. Its title and action rows use compact native cards; this is separate from Codex pager chrome and must not change the ordinary terminal shortcut strip into Codex styling.
 - `StatusCard`: repeated navigation/status card with icon, title, subtitle, optional trailing, optional tap.
-- `GatewayControls`, `NodeControls`: operational controls tied to gateway/node lifecycle.
-- `ProgressStep`, `OpenClawReleaseSelector`: setup and install flow components.
+- `NodeControls`: operational controls tied to node/capability lifecycle. The old Flutter `GatewayControls` widget was removed with the OpenClaw gateway UI.
+- `ProgressStep`: setup and install flow component. The old OpenClaw release selector was removed from the setup flow.
 - `ResponsiveLayout`: content width/text-scale clamps.
 - `TerminalToolbar`, `NativeTerminalView`, `NativeProotTerminal`: terminal input and native terminal surfaces. `TerminalScreen` now uses the native `NativeTerminalView` key strip (`useNativeToolbar: true`) so the terminal prompt and shortcut bar move as one Android surface during IME transitions. Both the native terminal shortcut bar and the Flutter fallback toolbar now provide explicit press-state background changes plus haptic feedback on taps.
 - Shared native terminal chrome must stay scoped: ordinary CLI sessions should keep the tighter, simpler terminal toolbar styling, while the Codex pager may opt into denser/red-accented chrome. Do not restyle `NativeTerminalSessionView` globally for Codex and accidentally shrink other CLI terminal viewports again.
@@ -47,7 +47,7 @@ Operational Android utility app for managing an OpenClaw runtime. Existing scree
 ## Screen QA Notes
 - Codex pager density policy: terminal/page chrome should not wrap the terminal, shortcut strip, or WebView in rounded outer cards. Browser controls should fit into a compact top band, leaving most height to the WebView; the more menu should use the custom dense list, not the default platform popup.
 - Verify safe areas, keyboard overlap, loading states, empty states, error states, and text fitting.
-- Important screens to manually smoke when UI changes: setup wizard, dashboard, terminal, Web dashboard, config editor, provider detail, backup manager, local model screens, settings/update flow.
+- Important screens to manually smoke when UI changes: setup wizard, dashboard, CLI tools/local API proxy, terminal, cpolar Web dashboard, backup manager, local model screens, settings/update flow. Provider detail/config editor/message-platform/log screens are no longer part of the app UI.
 - For Codex browser UI changes, smoke the terminal browser sidecar on compact and wide widths, including tab strip overflow, add/switch/close tab behavior, back/forward/reload state, desktop/mobile UA switching, desktop UA page layout, pinch/page zoom behavior, more-menu tool access, pending-save script draft card, script assistant bottom sheet, and header icon density.
 - For native Codex pager UI changes, additionally smoke the dedicated Android pager header safe area, browser top strips, icon rendering/tint, recent-actions toggle, inspector cards, and address-row editing with IME open/close.
 - Keep Codex browser header/menu surfaces explicitly high-contrast on the black panel background. Do not rely on the global `ListTileTheme` muted icon color for popup menu entries inside the browser panel.

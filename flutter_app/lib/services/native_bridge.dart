@@ -3,7 +3,6 @@ import '../constants.dart';
 
 class NativeBridge {
   static const _channel = MethodChannel(AppConstants.channelName);
-  static const _eventChannel = EventChannel(AppConstants.eventChannelName);
   static const _setupLogEventChannel =
       EventChannel(AppConstants.setupLogEventChannelName);
   static int _terminalSoftInputModeOwners = 0;
@@ -64,14 +63,6 @@ class NativeBridge {
     });
   }
 
-  static Future<bool> startGateway() async {
-    return await _channel.invokeMethod('startGateway');
-  }
-
-  static Future<bool> stopGateway() async {
-    return await _channel.invokeMethod('stopGateway');
-  }
-
   static Future<bool> startLocalApiProxy() async {
     return await _channel.invokeMethod('startLocalApiProxy');
   }
@@ -82,21 +73,6 @@ class NativeBridge {
 
   static Future<bool> isLocalApiProxyRunning() async {
     return await _channel.invokeMethod('isLocalApiProxyRunning');
-  }
-
-  static Future<bool> isGatewayRunning() async {
-    return await _channel.invokeMethod('isGatewayRunning');
-  }
-
-  static Future<bool> isGatewayLogPersistenceEnabled() async {
-    return await _channel.invokeMethod('isGatewayLogPersistenceEnabled');
-  }
-
-  static Future<bool> setGatewayLogPersistenceEnabled(bool enabled) async {
-    return await _channel.invokeMethod(
-      'setGatewayLogPersistenceEnabled',
-      {'enabled': enabled},
-    );
   }
 
   static Future<bool> setupDirs() async {
@@ -228,23 +204,6 @@ class NativeBridge {
     return await _channel.invokeMethod('isTerminalServiceRunning');
   }
 
-  static Future<bool> startNodeService() async {
-    return await _channel.invokeMethod('startNodeService');
-  }
-
-  static Future<bool> stopNodeService() async {
-    return await _channel.invokeMethod('stopNodeService');
-  }
-
-  static Future<bool> isNodeServiceRunning() async {
-    return await _channel.invokeMethod('isNodeServiceRunning');
-  }
-
-  static Future<bool> updateNodeNotification(String text) async {
-    return await _channel
-        .invokeMethod('updateNodeNotification', {'text': text});
-  }
-
   static Future<bool> requestBatteryOptimization() async {
     return await _channel.invokeMethod('requestBatteryOptimization');
   }
@@ -273,12 +232,6 @@ class NativeBridge {
         .invokeMethod('showUrlNotification', {'url': url, 'title': title});
   }
 
-  static Future<Map<String, dynamic>?> pickSnapshotFile() async {
-    final result = await _channel.invokeMethod('pickSnapshotFile');
-    if (result == null) return null;
-    return Map<String, dynamic>.from(result);
-  }
-
   static Future<Map<String, dynamic>?> saveSnapshotFile({
     required String suggestedName,
     required String content,
@@ -291,69 +244,16 @@ class NativeBridge {
     return Map<String, dynamic>.from(result);
   }
 
-  static Future<Map<String, dynamic>?> pickBackupFile() async {
-    final result = await _channel.invokeMethod('pickBackupFile');
-    if (result == null) return null;
-    return Map<String, dynamic>.from(result);
-  }
-
   static Future<Map<String, dynamic>?> pickBootstrapArchiveFile() async {
     final result = await _channel.invokeMethod('pickBootstrapArchiveFile');
     if (result == null) return null;
     return Map<String, dynamic>.from(result);
   }
 
-  static Future<Map<String, dynamic>?> exportWorkspaceBackup({
-    required String suggestedName,
-    required String appVersion,
-    String? openClawVersion,
-  }) async {
-    final result = await _channel.invokeMethod('exportWorkspaceBackup', {
-      'suggestedName': suggestedName,
-      'appVersion': appVersion,
-      'openClawVersion': openClawVersion,
-    });
-    if (result == null) return null;
-    return Map<String, dynamic>.from(result);
-  }
-
-  static Future<Map<String, dynamic>?> inspectWorkspaceBackup(
-    String path,
-  ) async {
-    final result = await _channel.invokeMethod(
-      'inspectWorkspaceBackup',
-      {'path': path},
-    );
-    if (result == null) return null;
-    return Map<String, dynamic>.from(result);
-  }
-
-  static Future<bool> restoreWorkspaceBackup(String path) async {
-    return await _channel.invokeMethod(
-      'restoreWorkspaceBackup',
-      {'path': path},
-    );
-  }
-
-  static Stream<String> get gatewayLogStream {
-    return _eventChannel
-        .receiveBroadcastStream()
-        .map((event) => event.toString());
-  }
-
   static Stream<String> get setupLogStream {
     return _setupLogEventChannel
         .receiveBroadcastStream()
         .map((event) => event.toString());
-  }
-
-  static Future<String?> requestScreenCapture(int durationMs) async {
-    return await _channel
-        .invokeMethod('requestScreenCapture', {'durationMs': durationMs});
-  }
-
-  static Future<bool> stopScreenCapture() async {
-    return await _channel.invokeMethod('stopScreenCapture');
   }
 
   static Future<bool> requestStoragePermission() async {
@@ -364,32 +264,8 @@ class NativeBridge {
     return await _channel.invokeMethod('hasStoragePermission');
   }
 
-  static Future<bool> hasOverlayPermission() async {
-    return await _channel.invokeMethod('hasOverlayPermission');
-  }
-
-  static Future<bool> requestOverlayPermission() async {
-    return await _channel.invokeMethod('requestOverlayPermission');
-  }
-
-  static Future<bool> startFloatingFileManager() async {
-    return await _channel.invokeMethod('startFloatingFileManager');
-  }
-
-  static Future<bool> stopFloatingFileManager() async {
-    return await _channel.invokeMethod('stopFloatingFileManager');
-  }
-
-  static Future<bool> isFloatingFileManagerRunning() async {
-    return await _channel.invokeMethod('isFloatingFileManagerRunning');
-  }
-
   static Future<String> getExternalStoragePath() async {
     return await _channel.invokeMethod('getExternalStoragePath');
-  }
-
-  static Future<bool> installApk(String apkPath) async {
-    return await _channel.invokeMethod('installApk', {'apkPath': apkPath});
   }
 
   static Future<String?> readRootfsFile(String path) async {
@@ -399,92 +275,6 @@ class NativeBridge {
   static Future<bool> writeRootfsFile(String path, String content) async {
     return await _channel
         .invokeMethod('writeRootfsFile', {'path': path, 'content': content});
-  }
-
-  // SSH Service
-  static Future<bool> startSshd({int port = 8022}) async {
-    return await _channel.invokeMethod('startSshd', {'port': port});
-  }
-
-  static Future<bool> stopSshd() async {
-    return await _channel.invokeMethod('stopSshd');
-  }
-
-  static Future<bool> isSshdRunning() async {
-    return await _channel.invokeMethod('isSshdRunning');
-  }
-
-  static Future<int> getSshdPort() async {
-    return await _channel.invokeMethod('getSshdPort');
-  }
-
-  static Future<bool> startCpolarService({
-    required String binaryPath,
-    required String configPath,
-    required String logPath,
-    int webPort = 9200,
-  }) async {
-    return await _channel.invokeMethod('startCpolarService', {
-      'binaryPath': binaryPath,
-      'configPath': configPath,
-      'logPath': logPath,
-      'webPort': webPort,
-    });
-  }
-
-  static Future<bool> stopCpolarService() async {
-    return await _channel.invokeMethod('stopCpolarService');
-  }
-
-  static Future<bool> isCpolarServiceRunning() async {
-    return await _channel.invokeMethod('isCpolarServiceRunning');
-  }
-
-  static Future<bool> startLocalModelService({
-    required String binaryPath,
-    required String modelPath,
-    required String logPath,
-    required int port,
-    required String alias,
-    required int contextSize,
-    required int threads,
-    required int threadsBatch,
-    required int batchSize,
-    required int ubatchSize,
-  }) async {
-    return await _channel.invokeMethod('startLocalModelService', {
-      'binaryPath': binaryPath,
-      'modelPath': modelPath,
-      'logPath': logPath,
-      'port': port,
-      'alias': alias,
-      'contextSize': contextSize,
-      'threads': threads,
-      'threadsBatch': threadsBatch,
-      'batchSize': batchSize,
-      'ubatchSize': ubatchSize,
-    });
-  }
-
-  static Future<bool> stopLocalModelService() async {
-    return await _channel.invokeMethod('stopLocalModelService');
-  }
-
-  static Future<bool> isLocalModelServiceRunning() async {
-    return await _channel.invokeMethod('isLocalModelServiceRunning');
-  }
-
-  static Future<Map<String, dynamic>?> getLocalModelRuntimeStats() async {
-    final result = await _channel.invokeMethod('getLocalModelRuntimeStats');
-    if (result == null) {
-      return null;
-    }
-    return Map<String, dynamic>.from(result);
-  }
-
-  static Future<List<String>> getDeviceIps() async {
-    final result = await _channel.invokeMethod('getDeviceIps');
-    return List<String>.from(result);
   }
 
   static Future<bool> bringToForeground() async {

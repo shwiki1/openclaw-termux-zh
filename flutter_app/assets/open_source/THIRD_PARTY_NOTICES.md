@@ -36,17 +36,8 @@ Direct dependencies currently declared:
 - `provider`
 - `shared_preferences`
 - `path_provider`
-- `permission_handler`
-- `url_launcher`
-- `web_socket_channel`
-- `cryptography`
 - `google_fonts`
 - `uuid`
-- `camera`
-- `geolocator`
-- `flutter_blue_plus` 1.32.0 (BSD-3-Clause; pinned to avoid later commercial-license versions)
-- `usb_serial`
-- `flutter_markdown_plus`
 
 ## Runtime-Installed CLI Tools
 
@@ -121,38 +112,31 @@ installers that fetch them into the Ubuntu rootfs at runtime under
 
 - Version: 4.3.2.
 - License: MIT.
-- Used as: local browser-side Tailwind runtime for the floating WebView file
-  manager frontend and bundled api2py management frontend.
+- Used as: local browser-side Tailwind runtime for the bundled api2py
+  management frontend.
 - Upstream: https://github.com/tailwindlabs/tailwindcss/tree/main/packages/@tailwindcss-browser
 - Source for distributed binary: npm package `@tailwindcss/browser@4.3.2`.
-- Modifications: none; `dist/index.global.js` is copied into
-  `flutter_app/android/app/src/main/assets/file-manager/vendor/tailwind-browser.js`
-  and api2py's local `tailwind.js` copy is bundled at
+- Modifications: none; api2py's local `tailwind.js` copy is bundled at
   `flutter_app/assets/api2py/public/static/lib/tailwind.js`.
-- Required notices: license text is preserved in
-  `flutter_app/android/app/src/main/assets/file-manager/vendor/licenses/tailwindcss-browser-LICENSE`.
+- Required notices: preserve upstream MIT license text.
 
 ## Lucide
 
 - Version: 1.23.0.
 - License: ISC.
-- Used as: local UMD icon runtime for the floating WebView file manager
-  frontend and bundled api2py management frontend.
+- Used as: local UMD icon runtime for the bundled api2py management frontend.
 - Upstream: https://github.com/lucide-icons/lucide/tree/main/packages/lucide
 - Source for distributed binary: npm package `lucide@1.23.0`.
-- Modifications: none; `dist/umd/lucide.min.js` is copied into
-  `flutter_app/android/app/src/main/assets/file-manager/vendor/lucide.min.js`
-  and api2py's local `lucide.js` copy is bundled at
+- Modifications: none; api2py's local `lucide.js` copy is bundled at
   `flutter_app/assets/api2py/public/static/lib/lucide.js`.
-- Required notices: license text is preserved in
-  `flutter_app/android/app/src/main/assets/file-manager/vendor/licenses/lucide-LICENSE`.
+- Required notices: preserve upstream ISC license text.
 
 ## Lucide Icons
 
 - Version: `main` branch snapshot fetched on 2026-07-08.
 - License: ISC License, with a subset of icons additionally covered by the
   Feather MIT license text included in the upstream `LICENSE`.
-- Used as: Android PNG UI assets for the floating file manager.
+- Used as: Android PNG UI assets for native terminal and browser controls.
 - Upstream: https://github.com/lucide-icons/lucide
 - Source for distributed binary: `third_party/lucide/icons/*.svg`
 - Modifications: converted selected SVG icons to
@@ -161,83 +145,11 @@ installers that fetch them into the Ubuntu rootfs at runtime under
 
 Included icons:
 
-`app-window`, `archive`, `arrow-down-up`, `arrow-up-from-line`,
-`audio-waveform`, `bot`, `chevron-left`, `chevrons-down-up`, `clipboard`,
-`clipboard-paste`, `copy`, `external-link`, `eye`, `eye-off`, `file`,
-`file-archive`, `file-code`,
-`file-image`, `file-music`,
-`file-text`, `file-video-camera`, `folder`, `folder-open`, `folder-plus`,
-`globe`, `grid-2x2`, `hard-drive`, `history`, `house`, `info`,
-`layout-list`, `link`, `list-checks`, `minus`,
-`mouse-pointer-click`, `move`, `panel-right`, `panel-top-close`,
-`panel-top-open`, `play`, `plus`, `refresh-cw`, `route`, `save`,
-`scan-search`, `search`, `share-2`, `square-check`, `square-pen`, `star`,
-`star-off`, `trash-2`, `upload`, `workflow`, `x`
-
-## Ace Editor / ace-builds
-
-- Version: 1.44.0.
-- License: BSD-3-Clause.
-- Used as: local browser code editor and syntax highlighter for the floating
-  WebView file manager.
-- Upstream: https://github.com/ajaxorg/ace-builds
-- Source for distributed binary: npm package `ace-builds@1.44.0`.
-- Modifications: none; selected `src-min-noconflict` browser files are copied
-  into `flutter_app/android/app/src/main/assets/file-manager/vendor/ace/`.
-- Required notices: license text is preserved in
-  `flutter_app/android/app/src/main/assets/file-manager/vendor/licenses/ace-builds-LICENSE`.
-
-## Marked
-
-- Version: 18.0.5.
-- License: MIT.
-- Used as: local Markdown renderer for the floating WebView file manager.
-- Upstream: https://github.com/markedjs/marked
-- Source for distributed binary: npm package `marked@18.0.5`.
-- Modifications: none; `lib/marked.umd.js` is copied into
-  `flutter_app/android/app/src/main/assets/file-manager/vendor/docs/marked.umd.js`.
-- Required notices: license text is preserved in
-  `flutter_app/android/app/src/main/assets/file-manager/vendor/licenses/marked-LICENSE`.
-
-## Mammoth
-
-- Version: 1.12.0.
-- License: BSD-2-Clause.
-- Used as: local DOCX-to-HTML preview library for the floating WebView file
-  manager.
-- Upstream: https://github.com/mwilliamson/mammoth.js
-- Source for distributed binary: npm package `mammoth@1.12.0`.
-- Modifications: none; `mammoth.browser.min.js` is copied into
-  `flutter_app/android/app/src/main/assets/file-manager/vendor/docs/mammoth.browser.min.js`.
-- Required notices: license text is preserved in
-  `flutter_app/android/app/src/main/assets/file-manager/vendor/licenses/mammoth-LICENSE`.
-
-## SheetJS xlsx
-
-- Version: 0.18.5.
-- License: Apache-2.0.
-- Used as: local XLS/XLSX/ODS spreadsheet preview library for the floating
-  WebView file manager.
-- Upstream: https://github.com/SheetJS/sheetjs
-- Source for distributed binary: npm package `xlsx@0.18.5`.
-- Modifications: none; `dist/xlsx.full.min.js` is copied into
-  `flutter_app/android/app/src/main/assets/file-manager/vendor/docs/xlsx.full.min.js`.
-- Required notices: license text is preserved in
-  `flutter_app/android/app/src/main/assets/file-manager/vendor/licenses/xlsx-LICENSE`.
-
-## JSZip
-
-- Version: 3.10.1.
-- License: MIT OR GPL-3.0-or-later; this project distributes it under the MIT
-  option.
-- Used as: local ZIP/OOXML reader for PPTX text-outline preview in the floating
-  WebView file manager.
-- Upstream: https://github.com/Stuk/jszip
-- Source for distributed binary: npm package `jszip@3.10.1`.
-- Modifications: none; `dist/jszip.min.js` is copied into
-  `flutter_app/android/app/src/main/assets/file-manager/vendor/docs/jszip.min.js`.
-- Required notices: license text is preserved in
-  `flutter_app/android/app/src/main/assets/file-manager/vendor/licenses/jszip-LICENSE`.
+`app-window`, `bot`, `chevron-left`, `clipboard-paste`, `copy`,
+`external-link`, `eye`, `eye-off`, `file-code`, `globe`, `hard-drive`,
+`layout-list`, `link`, `mouse-pointer-click`, `panel-right`, `play`, `plus`,
+`refresh-cw`, `route`, `save`, `scan-search`, `square-pen`, `star`, `trash-2`,
+`upload`, `workflow`, `x`
 
 ## PRoot From Termux Packages
 
@@ -322,65 +234,27 @@ Included icons:
 - Modifications: apt sources are configured to domestic mirrors during setup.
 - Required notices: each installed package keeps its own license terms.
 
-## Bundled OpenClaw Prebuilt Rootfs
+## Bundled CiYuanXia Prebuilt Rootfs
 
 - Version: generated at APK build time by `scripts/build-prebuilt-rootfs.sh`
   from Ubuntu Base 24.04.3 for arm64.
-- License: aggregate of Ubuntu packages, Node.js, OpenClaw, and npm package
-  dependencies; see the component entries in this file.
+- License: aggregate of Ubuntu packages, Node.js, Python packages used by the
+  local API relay, and their transitive dependencies; see the component entries
+  in this file.
 - Used as: `assets/bootstrap/openclaw-rootfs-noble-arm64.tar.gz` packaged
   inside the APK to avoid slow first-run environment and plugin downloads.
 - Companion manifest: `assets/bootstrap/openclaw-rootfs-noble-arm64.json`
   records the exact resolved package versions, fingerprint, SHA256, and build
   timestamp used for the current prebuilt bundle and the reusable
   `basic-resource` GitHub Release.
-- Upstream: Ubuntu Base, Node.js, npm registry packages, and OpenClaw plugin
-  package sources listed below.
+- Upstream: Ubuntu Base, Node.js, PyPI packages used by the bundled local API
+  relay, and their transitive dependencies.
 - Source for distributed binary: see `OPEN_SOURCE_SOURCES.md` and package
   metadata/license files retained inside the rootfs under npm package folders.
-- Modifications: installs base packages, Node.js, OpenClaw, QQ Bot plugin, and
-  Weixin plugin; writes npm mirror config and enables both messaging plugins in
-  `/root/.openclaw/openclaw.json`.
+- Modifications: installs base packages, Node.js, local API relay Python
+  dependencies, and npm mirror config. The current prebuilt RootFS no longer
+  preinstalls OpenClaw or the OpenClaw QQ/Weixin plugins.
 - Required notices: preserve all component licenses and provide GPL/LGPL source
   access for system packages included in the generated rootfs. The prebuilt
   cleanup keeps `/usr/share/doc/**/copyright` files while removing other docs,
   manpages, info pages, caches, logs, bytecode, and examples to reduce APK size.
-
-## OpenClaw npm Package
-
-- Version: installed through `openclaw@latest` during prebuilt-rootfs build;
-  latest observed by the 2026-07-15 registry check is `2026.7.1`.
-- License: MIT.
-- Used as: OpenClaw CLI/runtime inside the proot environment.
-- Upstream: https://www.npmjs.com/package/openclaw
-- Source for distributed binary: npm package tarball and upstream package
-  metadata; upstream repository https://github.com/openclaw/openclaw
-- Modifications: none.
-- Required notices: preserve package license and notices from the installed npm
-  package.
-
-## Tencent Connect OpenClaw QQ Bot Plugin
-
-- Version: installed through `@tencent-connect/openclaw-qqbot@latest` during
-  prebuilt-rootfs build; latest observed by the 2026-07-15 registry check is
-  `2.0.0`.
-- License: MIT; package tarball includes `LICENSE`.
-- Used as: QQ Bot channel plugin preinstalled in the bundled OpenClaw rootfs.
-- Upstream: https://github.com/tencent-connect/openclaw-qqbot
-- Source for distributed binary: npm package tarball
-  `@tencent-connect/openclaw-qqbot`.
-- Modifications: none; the app only enables the plugin entry in OpenClaw config.
-- Required notices: preserve package license and copyright notices.
-
-## Tencent Weixin OpenClaw Plugin
-
-- Version: installed through `@tencent-weixin/openclaw-weixin@latest` during
-  prebuilt-rootfs build; latest observed by the 2026-07-15 registry check is
-  `2.4.6`.
-- License: MIT; package metadata and tarball license both declare MIT.
-- Used as: Weixin channel plugin preinstalled in the bundled OpenClaw rootfs.
-- Upstream: https://www.npmjs.com/package/@tencent-weixin/openclaw-weixin
-- Source for distributed binary: npm package tarball
-  `@tencent-weixin/openclaw-weixin`.
-- Modifications: none; the app only enables the plugin entry in OpenClaw config.
-- Required notices: preserve package license and copyright notices.

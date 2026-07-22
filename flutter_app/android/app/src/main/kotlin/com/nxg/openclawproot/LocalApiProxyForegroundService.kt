@@ -227,7 +227,7 @@ PY
         val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
         wakeLock = powerManager.newWakeLock(
             PowerManager.PARTIAL_WAKE_LOCK,
-            "OpenClaw::LocalApiProxyWakeLock"
+            "CiYuanXia::LocalApiProxyWakeLock"
         )
         wakeLock?.acquire(24 * 60 * 60 * 1000L)
     }
@@ -243,7 +243,7 @@ PY
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 CHANNEL_ID,
-                "OpenClaw local API proxy",
+                "CiYuanXia local API proxy",
                 NotificationManager.IMPORTANCE_LOW
             ).apply {
                 description = "Keeps the local API relay running in the background"
@@ -267,7 +267,7 @@ PY
             Notification.Builder(this)
         }
         return builder
-            .setContentTitle("OpenClaw API Proxy")
+            .setContentTitle("CiYuanXia API Proxy")
             .setContentText(text)
             .setSmallIcon(android.R.drawable.stat_sys_upload_done)
             .setContentIntent(pendingIntent)

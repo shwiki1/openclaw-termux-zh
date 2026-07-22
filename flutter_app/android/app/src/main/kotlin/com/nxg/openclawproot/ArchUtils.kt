@@ -1,4 +1,4 @@
-﻿package com.agent.cyx
+package com.agent.cyx
 
 import android.os.Build
 
@@ -24,4 +24,3 @@ object ArchUtils {
         }
     }
 }
-

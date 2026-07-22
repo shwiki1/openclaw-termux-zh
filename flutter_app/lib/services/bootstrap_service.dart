@@ -5,16 +5,12 @@ import 'dart:ui';
 import 'package:dio/dio.dart';
 import '../constants.dart';
 import '../l10n/app_localizations.dart';
-import '../models/openclaw_install_options.dart';
+import '../models/runtime_install_options.dart';
 import '../models/setup_state.dart';
-import 'install_status_message_formatter.dart';
 import 'native_bridge.dart';
-import 'openclaw_version_service.dart';
 
 class BootstrapService {
   final Dio _dio = Dio();
-  final OpenClawVersionService _openClawVersionService =
-      OpenClawVersionService();
   SetupState _lastSetupState = const SetupState();
 
   AppLocalizations get _notificationL10n =>
@@ -44,9 +40,7 @@ class BootstrapService {
       case SetupStep.extractingRootfs:
         return 0.30 + (progress * 0.15);
       case SetupStep.installingNode:
-        return 0.45 + (progress * 0.35);
-      case SetupStep.installingOpenClaw:
-        return 0.80 + (progress * 0.18);
+        return 0.45 + (progress * 0.53);
       case SetupStep.configuringBypass:
         return 0.98 + (progress * 0.02);
       case SetupStep.complete:
@@ -73,39 +67,6 @@ class BootstrapService {
       return true;
     } catch (_) {
       return false;
-    }
-  }
-
-  Future<bool> _isInstalledOpenClawUsable() async {
-    try {
-      await NativeBridge.runInProot('openclaw --version', timeout: 30);
-      return true;
-    } catch (_) {
-      return false;
-    }
-  }
-
-  Future<String?> _readPrebuiltOpenClawVersion() async {
-    try {
-      final marker = await NativeBridge.readRootfsFile(
-        '/etc/openclaw-prebuilt-rootfs',
-      );
-      if (marker == null || marker.trim().isEmpty) {
-        return null;
-      }
-      for (final line in marker.split(RegExp(r'\r?\n'))) {
-        final trimmed = line.trim();
-        if (!trimmed.startsWith('openclaw=')) {
-          continue;
-        }
-        final version = trimmed.substring('openclaw='.length).trim();
-        if (version.isNotEmpty) {
-          return version;
-        }
-      }
-      return null;
-    } catch (_) {
-      return null;
     }
   }
 
@@ -468,8 +429,7 @@ class BootstrapService {
 
   Future<void> runFullSetup({
     required void Function(SetupState) onProgress,
-    OpenClawReleaseInfo? selectedOpenClawRelease,
-    OpenClawInstallOptions installOptions = const OpenClawInstallOptions(),
+    RuntimeInstallOptions installOptions = const RuntimeInstallOptions(),
   }) async {
     _lastSetupState = const SetupState();
     final logSubscription = NativeBridge.setupLogStream.listen((line) {
@@ -1065,67 +1025,7 @@ class BootstrapService {
 
       bootstrapStatus = await NativeBridge.getBootstrapStatus();
 
-      // Step 4: Install OpenClaw (80-98%). The gateway is optional on first run;
-      // rootfs + Node remain mandatory so CLI tools can be installed later.
-      if (!installOptions.installOpenClaw) {
-        _emitProgress(
-          onProgress: onProgress,
-          step: SetupStep.installingOpenClaw,
-          progress: 1.0,
-          message: 'OpenClaw install skipped',
-          detail: 'Environment is ready; OpenClaw gateway can be installed later.',
-        );
-      } else {
-        final installedOpenClawVersion =
-            await _openClawVersionService.readInstalledVersion();
-        final prebuiltOpenClawVersion = await _readPrebuiltOpenClawVersion();
-        final targetVersion = selectedOpenClawRelease?.version.trim();
-        final hasPrebuiltOpenClaw = prebuiltOpenClawVersion != null;
-        final openClawReady = hasPrebuiltOpenClaw ||
-            (_statusFlag(bootstrapStatus, 'openclawInstalled') &&
-                installedOpenClawVersion != null &&
-                (targetVersion == null ||
-                    targetVersion.isEmpty ||
-                    OpenClawVersionService.isSameVersion(
-                      installedVersion: installedOpenClawVersion,
-                      targetVersion: targetVersion,
-                    )) &&
-                await _isInstalledOpenClawUsable());
-
-        if (openClawReady) {
-          final reusedVersion =
-              prebuiltOpenClawVersion ?? installedOpenClawVersion ?? 'prebuilt';
-          _emitProgress(
-            onProgress: onProgress,
-            step: SetupStep.installingOpenClaw,
-            progress: 1.0,
-            message: 'OpenClaw already installed',
-            detail: hasPrebuiltOpenClaw
-                ? 'Reusing prebuilt OpenClaw $reusedVersion.'
-                : 'Reusing OpenClaw $reusedVersion.',
-          );
-        } else {
-          await _openClawVersionService.installVersion(
-            selectedOpenClawRelease?.version ?? 'latest',
-            releaseInfo: selectedOpenClawRelease,
-            installOptions: installOptions,
-            captureLiveLogs: false,
-            onProgress: (installProgress) {
-              final detail = installProgress.detail?.trim();
-              _emitProgress(
-                onProgress: onProgress,
-                step: SetupStep.installingOpenClaw,
-                progress: installProgress.progress,
-                message: installProgress.message,
-                detail: detail?.isEmpty == true ? null : detail,
-                preserveDetail: detail == null || detail.isEmpty,
-              );
-            },
-          );
-        }
-      }
-
-      // Step 5: Bionic Bypass already installed (before node verification)
+      // Step 4: Bionic Bypass already installed (before node verification)
       _emitProgress(
         onProgress: onProgress,
         step: SetupStep.configuringBypass,
@@ -1140,9 +1040,7 @@ class BootstrapService {
         onProgress: onProgress,
         step: SetupStep.complete,
         progress: 1.0,
-        message: installOptions.installOpenClaw
-            ? 'Setup complete! Ready to start the gateway.'
-            : 'Setup complete! Environment is ready.',
+        message: 'Setup complete! Environment is ready.',
         notificationText: 'Setup complete! 100.0%',
       );
     } on DioException catch (e) {

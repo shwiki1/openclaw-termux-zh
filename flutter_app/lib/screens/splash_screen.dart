@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -7,9 +6,7 @@ import '../constants.dart';
 import '../services/local_api_proxy_service.dart';
 import '../services/native_bridge.dart';
 import '../services/preferences_service.dart';
-import '../services/provider_config_service.dart';
 import 'setup_wizard_screen.dart';
-import 'onboarding_screen.dart';
 import 'dashboard_screen.dart';
 
 class SplashScreen extends StatefulWidget {
@@ -81,44 +78,7 @@ class _SplashScreenState extends State<SplashScreen>
 
       final prefs = PreferencesService();
       await prefs.init();
-
-      // Auto-export snapshot when app version changes (#55)
-      try {
-        final oldVersion = prefs.lastAppVersion;
-        if (oldVersion != null && oldVersion != AppConstants.fullVersion) {
-          final hasPermission = await NativeBridge.hasStoragePermission();
-          if (hasPermission) {
-            final sdcard = await NativeBridge.getExternalStoragePath();
-            final downloadDir = Directory('$sdcard/Download');
-            if (!await downloadDir.exists()) {
-              await downloadDir.create(recursive: true);
-            }
-            final snapshotPath =
-                '$sdcard/Download/openclaw-snapshot-$oldVersion.json';
-            final openclawJson = await NativeBridge.readRootfsFile(
-                'root/.openclaw/openclaw.json');
-            final persistentGatewayLogs =
-                await NativeBridge.isGatewayLogPersistenceEnabled();
-            final snapshot = {
-              'version': oldVersion,
-              'timestamp': DateTime.now().toIso8601String(),
-              'openclawConfig': openclawJson,
-              'dashboardUrl': prefs.dashboardUrl,
-              'autoStart': prefs.autoStartGateway,
-              'persistentGatewayLogs': persistentGatewayLogs,
-              'nodeEnabled': prefs.nodeEnabled,
-              'nodeDeviceToken': prefs.nodeDeviceToken,
-              'nodeGatewayHost': prefs.nodeGatewayHost,
-              'nodeGatewayPort': prefs.nodeGatewayPort,
-              'nodeGatewayToken': prefs.nodeGatewayToken,
-            };
-            await File(snapshotPath).writeAsString(
-              const JsonEncoder.withIndent('  ').convert(snapshot),
-            );
-          }
-        }
-        prefs.lastAppVersion = AppConstants.fullVersion;
-      } catch (_) {}
+      prefs.lastAppVersion = AppConstants.fullVersion;
 
       bool setupComplete;
       try {
@@ -131,27 +91,15 @@ class _SplashScreenState extends State<SplashScreen>
 
       if (setupComplete) {
         unawaited(LocalApiProxyService.start());
-        final gatewayConfigured =
-            await ProviderConfigService.hasRequiredGatewayConfig();
-        final pendingSetupCompletionChoice =
-            prefs.pendingSetupCompletionChoice;
         if (!mounted) return;
 
-        if (gatewayConfigured) {
-          prefs.pendingSetupCompletionChoice = false;
-          prefs.setupComplete = true;
-          prefs.isFirstRun = false;
-        }
+        prefs.pendingSetupCompletionChoice = false;
+        prefs.setupComplete = true;
+        prefs.isFirstRun = false;
 
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(
-            builder: (_) => gatewayConfigured
-                ? const DashboardScreen()
-                : pendingSetupCompletionChoice
-                    ? const SetupWizardScreen(
-                        resumeCompletionChoice: true,
-                      )
-                    : const OnboardingScreen(isFirstRun: true),
+            builder: (_) => const DashboardScreen(),
           ),
         );
       } else {
@@ -193,7 +141,7 @@ class _SplashScreenState extends State<SplashScreen>
               ),
               const SizedBox(height: 8),
               Text(
-                'AI Gateway for Android',
+                'CLI Runtime for Android',
                 style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                       color: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),

@@ -33,19 +33,6 @@ class InstallStatusMessageFormatter {
       );
     }
 
-    final openClawDownload = RegExp(
-      r'^Downloading OpenClaw: ([0-9.]+) MB / ([0-9.]+) MB(?: \| (.+))?$',
-    ).firstMatch(message);
-    if (openClawDownload != null) {
-      final current = openClawDownload.group(1);
-      final total = openClawDownload.group(2);
-      final details = openClawDownload.group(3);
-      return _appendDetails(
-        '${l10n.t('setupWizardStatusInstallingOpenClaw')} $current MB / $total MB',
-        localizeDetail(l10n, details),
-      );
-    }
-
     final nodeVersionMatch = RegExp(
       r'^(?:Downloading|Using bundled) Node\.js (.+?)(?:\.{3}| package\.\.\.)$',
     ).firstMatch(message);
@@ -92,30 +79,6 @@ class InstallStatusMessageFormatter {
         return l10n.t('setupWizardStatusInstallingBasePackages');
       case 'Base packages already available':
         return l10n.t('setupWizardStatusBasePackagesReady');
-      case 'Preparing OpenClaw package...':
-        return _phrase(
-          l10n,
-          en: 'Preparing OpenClaw package...',
-          zhHans: '正在准备 OpenClaw 安装包...',
-          zhHant: '正在準備 OpenClaw 安裝包...',
-          ja: 'OpenClaw パッケージを準備中...',
-        );
-      case 'Downloading OpenClaw package...':
-        return _phrase(
-          l10n,
-          en: 'Downloading OpenClaw package...',
-          zhHans: '正在下载 OpenClaw 安装包...',
-          zhHant: '正在下載 OpenClaw 安裝包...',
-          ja: 'OpenClaw パッケージをダウンロード中...',
-        );
-      case 'Using cached OpenClaw package...':
-        return _phrase(
-          l10n,
-          en: 'Using cached OpenClaw package...',
-          zhHans: '正在使用本地 OpenClaw 安装包缓存...',
-          zhHant: '正在使用本地 OpenClaw 安裝包快取...',
-          ja: 'ローカルの OpenClaw パッケージキャッシュを使用中...',
-        );
       case 'Extracting Node.js...':
         return l10n.t('setupWizardStatusExtractingNode');
       case 'Verifying Node.js...':
@@ -124,27 +87,13 @@ class InstallStatusMessageFormatter {
         return l10n.t('setupWizardStatusNodeInstalled');
       case 'Checking Node.js requirement...':
       case 'Node.js requirement satisfied':
-      case 'Installing OpenClaw dependencies...':
-      case 'Installing OpenClaw (this may take a few minutes)...':
-        return l10n.t('setupWizardStatusInstallingOpenClaw');
+        return message;
       case 'Creating bin wrappers...':
         return l10n.t('setupWizardStatusCreatingBinWrappers');
-      case 'Verifying OpenClaw...':
-        return l10n.t('setupWizardStatusVerifyingOpenClaw');
-      case 'OpenClaw installed':
-        return l10n.t('setupWizardStatusOpenClawInstalled');
       case 'Bionic Bypass configured':
         return l10n.t('setupWizardStatusBypassConfigured');
-      case 'Setup complete! Ready to start the gateway.':
+      case 'Setup complete! Ready to start the CLI runtime.':
         return l10n.t('setupWizardStatusReady');
-      case 'Preparing installation...':
-        return l10n.t('gatewayApplyingVersion');
-      case 'Stopping gateway...':
-        return l10n.t('gatewayStopping');
-      case 'Restarting gateway...':
-        return l10n.t('messagePlatformDetailGatewayRestarting');
-      case 'Refreshing installed version...':
-        return '${l10n.t('logsRefresh')}...';
       default:
         return message;
     }
@@ -174,14 +123,6 @@ class InstallStatusMessageFormatter {
           zhHant: '優先使用 APK 內建的 Node.js 壓縮包。',
           ja: 'APK に同梱された Node.js アーカイブを優先して使用します。',
         );
-      case 'Using local OpenClaw package cache.':
-        return _phrase(
-          l10n,
-          en: 'Using the local OpenClaw package cache.',
-          zhHans: '正在使用本地 OpenClaw 安装包缓存。',
-          zhHant: '正在使用本地 OpenClaw 安裝包快取。',
-          ja: 'ローカルの OpenClaw パッケージキャッシュを使用しています。',
-        );
       case 'Preparing Node.js files...':
         return _phrase(
           l10n,
@@ -205,14 +146,6 @@ class InstallStatusMessageFormatter {
           zhHans: '正在执行基础软件包的 apt-get install...',
           zhHant: '正在執行基礎軟體包的 apt-get install...',
           ja: '基本パッケージ向けの apt-get install を実行中...',
-        );
-      case 'Running npm install for OpenClaw...':
-        return _phrase(
-          l10n,
-          en: 'Running npm install for OpenClaw...',
-          zhHans: '下载完成，正在执行 OpenClaw 的 npm 安装...',
-          zhHant: '下載完成，正在執行 OpenClaw 的 npm 安裝...',
-          ja: 'ダウンロード完了。OpenClaw の npm インストールを実行中...',
         );
       case 'Reading package lists...':
         return _phrase(
