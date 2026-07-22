@@ -243,14 +243,15 @@ jobs:
               | while read -r run_id; do
                   [ -n "$run_id" ] || continue
                   gh run view "$run_id" --repo "${GITHUB_REPOSITORY}" --log 2>/dev/null \
-                    | sed -nE 's/.*Selected next Android build: ([0-9]+).*/\1/p'
-                done
+                    | sed -nE 's/.*Selected next Android build: ([0-9]+).*/\1/p' || true
+                done || true
+            return 0
           }
           LATEST_WORKFLOW_BUILD="$({
-            detect_latest_workflow_build "${GITHUB_WORKFLOW}"
-            detect_latest_workflow_build "Build CiYuanXia Apps"
-            detect_latest_workflow_build "Build OpenClaw Apps"
-          } | sed -nE '/^[0-9]+$/p' | sort -n | tail -n 1)"
+            detect_latest_workflow_build "${GITHUB_WORKFLOW}" || true
+            detect_latest_workflow_build "Build CiYuanXia Apps" || true
+            detect_latest_workflow_build "Build OpenClaw Apps" || true
+          } | sed -nE '/^[0-9]+$/p' | sort -n | tail -n 1 || true)"
           if ! [[ "$LATEST_WORKFLOW_BUILD" =~ ^[0-9]+$ ]]; then
             echo "WARNING: Unable to determine the latest successful workflow Android build from recent logs."
             LATEST_WORKFLOW_BUILD=0
