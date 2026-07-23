@@ -11,7 +11,9 @@ notices and source-offer details follow below in the complete notices.
 - Dart SDK: https://github.com/dart-lang/sdk
 - Pub package registry: https://pub.dev/
 - webview_flutter: https://pub.dev/packages/webview_flutter
+- webview_flutter source: https://github.com/flutter/packages/tree/main/packages/webview_flutter/webview_flutter
 - webview_flutter_android: https://pub.dev/packages/webview_flutter_android
+- webview_flutter_android source: https://github.com/flutter/packages/tree/main/packages/webview_flutter/webview_flutter_android
 - dio: https://github.com/cfug/dio
 - http: https://github.com/dart-lang/http
 - provider: https://github.com/rrousselGit/provider
@@ -23,11 +25,14 @@ notices and source-offer details follow below in the complete notices.
 ## Android Libraries
 
 - Termux terminal-view: https://github.com/termux/termux-app/tree/v0.118.0
+- AndroidX project: https://github.com/androidx/androidx
 - AndroidX RecyclerView: https://developer.android.com/jetpack/androidx/releases/recyclerview
 - AndroidX Media3 ExoPlayer: https://github.com/androidx/media/tree/release/libraries/exoplayer
 - AndroidX Media3 UI: https://github.com/androidx/media/tree/release/libraries/ui
 - Apache Commons Compress: https://github.com/apache/commons-compress
+- Apache Commons Compress source release: https://commons.apache.org/proper/commons-compress/download_compress.cgi
 - XZ for Java: https://tukaani.org/xz/java.html
+- XZ for Java source: https://github.com/tukaani-project/xz-java
 - zstd-jni: https://github.com/luben/zstd-jni
 
 ## Android Native Runtime Libraries
@@ -39,17 +44,24 @@ notices and source-offer details follow below in the complete notices.
 ## Bundled Browser Libraries And Assets
 
 - @tailwindcss/browser: https://github.com/tailwindlabs/tailwindcss/tree/main/packages/@tailwindcss-browser
+- @tailwindcss/browser npm package: https://www.npmjs.com/package/@tailwindcss/browser
 - Lucide browser runtime: https://github.com/lucide-icons/lucide/tree/main/packages/lucide
+- Lucide npm package: https://www.npmjs.com/package/lucide
 - Lucide Android icon assets: https://github.com/lucide-icons/lucide
 - DejaVu Fonts: https://dejavu-fonts.github.io/
+- DejaVu Fonts source: https://github.com/dejavu-fonts/dejavu-fonts
 
 ## Bundled Local API Relay Python Packages
 
 - PyPI package registry: https://pypi.org/
 - Starlette: https://github.com/encode/starlette
+- Starlette PyPI package: https://pypi.org/project/starlette/
 - Uvicorn: https://github.com/encode/uvicorn
+- Uvicorn PyPI package: https://pypi.org/project/uvicorn/
 - HTTPX: https://github.com/encode/httpx
+- HTTPX PyPI package: https://pypi.org/project/httpx/
 - aiosqlite: https://github.com/omnilib/aiosqlite
+- aiosqlite PyPI package: https://pypi.org/project/aiosqlite/
 
 ## Bundled RootFS And Runtime Packages
 
@@ -58,6 +70,7 @@ notices and source-offer details follow below in the complete notices.
 - Ubuntu Base images: https://cdimage.ubuntu.com/ubuntu-base/releases/24.04/release/
 - Ubuntu Base product page: https://ubuntu.com/download/base
 - Node.js: https://github.com/nodejs/node
+- Node.js downloads: https://nodejs.org/dist/
 
 The current CiYuanXia prebuilt RootFS no longer preinstalls OpenClaw or the
 OpenClaw QQ/Weixin plugins.
